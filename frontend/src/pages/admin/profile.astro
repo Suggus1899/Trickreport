@@ -1,0 +1,180 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NeuCard from '../../components/NeuCard.astro';
+import NeuButton from '../../components/NeuButton.astro';
+import NeuBadge from '../../components/NeuBadge.astro';
+import { getMe, getSummary } from '../../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token) return Astro.redirect('/login');
+
+let me;
+try {
+  me = await getMe(token);
+} catch {
+  return Astro.redirect('/login');
+}
+
+if (me.role !== 'admin') return Astro.redirect('/dashboard');
+
+let summary;
+try {
+  summary = await getSummary(token);
+} catch {
+  summary = { total_tickets: 0, open_tickets: 0, closed_tickets: 0, total_users: 0 };
+}
+---
+
+<Layout title="Admin Profile — Trickreport" user={{ name: me.name, role: me.role }}>
+  <div class="max-w-5xl mx-auto py-8">
+    <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+      <div>
+        <h1 class="text-2xl font-bold text-main">Admin Profile</h1>
+        <p class="text-muted text-sm">System overview and administrative tools</p>
+      </div>
+      <div class="flex gap-2">
+        <NeuButton href="/profile" variant="raised" size="sm">My Profile</NeuButton>
+        <NeuButton href="/dashboard" variant="raised" size="sm">Dashboard</NeuButton>
+      </div>
+    </div>
+
+    <!-- Admin info card -->
+    <NeuCard class="mb-6">
+      <div class="flex items-center gap-4 flex-wrap">
+        <div class="admin-avatar">
+          {me.name.charAt(0).toUpperCase()}
+        </div>
+        <div class="flex-1 min-w-0">
+          <h2 class="text-lg font-semibold text-main">{me.name}</h2>
+          <p class="text-sm text-muted">{me.email}</p>
+          <div class="flex gap-2 mt-2">
+            <NeuBadge variant="danger">Administrator</NeuBadge>
+            <NeuBadge variant="info">Full Access</NeuBadge>
+          </div>
+        </div>
+      </div>
+    </NeuCard>
+
+    <!-- System stats -->
+    <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <NeuCard>
+        <p class="text-xs text-muted uppercase tracking-wide">Total Tickets</p>
+        <p class="text-3xl font-bold text-main mt-1">{summary.total_tickets || 0}</p>
+      </NeuCard>
+      <NeuCard>
+        <p class="text-xs text-muted uppercase tracking-wide">Open</p>
+        <p class="text-3xl font-bold text-accent mt-1">{summary.open_tickets || 0}</p>
+      </NeuCard>
+      <NeuCard>
+        <p class="text-xs text-muted uppercase tracking-wide">Closed</p>
+        <p class="text-3xl font-bold text-main mt-1">{summary.closed_tickets || 0}</p>
+      </NeuCard>
+      <NeuCard>
+        <p class="text-xs text-muted uppercase tracking-wide">Users</p>
+        <p class="text-3xl font-bold text-main mt-1">{summary.total_users || 0}</p>
+      </NeuCard>
+    </div>
+
+    <!-- Quick admin actions -->
+    <div class="grid md:grid-cols-2 gap-6 mb-6">
+      <NeuCard>
+        <h3 class="text-lg font-semibold mb-4">User Management</h3>
+        <div class="flex flex-col gap-3">
+          <a href="/admin/users" class="admin-action">
+            <span>Manage Users</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+          <a href="/admin/users" class="admin-action">
+            <span>Create New User</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+        </div>
+      </NeuCard>
+
+      <NeuCard>
+        <h3 class="text-lg font-semibold mb-4">SLA & Automation</h3>
+        <div class="flex flex-col gap-3">
+          <a href="/admin/sla" class="admin-action">
+            <span>SLA Policies</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+          <a href="/admin/automations" class="admin-action">
+            <span>Automation Rules</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+        </div>
+      </NeuCard>
+    </div>
+
+    <!-- Analytics & System -->
+    <div class="grid md:grid-cols-2 gap-6">
+      <NeuCard>
+        <h3 class="text-lg font-semibold mb-4">Analytics</h3>
+        <div class="flex flex-col gap-3">
+          <a href="/admin/analytics" class="admin-action">
+            <span>View Analytics</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+          <a href="/admin/analytics" class="admin-action">
+            <span>Charts & Trends</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+        </div>
+      </NeuCard>
+
+      <NeuCard>
+        <h3 class="text-lg font-semibold mb-4">Account</h3>
+        <div class="flex flex-col gap-3">
+          <a href="/profile" class="admin-action">
+            <span>Edit My Profile</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+          <a href="/profile" class="admin-action">
+            <span>Security & MFA</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+          <a href="/logout" class="admin-action danger">
+            <span>Logout</span>
+            <span class="arrow">&rarr;</span>
+          </a>
+        </div>
+      </NeuCard>
+    </div>
+  </div>
+
+  <style>
+    .admin-avatar {
+      width: 4rem;
+      height: 4rem;
+      border-radius: var(--radius-full);
+      background: var(--bg-base);
+      box-shadow: var(--shadow-convex);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: var(--accent);
+      flex-shrink: 0;
+    }
+    .admin-action {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.875rem 1rem;
+      border-radius: var(--radius-md);
+      background: var(--bg-base);
+      box-shadow: var(--shadow-convex);
+      color: var(--text-main);
+      font-weight: 600;
+      font-size: 0.9rem;
+      transition: box-shadow 0.2s ease;
+      text-decoration: none;
+    }
+    .admin-action:hover { box-shadow: var(--shadow-raised); }
+    .admin-action:active { box-shadow: var(--shadow-sunken); }
+    .admin-action .arrow { color: var(--text-muted); transition: transform 0.2s ease; }
+    .admin-action:hover .arrow { transform: translateX(4px); color: var(--accent); }
+    .admin-action.danger { color: var(--danger); }
+  </style>
+</Layout>

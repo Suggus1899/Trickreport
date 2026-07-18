@@ -36,6 +36,7 @@ type Repos struct {
 	PasswordReset  *postgres.PasswordResetRepo
 	Session        *postgres.SessionRepo
 	TxManager      *postgres.TxManager
+	Notification   *postgres.NotificationRepo
 }
 
 // NewRepos creates all repositories from a pgxpool.
@@ -54,6 +55,7 @@ func NewRepos(pool *pgxpool.Pool) *Repos {
 		PasswordReset:  postgres.NewPasswordResetRepo(pool),
 		Session:        postgres.NewSessionRepo(pool),
 		TxManager:      postgres.NewTxManager(pool),
+		Notification:   postgres.NewNotificationRepo(pool),
 	}
 }
 
@@ -71,6 +73,7 @@ type Services struct {
 	MFA           *appAuth.MFAService
 	PasswordReset *appAuth.PasswordResetService
 	TokenStore    *infraAuth.MemoryTokenStore
+	Notification  *appTicket.NotificationService
 }
 
 // NewServices creates all application services from repos and adapters.
@@ -92,6 +95,11 @@ func NewServices(
 	ticketSvc.SetEngine(engine)
 	ticketSvc.SetTxManager(repos.TxManager)
 	ticketSvc.SetSLAPolicyFetcher(repos.SLA)
+
+	// Notification service — wired into the ticket service so events create
+	// persistent notifications and broadcast them in real-time via WebSocket.
+	notifSvc := appTicket.NewNotificationService(repos.Notification)
+	ticketSvc.SetNotificationService(notifSvc)
 
 	// Auth service with token store, session repo, account lockout, MFA repo,
 	// and full password hasher (for password reset and MFA flows).
@@ -132,19 +140,21 @@ func NewServices(
 		MFA:           mfaSvc,
 		PasswordReset: resetSvc,
 		TokenStore:    tokenStore,
+		Notification:  notifSvc,
 	}
 }
 
 // Handlers holds all HTTP handlers.
 type Handlers struct {
-	Auth       *handler.AuthHandler
-	Ticket     *handler.TicketHandler
-	User       *handler.UserHandler
-	Article    *handler.ArticleHandler
-	SLA        *handler.SLAHandler
-	Automation *handler.AutomationHandler
-	Analytics  *handler.AnalyticsHandler
-	Attachment *handler.AttachmentHandler
+	Auth         *handler.AuthHandler
+	Ticket       *handler.TicketHandler
+	User         *handler.UserHandler
+	Article      *handler.ArticleHandler
+	SLA          *handler.SLAHandler
+	Automation   *handler.AutomationHandler
+	Analytics    *handler.AnalyticsHandler
+	Attachment   *handler.AttachmentHandler
+	Notification *handler.NotificationHandler
 }
 
 // NewHandlers creates all HTTP handlers from services.
@@ -154,13 +164,14 @@ func NewHandlers(services *Services) *Handlers {
 	authH.SetPasswordResetService(services.PasswordReset)
 
 	return &Handlers{
-		Auth:       authH,
-		User:       handler.NewUserHandler(services.User),
-		Ticket:     handler.NewTicketHandler(services.Ticket),
-		Article:    handler.NewArticleHandler(services.Article),
-		SLA:        handler.NewSLAHandler(services.SLA),
-		Automation: handler.NewAutomationHandler(services.Automation),
-		Analytics:  handler.NewAnalyticsHandler(services.Analytics),
-		Attachment: handler.NewAttachmentHandler(services.Attachment),
+		Auth:         authH,
+		User:         handler.NewUserHandler(services.User),
+		Ticket:       handler.NewTicketHandler(services.Ticket),
+		Article:      handler.NewArticleHandler(services.Article),
+		SLA:          handler.NewSLAHandler(services.SLA),
+		Automation:   handler.NewAutomationHandler(services.Automation),
+		Analytics:    handler.NewAnalyticsHandler(services.Analytics),
+		Attachment:   handler.NewAttachmentHandler(services.Attachment),
+		Notification: handler.NewNotificationHandler(services.Notification),
 	}
 }

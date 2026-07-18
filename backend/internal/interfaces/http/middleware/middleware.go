@@ -127,5 +127,9 @@ func extractToken(r *http.Request) string {
 	if c, err := r.Cookie("trickreport_token"); err == nil {
 		return c.Value
 	}
+	// WebSocket clients can't set custom headers, so allow token as query param.
+	if q := r.URL.Query().Get("token"); q != "" {
+		return q
+	}
 	return ""
 }

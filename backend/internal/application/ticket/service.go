@@ -85,6 +85,7 @@ type UserService struct {
 	engine      AutomationEvaluator
 	tx          TxManager
 	slaFetcher  SLAPolicyFetcher
+	notifSvc    *NotificationService
 }
 
 // NewService creates a new ticket application service.
@@ -114,6 +115,12 @@ func (s *UserService) SetTxManager(tx TxManager) {
 // calculates and persists the SLA deadline based on the tenant's policy.
 func (s *UserService) SetSLAPolicyFetcher(f SLAPolicyFetcher) {
 	s.slaFetcher = f
+}
+
+// SetNotificationService wires the notification service. When set, ticket
+// events create persistent notifications for relevant users.
+func (s *UserService) SetNotificationService(n *NotificationService) {
+	s.notifSvc = n
 }
 
 // evaluateAutomation fires an automation event asynchronously.
@@ -231,6 +238,13 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 		s.hub.BroadcastEvent(input.TenantID, "TICKET_CREATED", t)
 	}
 
+	// Create a persistent notification for the ticket creator.
+	if s.notifSvc != nil {
+		title := "Ticket created: " + t.Title
+		body := "Your ticket has been created successfully."
+		s.createNotificationSafe(context.Background(), input.TenantID, input.CreatedBy, title, body, "ticket_created", &t.ID, "ticket")
+	}
+
 	// Fire automation rules for ticket creation.
 	s.evaluateAutomation(input.TenantID, appAuto.Event{
 		Type:     "ticket_created",
@@ -287,6 +301,15 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uui
 			"ticket_id": id,
 			"status":    string(status),
 		})
+	}
+
+	// Notify the ticket creator about the status change (if they're not the one changing it).
+	if s.notifSvc != nil {
+		if creatorID, err := s.repo.GetCreator(ctx, id, tenantID); err == nil && creatorID != userID {
+			title := "Ticket updated: status changed to " + string(status)
+			body := "The status of your ticket has been updated."
+			s.createNotificationSafe(context.Background(), tenantID, creatorID, title, body, "ticket_updated", &id, "ticket")
+		}
 	}
 
 	// Fire automation rules for status changes.
@@ -366,6 +389,15 @@ func (s *UserService) AddComment(ctx context.Context, input AddCommentInput) (*d
 		s.hub.BroadcastEvent(input.TenantID, "NEW_COMMENT", c)
 	}
 
+	// Notify the ticket creator about the new comment (if they're not the commenter).
+	if s.notifSvc != nil {
+		if creatorID, err := s.repo.GetCreator(ctx, input.TicketID, input.TenantID); err == nil && creatorID != input.UserID {
+			title := "New comment on your ticket"
+			body := "Someone commented on your ticket."
+			s.createNotificationSafe(context.Background(), input.TenantID, creatorID, title, body, "new_comment", &input.TicketID, "ticket")
+		}
+	}
+
 	return c, nil
 }
 
@@ -380,4 +412,20 @@ func (s *UserService) ListHistory(ctx context.Context, ticketID, tenantID uuid.U
 		return nil, domainTicket.ErrForbidden
 	}
 	return s.history.List(ctx, ticketID)
+}
+
+// createNotificationSafe creates a notification and broadcasts it via WebSocket.
+// Errors are silently ignored to avoid failing the main operation.
+func (s *UserService) createNotificationSafe(ctx context.Context, tenantID, userID uuid.UUID, title, body, notifType string, refID *uuid.UUID, refType string) {
+	if s.notifSvc == nil {
+		return
+	}
+	n, err := s.notifSvc.CreateForUser(ctx, tenantID, userID, title, body, notifType, refID, refType)
+	if err != nil {
+		return
+	}
+	// Broadcast the notification in real-time via WebSocket.
+	if s.hub != nil {
+		s.hub.BroadcastEvent(tenantID, "NOTIFICATION", n)
+	}
 }
