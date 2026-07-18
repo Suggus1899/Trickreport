@@ -29,6 +29,19 @@ type Config struct {
 	LDAPBindPW  string `mapstructure:"LDAP_BIND_PW"`
 	LDAPBaseDN  string `mapstructure:"LDAP_BASE_DN"`
 	LDAPUIDAttr string `mapstructure:"LDAP_UID_ATTR"`
+
+	// Email (SMTP)
+	Email EmailConfig `mapstructure:",squash"`
+}
+
+// EmailConfig holds SMTP settings for sending transactional email.
+type EmailConfig struct {
+	SMTPHost     string `mapstructure:"SMTP_HOST"`
+	SMTPPort     int    `mapstructure:"SMTP_PORT"`
+	SMTPUsername string `mapstructure:"SMTP_USERNAME"`
+	SMTPPassword string `mapstructure:"SMTP_PASSWORD"`
+	SMTPFrom     string `mapstructure:"SMTP_FROM"`
+	SMTPUseTLS   bool   `mapstructure:"SMTP_USE_TLS"`
 }
 
 // IsProduction returns true when ENV=production.
@@ -72,6 +85,9 @@ func Load() *Config {
 	viper.SetDefault("LDAP_PORT", 636)
 	viper.SetDefault("LDAP_USE_TLS", true)
 	viper.SetDefault("LDAP_UID_ATTR", "uid")
+	viper.SetDefault("SMTP_PORT", 587)
+	viper.SetDefault("SMTP_USE_TLS", true)
+	viper.SetDefault("SMTP_FROM", "noreply@trickreport.local")
 
 	if err := viper.ReadInConfig(); err != nil {
 		log.Println("No .env file found, using environment variables only")

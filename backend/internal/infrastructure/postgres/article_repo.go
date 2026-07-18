@@ -39,8 +39,8 @@ func (r *ArticleRepo) List(ctx context.Context, tenantID uuid.UUID, filter artic
 		q += ` AND a.published = TRUE`
 	}
 	if filter.Search != "" {
-		q += fmt.Sprintf(` AND a.title ILIKE $%d`, argIdx)
-		args = append(args, "%"+filter.Search+"%")
+		q += fmt.Sprintf(` AND a.search_vector @@ plainto_tsquery('english', $%d)`, argIdx)
+		args = append(args, filter.Search)
 		argIdx++
 	}
 	q += ` ORDER BY a.created_at DESC`

@@ -5,14 +5,22 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	appAuto "github.com/trickreport/backend/internal/application/automation"
 	domainTicket "github.com/trickreport/backend/internal/domain/ticket"
 )
+
+// AutomationEvaluator is the port for evaluating automation rules on events.
+// Implemented by the automation engine.
+type AutomationEvaluator interface {
+	Evaluate(ctx context.Context, tenantID uuid.UUID, event appAuto.Event) error
+}
 
 // Filter holds query parameters for listing tickets.
 type Filter struct {
 	Status     string
 	Priority   string
 	AssignedTo string
+	Search     string
 	Limit      int
 	Offset     int
 }
@@ -55,6 +63,7 @@ type UserService struct {
 	history  HistoryRepository
 	hub      EventBroadcaster
 	email    EmailNotifier
+	engine   AutomationEvaluator
 }
 
 // NewService creates a new ticket application service.
@@ -66,6 +75,26 @@ func NewService(repo Repository, comments CommentRepository, history HistoryRepo
 		hub:      hub,
 		email:    email,
 	}
+}
+
+// SetEngine wires the automation engine. It is optional — when set, ticket
+// events are evaluated against automation rules.
+func (s *UserService) SetEngine(engine AutomationEvaluator) {
+	s.engine = engine
+}
+
+// evaluateAutomation fires an automation event asynchronously.
+func (s *UserService) evaluateAutomation(tenantID uuid.UUID, event appAuto.Event) {
+	if s.engine == nil {
+		return
+	}
+	go func() {
+		ctx := context.Background()
+		if err := s.engine.Evaluate(ctx, tenantID, event); err != nil {
+			// Errors are logged by the engine; nothing to do here.
+			_ = err
+		}
+	}()
 }
 
 // List returns tickets for the tenant, filtered by role and query params.
@@ -135,6 +164,15 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 		s.hub.BroadcastEvent(input.TenantID, "TICKET_CREATED", t)
 	}
 
+	// Fire automation rules for ticket creation.
+	s.evaluateAutomation(input.TenantID, appAuto.Event{
+		Type:     "ticket_created",
+		TenantID: input.TenantID,
+		TicketID: t.ID,
+		UserID:   input.CreatedBy,
+		NewValue: string(t.Priority),
+	})
+
 	return t, nil
 }
 
@@ -154,6 +192,8 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uui
 		return domainTicket.ErrForbidden
 	}
 
+	oldStatus := string(t.Status)
+
 	if err := t.ChangeStatus(status); err != nil {
 		return err
 	}
@@ -168,6 +208,16 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uui
 			"status":    string(status),
 		})
 	}
+
+	// Fire automation rules for status changes.
+	s.evaluateAutomation(tenantID, appAuto.Event{
+		Type:     "ticket_status_changed",
+		TenantID: tenantID,
+		TicketID: id,
+		UserID:   userID,
+		OldValue: oldStatus,
+		NewValue: string(status),
+	})
 
 	return nil
 }

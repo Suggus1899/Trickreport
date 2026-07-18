@@ -122,6 +122,7 @@ func (h *TicketHandler) List(w http.ResponseWriter, r *http.Request) {
 		Status:     r.URL.Query().Get("status"),
 		Priority:   r.URL.Query().Get("priority"),
 		AssignedTo: r.URL.Query().Get("assigned_to"),
+		Search:     r.URL.Query().Get("q"),
 		Limit:      limit,
 		Offset:     offset,
 	}
