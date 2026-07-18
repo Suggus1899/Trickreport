@@ -1,106 +1,279 @@
-# Trickreport — Multi-tenant Help Desk
+<div align="center">
 
-Trickreport is a clean-architecture Help Desk and Ticketing System built with **Go** (Backend), **Astro** (Frontend), **Tailwind CSS** and **PostgreSQL**, featuring multi-tenancy, real-time WebSockets, SLA automations, and an analytics dashboard.
+# 🎫 Trickreport
 
-## Stack
+### Multi-tenant Help Desk & Ticketing Platform — Soporte técnico neumórfico
 
-| Layer | Technology |
-|-------|------------|
-| Backend | Go 1.23+ (chi, pgx, gorilla/websocket) |
-| Frontend | Astro 5.x (SSR with Node adapter) + Tailwind CSS |
-| UI Style | Neumorphism 2.0 — soft shadows, depth, tactile interactions |
-| Database | PostgreSQL 14+ |
-| Auth | JWT (cookies + Authorization header), optional LDAP |
+Plataforma de mesa de ayuda y ticketing **multi-tenant** construida con arquitectura limpia (Clean Architecture). Soporte técnico con WebSockets en tiempo real, SLA automatizados, base de conocimiento, analíticas y notificaciones en vivo.
 
-## Prerequisites
+</div>
 
-- Go 1.23+
-- Node.js 20+ / npm 10+
-- PostgreSQL 14+ (running locally on `localhost:5432`)
+<br>
 
-## Quick start (local, no Docker)
+<div align="center">
 
-> **Local development ALWAYS runs without Docker.** Docker is only for production/staging deployments (see [Deployment](#deployment-docker--on-premise)).
+## 🛠️ Tech Stack
 
-### 1. Database
+</div>
 
-Start PostgreSQL and create the database:
+<table align="center">
+<tr>
+<th colspan="5" align="center" width="600"><sub><b>Frontend</b></sub></th>
+</tr>
+<tr>
+<td align="center" width="120">
+<a href="https://astro.build/" target="_blank"><img src="https://cdn.simpleicons.org/astro/FF5D01" width="48" height="48" alt="Astro" /></a>
+<br><sub><b><a href="https://astro.build/" target="_blank">Astro 5</a></b></sub>
+<br><sub>SSR (Node adapter)</sub>
+</td>
+<td align="center" width="120">
+<a href="https://www.typescriptlang.org/" target="_blank"><img src="https://cdn.simpleicons.org/typescript/3178C6" width="48" height="48" alt="TypeScript" /></a>
+<br><sub><b><a href="https://www.typescriptlang.org/" target="_blank">TypeScript 5</a></b></sub>
+<br><sub>Type-safe</sub>
+</td>
+<td align="center" width="120">
+<a href="https://tailwindcss.com/" target="_blank"><img src="https://cdn.simpleicons.org/tailwindcss/06B6D4" width="48" height="48" alt="Tailwind CSS" /></a>
+<br><sub><b><a href="https://tailwindcss.com/" target="_blank">Tailwind CSS</a></b></sub>
+<br><sub>Utility-first</sub>
+</td>
+<td align="center" width="120">
+<a href="https://www.pwabuilder.com/" target="_blank"><img src="https://cdn.simpleicons.org/pwa/5A0FC8" width="48" height="48" alt="PWA" /></a>
+<br><sub><b><a href="https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps" target="_blank">PWA</a></b></sub>
+<br><sub>Offline + installable</sub>
+</td>
+<td align="center" width="120">
+<a href="https://vitest.dev/" target="_blank"><img src="https://cdn.simpleicons.org/vitest/6E9F18" width="48" height="48" alt="Vitest" /></a>
+<br><sub><b><a href="https://vitest.dev/" target="_blank">Vitest</a></b></sub>
+<br><sub>Unit testing</sub>
+</td>
+</tr>
+<tr>
+<th colspan="5" align="center" width="600"><sub><b>Backend</b></sub></th>
+</tr>
+<tr>
+<td align="center" width="120">
+<a href="https://go.dev/" target="_blank"><img src="https://cdn.simpleicons.org/go/00ADD8" width="48" height="48" alt="Go" /></a>
+<br><sub><b><a href="https://go.dev/" target="_blank">Go 1.25</a></b></sub>
+<br><sub>Backend API</sub>
+</td>
+<td align="center" width="120">
+<a href="https://github.com/go-chi/chi" target="_blank"><img src="https://raw.githubusercontent.com/go-chi/docs/master/assets/chi.png" width="48" height="48" alt="go-chi" /></a>
+<br><sub><b><a href="https://github.com/go-chi/chi" target="_blank">go-chi v5</a></b></sub>
+<br><sub>HTTP router</sub>
+</td>
+<td align="center" width="120">
+<a href="https://www.postgresql.org/" target="_blank"><img src="https://cdn.simpleicons.org/postgresql/4169E1" width="48" height="48" alt="PostgreSQL" /></a>
+<br><sub><b><a href="https://www.postgresql.org/" target="_blank">PostgreSQL 14+</a></b></sub>
+<br><sub>Primary DB</sub>
+</td>
+<td align="center" width="120">
+<a href="https://jwt.io/" target="_blank"><img src="https://cdn.simpleicons.org/jsonwebtokens/000000" width="48" height="48" alt="JWT" /></a>
+<br><sub><b><a href="https://jwt.io/" target="_blank">JWT</a></b></sub>
+<br><sub>HS256 · 8h + refresh</sub>
+</td>
+<td align="center" width="120">
+<a href="https://github.com/gorilla/websocket" target="_blank"><img src="https://cdn.simpleicons.org/websocket/010101" width="48" height="48" alt="WebSocket" /></a>
+<br><sub><b><a href="https://github.com/gorilla/websocket" target="_blank">WebSocket</a></b></sub>
+<br><sub>Real-time</sub>
+</td>
+</tr>
+<tr>
+<th colspan="5" align="center" width="600"><sub><b>Tooling & Infra</b></sub></th>
+</tr>
+<tr>
+<td align="center" width="120">
+<a href="https://nodejs.org/" target="_blank"><img src="https://cdn.simpleicons.org/nodedotjs/339933" width="48" height="48" alt="Node.js" /></a>
+<br><sub><b><a href="https://nodejs.org/" target="_blank">npm</a></b></sub>
+<br><sub>Package manager</sub>
+</td>
+<td align="center" width="120">
+<a href="https://eslint.org/" target="_blank"><img src="https://cdn.simpleicons.org/eslint/4B32C3" width="48" height="48" alt="ESLint" /></a>
+<br><sub><b><a href="https://eslint.org/" target="_blank">ESLint 9</a></b></sub>
+<br><sub>Linting</sub>
+</td>
+<td align="center" width="120">
+<a href="https://prettier.io/" target="_blank"><img src="https://cdn.simpleicons.org/prettier/F7B93E" width="48" height="48" alt="Prettier" /></a>
+<br><sub><b><a href="https://prettier.io/" target="_blank">Prettier</a></b></sub>
+<br><sub>Formatting</sub>
+</td>
+<td align="center" width="120">
+<a href="https://github.com/zerolog/zerolog" target="_blank"><img src="https://cdn.simpleicons.org/zerolog/000000" width="48" height="48" alt="zerolog" /></a>
+<br><sub><b><a href="https://github.com/zerolog/zerolog" target="_blank">zerolog</a></b></sub>
+<br><sub>Structured logging</sub>
+</td>
+<td align="center" width="120">
+<a href="https://www.docker.com/" target="_blank"><img src="https://cdn.simpleicons.org/docker/2496ED" width="48" height="48" alt="Docker" /></a>
+<br><sub><b><a href="https://www.docker.com/" target="_blank">Docker</a></b></sub>
+<br><sub>Prod deployment</sub>
+</td>
+</tr>
+</table>
 
-```powershell
-# Windows PowerShell
-psql -U postgres -c "CREATE DATABASE trickreport;"
+<br>
+
+## 📐 Arquitectura
+
+```
+                    ┌─────────────────────────────────────────────────┐
+                    │              Caddy / nginx (port 80)            │
+                    │           trickreport.local / api               │
+                    └──────┬──────────────────┬────────────────────────┘
+                           │                  │
+            ┌──────────────▼──────────┐  ┌────▼──────────────────────┐
+            │  Backend Go (port 8080) │  │  Astro Frontend (SSR)     │
+            │  go-chi · pgx · JWT     │  │  Neumorphism 2.0 UI       │
+            │  WebSocket · zerolog    │  │  PWA · Dark mode · A11y   │
+            └──────────┬──────────────┘  └───────────────────────────┘
+                       │
+            ┌──────────▼──────────┐
+            │  PostgreSQL 14+     │
+            │  Multi-tenant       │
+            └─────────────────────┘
 ```
 
+### Clean Architecture (Backend)
+
+```
+backend/internal/
+├── domain/          ← Entities + business rules (no dependencies)
+├── application/     ← Use cases / services (ports defined here)
+├── infrastructure/  ← Adapters: PostgreSQL repos, JWT, email, WebSocket
+└── interfaces/http/ ← HTTP handlers, middleware, server, wire (DI)
+```
+
+## 📱 Aplicaciones
+
+| App | Descripción | Puerto | Rol |
+|-----|-------------|--------|-----|
+| **Frontend (Astro SSR)** | App única — login, dashboard, tickets, knowledge base, admin, profile, notificaciones en vivo | 4321 | Todos los roles |
+| **Backend API (Go)** | REST API + WebSocket — auth, tickets, SLA, automations, analytics, notifications | 8080 | API server |
+
+### Roles
+
+| Rol | Permisos |
+|-----|----------|
+| **admin** | Todo: usuarios, SLA, automatizaciones, analytics, tickets, artículos |
+| **agent** | Tickets, comentarios, artículos, asignación, historial |
+| **end_user** | Crear tickets, ver los propios, knowledge base, perfil |
+
+## 📦 Estructura del Proyecto
+
+```
+trickreport/
+├── backend/                    ← Go API (go-chi + pgx + JWT)
+│   ├── cmd/api/                ← Entry point + main
+│   ├── internal/
+│   │   ├── application/        ← Use cases (auth, ticket, user, article, sla, automation, analytics)
+│   │   ├── bootstrap/          ← Initial admin seeding
+│   │   ├── config/             ← env loading + feature flags
+│   │   ├── db/                 ← pgxpool + embedded migrations (auto-applied)
+│   │   ├── domain/             ← Entities + business rules
+│   │   │   ├── article/        ← Knowledge base domain
+│   │   │   ├── automation/     ← Automation rules domain
+│   │   │   ├── event/          ← Domain events + event bus
+│   │   │   ├── sla/            ← SLA policy domain
+│   │   │   ├── ticket/         ← Ticket, comment, history, notification
+│   │   │   └── user/           ← User + role domain
+│   │   ├── infrastructure/     ← Adapters
+│   │   │   ├── auth/           ← JWT, bcrypt, LDAP, token store
+│   │   │   ├── email/          ← SMTP + queue + templates
+│   │   │   ├── postgres/       ← Repositories + TxManager + cached tenant resolver
+│   │   │   ├── realtime/       ← WebSocket hub adapter
+│   │   │   └── storage/        ← Object storage (local + S3)
+│   │   ├── interfaces/http/    ← HTTP layer
+│   │   │   ├── handler/        ← HTTP handlers (auth, ticket, user, article, sla, automation, analytics, attachment, notification, metrics, swagger)
+│   │   │   ├── middleware/     ← Auth, tenant, rate limit, CSRF, compress, metrics, request ID, max body, login rate limit
+│   │   │   ├── response/       ← JSON response helpers
+│   │   │   ├── validator/      ← Input validation
+│   │   │   ├── server.go       ← Chi router + middleware chain
+│   │   │   └── wire.go         ← Dependency injection
+│   │   ├── realtime/           ← WebSocket hub + client
+│   │   └── worker/             ← Background worker (SLA scanner, automation engine)
+│   ├── internal/db/migrations/ ← Embedded SQL migrations (000001-000014)
+│   ├── .golangci.yml           ← Linter config
+│   ├── .env.example            ← Environment template
+│   ├── Dockerfile              ← Production container
+│   └── Makefile                ← Backend dev targets
+│
+├── frontend/                   ← Astro 5 SSR frontend
+│   ├── src/
+│   │   ├── components/         ← NeuButton, NeuCard, NeuInput, NeuBadge, NotificationBell, GlobalSearch, ThemeToggle, Pagination, Skeleton, Spinner, NeuModal, NeuToast, KeyboardHelp, OnlineStatus, charts
+│   │   ├── layouts/            ← App shell (sidebar + header + nav)
+│   │   ├── lib/                ← API client, export, keyboard shortcuts, config
+│   │   ├── pages/              ← Routes (login, dashboard, tickets, articles, admin/*, profile, offline)
+│   │   ├── scripts/            ← Service worker registration
+│   │   └── styles/global.css   ← Neumorphism 2.0 design tokens
+│   ├── public/                 ← PWA manifest, icons, service worker
+│   ├── eslint.config.js        ← ESLint 9 flat config
+│   ├── .prettierrc.json        ← Prettier config
+│   ├── vitest.config.ts        ← Vitest config
+│   └── package.json
+│
+├── scripts/                    ← Dev scripts
+│   ├── dev.ps1                 ← Windows: start backend + frontend
+│   └── dev.sh                  ← Linux/macOS: start backend + frontend
+├── monitoring/                 ← Prometheus + Grafana + Alertmanager configs
+├── .github/workflows/          ← CI (Go build/test/vet + frontend build + security scanning)
+├── docker-compose*.yml         ← Production / staging / monitoring / backup
+├── Makefile                    ← Root dev targets
+└── README.md
+```
+
+## 🚀 Quick Start (Local, sin Docker)
+
+> **El desarrollo local SIEMPRE se ejecuta sin Docker.** Docker es solo para despliegue productivo/staging.
+
+### Prerrequisitos
+
+| Herramienta | Versión | Instalación |
+|-------------|---------|-------------|
+| Go | 1.25+ | [go.dev/dl](https://go.dev/dl/) |
+| Node.js | 20+ | [nodejs.org](https://nodejs.org/) |
+| PostgreSQL | 14+ | [postgresql.org](https://www.postgresql.org/download/) |
+
+### 1. Base de datos
+
 ```bash
-# Linux / macOS
+# Crear base de datos
 createdb trickreport
+
+# Las migraciones se ejecutan automáticamente al iniciar el backend.
+# No necesitas correr SQL manualmente.
 ```
 
-Migrations run **automatically** on backend startup — no manual migration step needed.
-
-### 2. Backend
-
-Copy and customize the environment file:
-
-```powershell
-cd backend
-copy .env.example .env
-# Edit .env: set DATABASE_URL with your local PostgreSQL credentials
-```
+### 2. Variables de entorno
 
 ```bash
-# Linux / macOS
 cd backend
 cp .env.example .env
-# Edit .env: set DATABASE_URL with your local PostgreSQL credentials
+# Editar .env: setear DATABASE_URL con tus credredenciales de PostgreSQL
 ```
 
-Run the server:
+```bash
+cd frontend
+cp .env.example .env.local
+```
+
+### 3. Backend (Go)
 
 ```bash
 cd backend
 go run cmd/api/main.go
+# ✅ Servidor en http://localhost:8080
+# ✅ Migraciones se ejecutan automáticamente
+# ✅ Logs en backend/trickreport.log + stdout (dev)
 ```
 
-Or use the Makefile:
+### 4. Frontend (Astro)
 
 ```bash
-cd backend
-make run
-```
-
-The backend runs at `http://localhost:8080`.
-Migrations are applied automatically on startup.
-
-Default credentials:
-
-- Email: `admin@trickreport.local`
-- Password: `changeme` (set `ADMIN_PASSWORD` in `.env`)
-
-### 3. Frontend
-
-Install dependencies and run the dev server:
-
-```powershell
 cd frontend
-copy .env.example .env.local
 npm install
 npm run dev
+# ✅ Frontend en http://localhost:4321
 ```
 
-```bash
-# Linux / macOS
-cd frontend
-cp .env.example .env.local
-npm install
-npm run dev
-```
-
-The frontend runs at `http://localhost:4321`.
-
-### 4. One-command dev (both backend + frontend)
-
-From the project root:
+### 5. Un solo comando (backend + frontend)
 
 ```powershell
 # Windows PowerShell
@@ -112,248 +285,216 @@ From the project root:
 ./scripts/dev.sh
 ```
 
-This starts the backend and frontend concurrently. Press `Ctrl+C` to stop both.
-
-Or with the root Makefile:
+O con el Makefile raíz:
 
 ```bash
 make dev
 ```
 
-## Project structure
+### Credenciales por defecto
 
+| Campo | Valor |
+|-------|-------|
+| Email | `admin@trickreport.local` |
+| Password | `changeme` (configurable via `ADMIN_PASSWORD` en `.env`) |
+
+## 📊 Features
+
+### Core
+
+| Feature | Descripción |
+|---------|-------------|
+| **Multi-tenancy** | Aislamiento por `tenant_id` con tenant resolver cacheado |
+| **Auth** | JWT (cookie + header), refresh tokens con rotación, MFA/TOTP, password reset, account lockout (5 intentos), password complexity |
+| **Tickets** | Ciclo completo: crear, asignar, cambiar estado, comentarios, historial, attachments |
+| **Knowledge Base** | Artículos con soporte Markdown, CRUD para agents/admins |
+| **SLA** | Policies por prioridad, deadline calculation automática, worker de background escanea mora |
+| **Automations** | Reglas visuales (condiciones + acciones), motor de evaluación, test de reglas |
+| **Analytics** | Dashboard con KPIs, SVG charts (line + donut), export CSV/PDF |
+| **Real-time** | WebSocket: notificaciones de tickets en vivo, toast popups, notification bell con badge |
+| **Notifications** | Persistencia en DB + broadcast WebSocket, mark read / mark all read, unread count |
+
+### Frontend UX
+
+| Feature | Descripción |
+|---------|-------------|
+| **Dark mode** | System preference + toggle manual, persistido en localStorage |
+| **Responsive** | Sidebar colapsable con hamburger menu, mobile-first |
+| **Loading states** | Skeletons + spinners |
+| **Pagination + filtering** | Tickets y artículos con filtros por estado/prioridad/búsqueda |
+| **Form validation** | Validación en tiempo real con error states |
+| **Accessibility** | WCAG 2.2: ARIA, skip-link, sr-only, focus-visible, keyboard nav |
+| **Toasts** | Notificaciones temporales con auto-dismiss |
+| **Modals** | Diálogos accesibles |
+| **Keyboard shortcuts** | `g d` dashboard, `g t` tickets, `g a` articles, `g u` users, `n` new ticket, `?` help |
+| **Global search** | Búsqueda con navegación por teclado |
+| **PWA** | Manifest + Service Worker + offline + install prompt + update toast + push notifications |
+| **Profiles** | Admin profile (stats + quick actions), user profile (edit, password, MFA, sessions) |
+
+### Backend Reliability
+
+| Feature | Descripción |
+|---------|-------------|
+| **Transactions** | TxManager con propagación por contexto |
+| **Domain events** | Event bus in-memory para desacoplar side effects |
+| **Email queue** | Cola con retries + templates HTML |
+| **Worker** | Background con retry logic, metrics, health check |
+| **Connection pool** | Configurable via env |
+| **Rate limiting** | Global por IP + login rate limiting por email+IP |
+| **Security** | CSRF, max body size, compression, security headers, file upload validation |
+| **Observability** | Prometheus metrics (`/metrics`), request ID propagation, Swagger (`/swagger`) |
+
+## 🔧 Variables de Entorno
+
+### Backend Go
+
+| Variable | Requerida | Default | Descripción |
+|----------|-----------|---------|-------------|
+| `DATABASE_URL` | ✅ | — | Connection string PostgreSQL |
+| `JWT_SECRET` | ✅ | — | Secret para firmar JWT |
+| `JWT_EXP_HOURS` | ❌ | `8` | Expiración del token en horas |
+| `PORT` | ❌ | `8080` | Puerto del servidor |
+| `ENV` | ❌ | `development` | `development` o `production` |
+| `CORS_ORIGINS` | ✅ prod | `http://localhost:4321` | Origins permitidos (separados por coma) |
+| `COOKIE_SECURE` | ❌ | `false` | Forzado a `true` en producción |
+| `ADMIN_EMAIL` | ❌ | `admin@trickreport.local` | Email del admin inicial |
+| `ADMIN_PASSWORD` | ❌ | `changeme` | Password del admin inicial |
+| `LDAP_ENABLED` | ❌ | `false` | Habilitar autenticación LDAP |
+
+### Frontend (Astro)
+
+| Variable | Requerida | Default | Descripción |
+|----------|-----------|---------|-------------|
+| `API_URL` | ✅ | — | URL base del backend Go |
+
+### Ejemplo `.env`
+
+```env
+# Backend Go
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/trickreport?sslmode=disable
+JWT_SECRET=tu-secreto-super-seguro-cambiar-en-produccion
+JWT_EXP_HOURS=8
+PORT=8080
+ENV=development
+CORS_ORIGINS=http://localhost:4321
+ADMIN_EMAIL=admin@trickreport.local
+ADMIN_PASSWORD=changeme
 ```
-backend/
-  cmd/api/main.go          # Entry point
-  internal/
-    application/           # Use cases / services
-    domain/                # Domain models and rules
-    infrastructure/        # Repositories, auth, realtime
-    interfaces/http/       # HTTP handlers, middleware, server, wire
-  internal/db/migrations/  # Embedded SQL migrations (auto-applied)
 
-frontend/
-  src/
-    components/            # NeuButton, NeuCard, NeuInput, NeuBadge, NotificationBell, ...
-    layouts/               # App shell with sidebar + header
-    pages/                 # Routes (Astro file-based routing)
-    lib/api.ts             # API client for the Go backend
-  src/styles/global.css    # Neumorphism 2.0 design tokens
+```env
+# Frontend
+API_URL=http://localhost:8080
 ```
 
-## Features
-
-1. **Multi-tenancy:** Tenant isolation via `tenant_id` (default tenant seeded).
-2. **Authentication:** JWT-based Auth with RBAC (End User, Agent, Admin), refresh tokens, MFA/TOTP, password reset, account lockout.
-3. **Tickets:** Full ticket lifecycle, status management, assignment, comments, history, attachments.
-4. **Knowledge Base:** Markdown-supported articles with CRUD for agents/admins.
-5. **SLAs & Automations:** SLA deadlines tracked by a background worker, visual automation builder.
-6. **Analytics:** Dashboard with KPI cards, SVG charts, ticket metrics, CSV/PDF export.
-7. **Real-Time:** WebSockets for live ticket notifications, toast popups, notification bell.
-8. **Profiles:** Admin profile with system stats, user profile with MFA/sessions management.
-9. **UX:** Dark mode, responsive sidebar, loading states, pagination, accessibility (WCAG 2.2), keyboard shortcuts, PWA with offline support.
-
-## Development
-
-### Running tests
+## 🧪 Testing & CI
 
 ```bash
 # Backend
 cd backend
 make test          # go test ./... -v -race
-make coverage      # generates coverage.out and prints per-function coverage
-
-# Frontend
-cd frontend
-npm run build      # type-checks + builds
-npx vitest run     # unit tests
-```
-
-### Linting & formatting
-
-```bash
-# Backend
-cd backend
+make coverage      # coverage.out + per-func report
 make lint          # golangci-lint
-make fmt           # go fmt
 make security      # govulncheck
 
 # Frontend
 cd frontend
+npm run build      # type-check + build
+npx vitest run     # unit tests
 npm run lint       # eslint
-npm run format     # prettier
 ```
 
-### Pre-commit hooks
+### CI Pipeline (GitHub Actions)
 
-**Frontend (husky + lint-staged):** after `npm install` in `frontend/`, husky
-is wired automatically via the `prepare` script. Staged `.js/.ts/.astro` files
-are linted and formatted; `.css/.json/.md` files are formatted.
+| Job | Descripción |
+|-----|-------------|
+| **Backend (Go)** | `go build` → `go vet` → `go test` → `govulncheck` → coverage report |
+| **Frontend (Astro)** | `npm ci` → `npm run build` → `npm run lint` → `npm audit` |
+| **Security** | Trivy container scan + dependency audit |
 
-**Backend (go vet + gofmt):** enable the backend hook with:
+## 🚢 Despliegue (Docker / On-Premise)
 
-```bash
-git config core.hooksPath backend/.githooks
-```
-
-This runs `go vet ./...` and `gofmt -l .` before each commit.
-
-### API documentation
-
-Interactive API docs are served at the `/swagger` endpoint when the Swagger
-handler is enabled (run `make install-tools` then `swag init` in `backend/` to
-generate the spec). See the backend `Makefile` `install-tools` target.
-
-## Production build
-
-Backend:
-
-```bash
-cd backend
-go build -o dist/trickreport-api cmd/api/main.go
-```
-
-Frontend:
-
-```bash
-cd frontend
-npm run build
-node ./dist/server/entry.mjs
-```
-
-## Deployment (Docker / On-Premise)
-
-> Docker is **only for production/staging deployments**. Local development always runs natively (see [Quick start](#quick-start-local-no-docker)).
+> Docker es **solo para despliegue productivo/staging**. El desarrollo local siempre es nativo.
 
 ### Docker Quick Start
 
-1. Create a `.env` file with the required secrets:
+```bash
+cp .env.onpremise.example .env
+# Editar .env con secrets fuertes
+docker compose up -d --build
+curl http://localhost:8080/health
+```
 
-   ```bash
-   cp .env.onpremise.example .env
-   # edit .env and set strong POSTGRES_PASSWORD, JWT_SECRET, ADMIN_PASSWORD
-   ```
+### On-Premise (Caddy, puerto 80)
 
-2. Build and start all services:
+```bash
+cp .env.onpremise.example .env.onpremise
+docker compose -f docker-compose.onpremise.yml --env-file .env.onpremise up -d --build
+```
 
-   ```bash
-   docker compose up -d --build
-   ```
+### Staging
 
-3. Verify the backend is healthy:
+```bash
+cp .env.staging.example .env.staging
+docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
+```
 
-   ```bash
-   curl http://localhost:8080/health
-   ```
-
-The API is available at `http://localhost:8080`, PostgreSQL on `5432`.
-All services run on a dedicated `trickreport_net` bridge network with resource
-limits and rotated JSON logs.
-
-### On-Premise Deployment
-
-For self-hosted deployments behind a single Caddy reverse proxy on port 80:
-
-1. Copy the on-premise env template and edit it:
-
-   ```bash
-   cp .env.onpremise.example .env.onpremise
-   ```
-
-2. Start the stack:
-
-   ```bash
-   docker compose -f docker-compose.onpremise.yml --env-file .env.onpremise up -d --build
-   ```
-
-The app is then served on `http://localhost` (port 80) with the frontend and
-backend on the same origin.
-
-### Staging Environment
-
-A staging compose file mirrors on-premise but uses a separate database
-(`trickreport_staging`) and a staging domain.
-
-1. Copy the staging env template and edit it:
-
-   ```bash
-   cp .env.staging.example .env.staging
-   ```
-
-2. Start the staging stack:
-
-   ```bash
-   docker compose -f docker-compose.staging.yml --env-file .env.staging up -d --build
-   ```
-
-By default staging is exposed on host port `8081` (configurable via
-`STAGING_PORT` in `.env.staging`).
-
-### Monitoring
-
-A Prometheus + Grafana + Alertmanager stack is provided as an overlay.
+### Monitoring (Prometheus + Grafana + Alertmanager)
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
 ```
 
-| Service      | URL                       | Notes                                  |
-|--------------|---------------------------|----------------------------------------|
-| Prometheus   | http://localhost:9090     | Scrapes backend `/metrics`             |
-| Grafana      | http://localhost:3001     | admin / `${GRAFANA_PASSWORD:-admin}`   |
-| Alertmanager | http://localhost:9093     | Routes service-down / error-rate alerts |
+| Service | URL | Notes |
+|---------|-----|-------|
+| Prometheus | http://localhost:9090 | Scrapes `/metrics` |
+| Grafana | http://localhost:3001 | admin / `${GRAFANA_PASSWORD:-admin}` |
+| Alertmanager | http://localhost:9093 | Alert routing |
 
-Scrape config lives in `monitoring/prometheus.yml`, alert rules in
-`monitoring/rules.yml`, and Alertmanager routing in
-`monitoring/alertmanager.yml`.
-
-### Backup & Restore
-
-Scheduled PostgreSQL backups run via a sidecar service that writes gzipped
-dumps to `./backups` on a daily cron, with 7-day / 4-week / 6-month retention.
-
-Start the backup service (overlay with the main compose file):
+### Backup
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d backup
+./scripts/restore.sh backups/trickreport_2024-01-01.sql.gz
 ```
 
-Restore a backup:
+## 🐛 Troubleshooting
+
+| Síntoma | Causa | Solución |
+|---------|-------|----------|
+| `failed to connect to database` | `DATABASE_URL` incorrecta o PostgreSQL no corre | Verificar PostgreSQL en `localhost:5432`; revisar credenciales en `backend/.env` |
+| `JWT_SECRET must be set` | `ENV=production` sin secret | Setear `JWT_SECRET` fuerte en `backend/.env` |
+| Frontend no llega al API | `CORS_ORIGINS` no incluye el origen | Agregar `http://localhost:4321` a `CORS_ORIGINS` |
+| WebSocket no funciona | Origin bloqueado o token no pasado | Verificar `CORS_ORIGINS`; WS usa `?token=` query param |
+| Puerto en uso (5432/8080/4321) | Otro proceso ocupa el puerto | Detener el proceso o cambiar `PORT` en `.env` |
+
+## 🤝 Contributing
+
+1. Instalar prerrequisitos (Go 1.25+, Node 20+, PostgreSQL 14+).
+2. Fork + clone del repo.
+3. `make dev` desde la raíz (arranca backend + frontend).
+4. Crear branch desde `dev` (`git checkout -b feat/my-feature`).
+5. Conventional Commits (`feat:`, `fix:`, `docs:`, `chore:`).
+6. `make test` + `make lint` deben pasar.
+7. Abrir PR a `dev`.
+
+### Pre-commit hooks
+
+**Frontend (husky + lint-staged):** se instala automáticamente con `npm install`.
+
+**Backend (go vet + gofmt):**
 
 ```bash
-./scripts/restore.sh backups/trickreport_2024-01-01T00:00:00Z.sql.gz
+git config core.hooksPath backend/.githooks
 ```
 
-> The restore script drops and recreates the `public` schema before loading,
-> so it should only be run against a target database you are willing to reset.
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| `failed to connect to database` | Wrong `DATABASE_URL` in `.env` or PostgreSQL not running | Verify PostgreSQL is running on `localhost:5432`; check credentials in `backend/.env` |
-| `JWT_SECRET must be set` on startup | `ENV=production` without a secret | Set a strong `JWT_SECRET` in `backend/.env` |
-| `ADMIN_PASSWORD must be set` on startup | `ENV=production` without admin password | Set `ADMIN_PASSWORD` in `backend/.env` |
-| Frontend cannot reach API | `CORS_ORIGINS` missing the frontend origin | Add `http://localhost:4321` to `CORS_ORIGINS` in `backend/.env` |
-| `port is already allocated` (5432 / 8080) | Another process holds the port | Stop the conflicting process or change `PORT` in `.env` |
-| WebSocket notifications not working | Token not passed or origin blocked | Check `CORS_ORIGINS` includes frontend origin; WebSocket uses `?token=` query param |
-| `COOKIE_SECURE` warning in production | Secure cookies disabled in prod | Set `COOKIE_SECURE=true` (forced automatically in production) |
-
-## Contributing
-
-1. Install prerequisites (Go 1.23+, Node 20+, PostgreSQL 14+).
-2. Fork and clone the repository.
-3. Backend: `cd backend && go run cmd/api/main.go` (migrations auto-applied on startup).
-4. Frontend: `cd frontend && npm install && npm run dev`.
-5. Or use `make dev` from the root to start both.
-
-### Submitting pull requests
-
-1. Create a feature branch from `main` (`git checkout -b feat/my-feature`).
-2. Keep commits focused and use [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, `chore:`, …).
-3. Ensure `make test` and `make lint` pass locally.
-4. Open a PR describing the change, motivation, and any migration/deploy notes.
-
-## License
+## 📜 Licencia
 
 Released under the **MIT License**. See `LICENSE` for details.
+
+---
+
+<div align="center">
+
+<sub>Hecho con ❤️ para mesa de ayuda y soporte técnico</sub>
+
+</div>
