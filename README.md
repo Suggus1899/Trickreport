@@ -72,7 +72,7 @@ Plataforma de mesa de ayuda y ticketing **multi-tenant** construida con arquitec
 <br><sub>HS256 · 8h + refresh</sub>
 </td>
 <td align="center" width="120">
-<a href="https://github.com/gorilla/websocket" target="_blank"><img src="https://cdn.simpleicons.org/websocket/010101" width="48" height="48" alt="WebSocket" /></a>
+<a href="https://github.com/gorilla/websocket" target="_blank"><img src="https://cdn.simpleicons.org/socketdotio/010101" width="48" height="48" alt="WebSocket" /></a>
 <br><sub><b><a href="https://github.com/gorilla/websocket" target="_blank">WebSocket</a></b></sub>
 <br><sub>Real-time notifications</sub>
 </td>
@@ -97,7 +97,7 @@ Plataforma de mesa de ayuda y ticketing **multi-tenant** construida con arquitec
 <br><sub>Formatting</sub>
 </td>
 <td align="center" width="120">
-<a href="https://github.com/zerolog/zerolog" target="_blank"><img src="https://cdn.simpleicons.org/zerolog/000000" width="48" height="48" alt="zerolog" /></a>
+<a href="https://github.com/zerolog/zerolog" target="_blank"><img src="https://img.shields.io/badge/zerolog-000000?style=flat&logo=go&logoColor=white" width="48" height="20" alt="zerolog" /></a>
 <br><sub><b><a href="https://github.com/zerolog/zerolog" target="_blank">zerolog</a></b></sub>
 <br><sub>Structured logging</sub>
 </td>
