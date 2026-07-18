@@ -1,0 +1,144 @@
+name: Release (SLSA Go Releaser)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag-name:
+        description: "Tag name for the release (e.g. v1.0.0)"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  # ────────────────────────────────────────────────────────────────────────────
+  # Prepare version metadata for ldflags.
+  # ────────────────────────────────────────────────────────────────────────────
+  prepare:
+    name: Prepare version metadata
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      commit-date: ${{ steps.meta.outputs.commit-date }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version metadata
+        id: meta
+        run: |
+          # VERSION: strip leading 'v' from tag (e.g. v1.0.0 → 1.0.0)
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(git describe --tags --always --dirty | cut -c2-)"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+          # COMMIT_DATE: ISO 8601 of the last commit
+          COMMIT_DATE="$(git log --date=iso8601-strict -1 --pretty=%cd)"
+          echo "commit-date=${COMMIT_DATE}" >> "$GITHUB_OUTPUT"
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # SLSA Go Releaser: compile the Go backend with a SLSA3 compliant builder.
+  # Generates non-forgeable provenance for each binary.
+  # https://github.com/slsa-framework/slsa-github-generator
+  # ────────────────────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }}/${{ matrix.arch }})
+    needs: [prepare]
+    permissions:
+      id-token: write # To sign the provenance.
+      contents: write # To upload assets to release.
+      actions: read   # To read the workflow path.
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [linux, windows, darwin]
+        arch: [amd64, arm64]
+        exclude:
+          # windows/arm64 is not commonly used; skip it.
+          - os: windows
+            arch: arm64
+    uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
+    with:
+      go-version: "1.25"
+      config-file: backend/.slsa-goreleaser/${{ matrix.os }}-${{ matrix.arch }}.yml
+      upload-assets: true
+      # Pass dynamically-generated env vars for ldflags.
+      evaluated-envs: |
+        VERSION=${{ needs.prepare.outputs.version }},
+        COMMIT=${{ github.sha }},
+        COMMIT_DATE=${{ needs.prepare.outputs.commit-date }}
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # Frontend build (Astro SSR) + compute subjects for SLSA provenance.
+  # ────────────────────────────────────────────────────────────────────────────
+  frontend:
+    name: Frontend (Astro SSR)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      actions: read
+      id-token: write
+    outputs:
+      base64-subjects: ${{ steps.subjects.outputs.base64-subjects }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Package frontend
+        run: |
+          mkdir -p dist
+          tar -czf dist/trickreport-frontend.tar.gz -C frontend/dist .
+
+      - name: Compute subjects for SLSA provenance
+        id: subjects
+        working-directory: dist
+        run: |
+          # Compute sha256sum and base64 encode it for the SLSA generic generator.
+          sha256sum trickreport-frontend.tar.gz > subjects.sha256sum
+          cat subjects.sha256sum
+          BASE64_SUBJECTS=$(base64 -w0 subjects.sha256sum)
+          echo "base64-subjects=${BASE64_SUBJECTS}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: trickreport-frontend
+          path: dist/trickreport-frontend.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+  # ────────────────────────────────────────────────────────────────────────────
+  # SLSA Generic Generator: generate SLSA3 provenance for the frontend artifact.
+  # https://github.com/slsa-framework/slsa-github-generator
+  # ────────────────────────────────────────────────────────────────────────────
+  frontend-provenance:
+    name: Frontend Provenance (SLSA Generic Generator)
+    needs: [frontend]
+    permissions:
+      id-token: write
+      contents: write
+      actions: read
+    uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
+    with:
+      upload-assets: true
+      base64-subjects: ${{ needs.frontend.outputs.base64-subjects }}
