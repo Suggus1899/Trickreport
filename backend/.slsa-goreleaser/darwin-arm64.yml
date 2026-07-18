@@ -1,0 +1,24 @@
+# SLSA Go Releaser config — darwin/arm64
+# https://github.com/slsa-framework/slsa-github-generator
+version: 1
+
+env:
+  - GO111MODULE=on
+  - CGO_ENABLED=0
+
+flags:
+  - -trimpath
+  - -tags=netgo
+
+goos: darwin
+goarch: arm64
+
+dir: ./backend
+main: ./backend/cmd/api
+
+binary: trickreport-backend-darwin-arm64
+
+ldflags:
+  - "-X main.Version={{ .Env.VERSION }}"
+  - "-X main.Commit={{ .Env.COMMIT }}"
+  - "-X main.CommitDate={{ .Env.COMMIT_DATE }}"
