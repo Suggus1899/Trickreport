@@ -9,6 +9,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
+
+	appAuto "github.com/trickreport/backend/internal/application/automation"
 )
 
 // Worker checks for SLA breaches and runs automations in the background.
@@ -16,6 +18,7 @@ type Worker struct {
 	db           *pgxpool.Pool
 	systemUserID uuid.UUID
 	interval     time.Duration
+	engine       *appAuto.Engine
 
 	wg sync.WaitGroup
 }
@@ -32,6 +35,12 @@ func WithSystemUserID(id uuid.UUID) Option {
 // WithInterval sets the poll interval. Defaults to 1 minute.
 func WithInterval(d time.Duration) Option {
 	return func(w *Worker) { w.interval = d }
+}
+
+// WithEngine wires the automation engine so SLA breach events are evaluated
+// against automation rules.
+func WithEngine(engine *appAuto.Engine) Option {
+	return func(w *Worker) { w.engine = engine }
 }
 
 // New creates a Worker. Pass options to customize behavior.
@@ -104,8 +113,12 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 		}
 		breachCount++
 		ticketIDStr := ""
+		tenantIDStr := ""
 		if id.Valid {
 			ticketIDStr = uuid.UUID(id.Bytes).String()
+		}
+		if tenantID.Valid {
+			tenantIDStr = uuid.UUID(tenantID.Bytes).String()
 		}
 
 		if _, err := w.db.Exec(ctx, `
@@ -120,6 +133,21 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 			VALUES ($1, $2, 'sla_breached', 'false', 'true')
 		`, id, w.systemUserID); err != nil {
 			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach history")
+		}
+
+		// Fire automation rules for the SLA breach event.
+		if w.engine != nil && id.Valid && tenantID.Valid {
+			event := appAuto.Event{
+				Type:     "sla_breach",
+				TenantID: uuid.UUID(tenantID.Bytes),
+				TicketID: uuid.UUID(id.Bytes),
+				UserID:   w.systemUserID,
+				OldValue: "false",
+				NewValue: "true",
+			}
+			if err := w.engine.Evaluate(ctx, uuid.UUID(tenantID.Bytes), event); err != nil {
+				log.Error().Err(err).Str("ticket_id", ticketIDStr).Str("tenant_id", tenantIDStr).Msg("Worker failed to evaluate automations for SLA breach")
+			}
 		}
 	}
 

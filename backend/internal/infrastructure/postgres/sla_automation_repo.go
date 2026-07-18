@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/trickreport/backend/internal/application/automation"
-	domainautomation "github.com/trickreport/backend/internal/domain/automation"
 	"github.com/trickreport/backend/internal/application/sla"
+	domainautomation "github.com/trickreport/backend/internal/domain/automation"
 	domainsla "github.com/trickreport/backend/internal/domain/sla"
 )
 
@@ -85,6 +85,11 @@ type AutomationRepo struct {
 // NewAutomationRepo creates a new AutomationRepo.
 func NewAutomationRepo(db *pgxpool.Pool) *AutomationRepo {
 	return &AutomationRepo{db: db}
+}
+
+// DB returns the underlying connection pool (used by the automation executor).
+func (r *AutomationRepo) DB() *pgxpool.Pool {
+	return r.db
 }
 
 // Compile-time assertion that AutomationRepo implements automation.Repository.

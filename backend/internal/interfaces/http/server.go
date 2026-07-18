@@ -8,26 +8,27 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
-	"golang.org/x/time/rate"
 	"github.com/rs/zerolog/log"
+	"golang.org/x/time/rate"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
 	"github.com/trickreport/backend/internal/config"
 	"github.com/trickreport/backend/internal/email"
 	infraAuth "github.com/trickreport/backend/internal/infrastructure/auth"
+	infraEmail "github.com/trickreport/backend/internal/infrastructure/email"
 	infraRealtime "github.com/trickreport/backend/internal/infrastructure/realtime"
 	httpMiddleware "github.com/trickreport/backend/internal/interfaces/http/middleware"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
 	"github.com/trickreport/backend/internal/realtime"
 	"github.com/trickreport/backend/internal/worker"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Server is the HTTP server with all dependencies wired.
 type Server struct {
-	cfg      *config.Config
-	pool     *pgxpool.Pool
-	router   *chi.Mux
+	cfg       *config.Config
+	pool      *pgxpool.Pool
+	router    *chi.Mux
 	workerCtx context.Context
 }
 
@@ -41,11 +42,14 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	realtime.ConfigureAllowedOrigins(cfg.AllowedOrigins())
 
 	// ── Email ─────────────────────────────────────────────────────────
-	sender := email.NewConsoleSender()
-
-	// ── Worker ────────────────────────────────────────────────────────
-	wrk := worker.New(pool)
-	go wrk.Start(ctx)
+	var sender email.Sender
+	if cfg.Email.SMTPHost != "" {
+		sender = infraEmail.NewSMTPSender(cfg.Email.SMTPHost, cfg.Email.SMTPPort, cfg.Email.SMTPUsername, cfg.Email.SMTPPassword, cfg.Email.SMTPFrom, cfg.Email.SMTPUseTLS)
+		log.Info().Str("host", cfg.Email.SMTPHost).Int("port", cfg.Email.SMTPPort).Msg("SMTP email sender configured")
+	} else {
+		sender = email.NewConsoleSender()
+		log.Info().Msg("Console email sender configured (no SMTP_HOST set)")
+	}
 
 	// ── Infrastructure: Repositories ──────────────────────────────────
 	repos := NewRepos(pool)
@@ -69,6 +73,10 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	}
 	services := NewServices(repos, hasher, tokenGen, hubAdapter, sender, ldapAuth, authCfg)
 
+	// ── Worker ────────────────────────────────────────────────────────
+	wrk := worker.New(pool, worker.WithEngine(services.Engine))
+	go wrk.Start(ctx)
+
 	// ── Interface: Handlers ───────────────────────────────────────────
 	handlers := NewHandlers(services)
 	authHandler := handlers.Auth
@@ -78,6 +86,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	slaHandler := handlers.SLA
 	automationHandler := handlers.Automation
 	analyticsHandler := handlers.Analytics
+	attachmentHandler := handlers.Attachment
 
 	// ── Router ────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -200,6 +209,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 					r.Get("/volume", analyticsHandler.GetVolume)
 					r.Get("/status-distribution", analyticsHandler.GetStatusDistribution)
 					r.Get("/resolution-time", analyticsHandler.GetResolutionTime)
+					r.Get("/charts", analyticsHandler.GetCharts)
 				})
 			})
 
@@ -219,6 +229,11 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 
 				r.Get("/{id}/comments", ticketHandler.ListComments)
 				r.Post("/{id}/comments", ticketHandler.AddComment)
+
+				// Attachments
+				r.Post("/{id}/attachments", attachmentHandler.Upload)
+				r.Get("/{id}/attachments", attachmentHandler.List)
+				r.Get("/{id}/attachments/{aid}", attachmentHandler.Download)
 
 				r.With(httpMiddleware.RequireRole("admin", "agent")).Get("/{id}/history", ticketHandler.ListHistory)
 			})

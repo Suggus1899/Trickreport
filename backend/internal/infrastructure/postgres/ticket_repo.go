@@ -50,6 +50,9 @@ func (r *TicketRepo) List(ctx context.Context, tenantID uuid.UUID, filter appTic
 	if filter.AssignedTo != "" {
 		q = q.Where(squirrel.Eq{"t.assigned_to": filter.AssignedTo})
 	}
+	if filter.Search != "" {
+		q = q.Where("t.search_vector @@ plainto_tsquery('english', ?)", filter.Search)
+	}
 	if filter.Limit > 0 {
 		q = q.Limit(uint64(filter.Limit))
 	}

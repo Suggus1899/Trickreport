@@ -64,3 +64,18 @@ func (h *AnalyticsHandler) GetResolutionTime(w http.ResponseWriter, r *http.Requ
 
 	response.JSON(w, http.StatusOK, metrics)
 }
+
+// GetCharts returns aggregated chart data in a single response, optimized
+// for frontend rendering.
+func (h *AnalyticsHandler) GetCharts(w http.ResponseWriter, r *http.Request) {
+	tenantID := middleware.TenantFromContext(r.Context())
+
+	data, err := h.svc.GetCharts(r.Context(), tenantID)
+	if err != nil {
+		middleware.LoggerFromContext(r.Context()).Error().Err(err).Str("tenant_id", tenantID.String()).Msg("analytics charts failed")
+		response.Error(w, http.StatusInternalServerError, "failed to get chart data")
+		return
+	}
+
+	response.JSON(w, http.StatusOK, data)
+}

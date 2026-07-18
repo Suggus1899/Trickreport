@@ -3,6 +3,8 @@ package http
 // wire.go — dependency wiring helpers
 
 import (
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/rs/zerolog/log"
 	appAnalytics "github.com/trickreport/backend/internal/application/analytics"
 	appArticle "github.com/trickreport/backend/internal/application/article"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
@@ -15,7 +17,6 @@ import (
 	"github.com/trickreport/backend/internal/infrastructure/postgres"
 	infraRealtime "github.com/trickreport/backend/internal/infrastructure/realtime"
 	"github.com/trickreport/backend/internal/interfaces/http/handler"
-	"github.com/jackc/pgx/v5/pgxpool"
 )
 
 // Repos holds all repository implementations.
@@ -29,6 +30,7 @@ type Repos struct {
 	Automation     *postgres.AutomationRepo
 	Analytics      *postgres.AnalyticsRepo
 	TenantResolver *postgres.TenantResolver
+	Attachment     *postgres.AttachmentRepo
 }
 
 // NewRepos creates all repositories from a pgxpool.
@@ -43,6 +45,7 @@ func NewRepos(pool *pgxpool.Pool) *Repos {
 		Automation:     postgres.NewAutomationRepo(pool),
 		Analytics:      postgres.NewAnalyticsRepo(pool),
 		TenantResolver: postgres.NewTenantResolver(pool),
+		Attachment:     postgres.NewAttachmentRepo(pool),
 	}
 }
 
@@ -55,6 +58,8 @@ type Services struct {
 	SLA        *appSLA.Service
 	Automation *appAuto.Service
 	Analytics  *appAnalytics.Service
+	Engine     *appAuto.Engine
+	Attachment *appTicket.AttachmentService
 }
 
 // NewServices creates all application services from repos and adapters.
@@ -63,18 +68,28 @@ func NewServices(
 	hasher *infraAuth.BcryptHasher,
 	tokenGen *infraAuth.JWTGenerator,
 	hubAdapter *infraRealtime.HubAdapter,
-	sender *email.ConsoleSender,
+	sender email.Sender,
 	ldapAuth appAuth.LDAPAuthenticator,
 	authCfg appAuth.Config,
 ) *Services {
+	// Build the automation engine: executor uses direct SQL on the pool,
+	// engine uses the automation repo + executor.
+	executor := postgres.NewAutomationExecutor(repos.Automation.DB())
+	engine := appAuto.NewEngine(repos.Automation, executor, log.Logger)
+
+	ticketSvc := appTicket.NewService(repos.Ticket, repos.Comment, repos.History, hubAdapter, sender)
+	ticketSvc.SetEngine(engine)
+
 	return &Services{
-		Ticket:     appTicket.NewService(repos.Ticket, repos.Comment, repos.History, hubAdapter, sender),
+		Ticket:     ticketSvc,
 		User:       appUser.NewService(repos.User, hasher),
 		Article:    appArticle.NewService(repos.Article),
 		SLA:        appSLA.NewService(repos.SLA),
 		Automation: appAuto.NewService(repos.Automation),
 		Analytics:  appAnalytics.NewService(repos.Analytics),
 		Auth:       appAuth.NewService(repos.User, hasher, ldapAuth, tokenGen, authCfg),
+		Engine:     engine,
+		Attachment: appTicket.NewAttachmentService(repos.Attachment, repos.Ticket),
 	}
 }
 
@@ -87,6 +102,7 @@ type Handlers struct {
 	SLA        *handler.SLAHandler
 	Automation *handler.AutomationHandler
 	Analytics  *handler.AnalyticsHandler
+	Attachment *handler.AttachmentHandler
 }
 
 // NewHandlers creates all HTTP handlers from services.
@@ -99,5 +115,6 @@ func NewHandlers(services *Services) *Handlers {
 		SLA:        handler.NewSLAHandler(services.SLA),
 		Automation: handler.NewAutomationHandler(services.Automation),
 		Analytics:  handler.NewAnalyticsHandler(services.Analytics),
+		Attachment: handler.NewAttachmentHandler(services.Attachment),
 	}
 }
