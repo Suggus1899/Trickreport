@@ -12,7 +12,7 @@ import (
 // UserRepository is the port for user lookup during authentication.
 type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*user.User, error)
-	GetByID(ctx context.Context, id uuid.UUID) (*user.User, error)
+	GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*user.User, error)
 }
 
 // PasswordHasher is the port for password verification.
@@ -125,5 +125,5 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (*LoginResult, er
 
 // GetProfile returns the current user's profile.
 func (s *Service) GetProfile(ctx context.Context, userID uuid.UUID) (*user.User, error) {
-	return s.users.GetByID(ctx, userID)
+	return s.users.GetByIDNoTenant(ctx, userID)
 }

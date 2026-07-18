@@ -4,6 +4,7 @@ import (
 	"net"
 	"net/http"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -14,57 +15,107 @@ import (
 // rateLimitConfig holds a token bucket limiter and the last time it was used.
 type rateLimitConfig struct {
 	limiter  *rate.Limiter
-	lastSeen time.Time
+	lastSeen atomic.Int64 // unix nanoseconds
 }
 
-// RateLimiter is an in-memory rate limiter keyed by client identifier.
+// Store is the abstraction for rate limiter state. The default in-memory
+// implementation works for single-instance deployments. Implement a Redis
+// store for distributed rate limiting.
+type Store interface {
+	GetOrCreate(key string, rate rate.Limit, burst int) *rate.Limiter
+	Touch(key string)
+	Cleanup(maxAge time.Duration)
+}
+
+// memoryStore is the default in-memory rate limiter store.
+type memoryStore struct {
+	mu      sync.RWMutex
+	clients map[string]*rateLimitConfig
+}
+
+func newMemoryStore() *memoryStore {
+	return &memoryStore{clients: make(map[string]*rateLimitConfig)}
+}
+
+func (s *memoryStore) GetOrCreate(key string, r rate.Limit, burst int) *rate.Limiter {
+	// Fast path: read lock
+	s.mu.RLock()
+	if cfg, ok := s.clients[key]; ok {
+		cfg.lastSeen.Store(time.Now().UnixNano())
+		s.mu.RUnlock()
+		return cfg.limiter
+	}
+	s.mu.RUnlock()
+
+	// Slow path: write lock
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	// Double-check after acquiring write lock
+	if cfg, ok := s.clients[key]; ok {
+		cfg.lastSeen.Store(time.Now().UnixNano())
+		return cfg.limiter
+	}
+	cfg := &rateLimitConfig{limiter: rate.NewLimiter(r, burst)}
+	cfg.lastSeen.Store(time.Now().UnixNano())
+	s.clients[key] = cfg
+	return cfg.limiter
+}
+
+func (s *memoryStore) Touch(key string) {
+	s.mu.RLock()
+	if cfg, ok := s.clients[key]; ok {
+		cfg.lastSeen.Store(time.Now().UnixNano())
+	}
+	s.mu.RUnlock()
+}
+
+func (s *memoryStore) Cleanup(maxAge time.Duration) {
+	s.mu.Lock()
+	now := time.Now()
+	for key, cfg := range s.clients {
+		last := time.Unix(0, cfg.lastSeen.Load())
+		if now.Sub(last) > maxAge {
+			delete(s.clients, key)
+		}
+	}
+	s.mu.Unlock()
+}
+
+// RateLimiter is a per-client rate limiter. It uses an in-memory store by
+// default and can be configured with a Redis store for distributed deployments.
 type RateLimiter struct {
-	rate     rate.Limit
-	burst    int
-	mu       sync.Mutex
-	clients  map[string]*rateLimitConfig
-	maxAge   time.Duration
+	rate  rate.Limit
+	burst int
+	store Store
+	maxAge time.Duration
 }
 
-// NewRateLimiter creates a new per-client rate limiter.
-// rate is the number of requests per second sustained, burst is the maximum
-// burst size, and maxAge is how long to keep idle client entries.
+// NewRateLimiter creates a new per-client rate limiter with an in-memory store.
 func NewRateLimiter(r rate.Limit, burst int, maxAge time.Duration) *RateLimiter {
 	return &RateLimiter{
-		rate:    r,
-		burst:   burst,
-		clients: make(map[string]*rateLimitConfig),
-		maxAge:  maxAge,
+		rate:   r,
+		burst:  burst,
+		store:  newMemoryStore(),
+		maxAge: maxAge,
 	}
 }
 
-// cleanup periodically removes stale limiters. It should be started once.
+// NewRateLimiterWithStore creates a rate limiter with a custom store (e.g. Redis).
+func NewRateLimiterWithStore(r rate.Limit, burst int, maxAge time.Duration, store Store) *RateLimiter {
+	return &RateLimiter{
+		rate:   r,
+		burst:  burst,
+		store:  store,
+		maxAge: maxAge,
+	}
+}
+
 func (rl *RateLimiter) cleanup() {
 	ticker := time.NewTicker(rl.maxAge / 2)
 	defer ticker.Stop()
 	for range ticker.C {
-		rl.mu.Lock()
-		now := time.Now()
-		for key, cfg := range rl.clients {
-			if now.Sub(cfg.lastSeen) > rl.maxAge {
-				delete(rl.clients, key)
-			}
-		}
-		rl.mu.Unlock()
+		rl.store.Cleanup(rl.maxAge)
 	}
-}
-
-func (rl *RateLimiter) getLimiter(key string) *rate.Limiter {
-	rl.mu.Lock()
-	defer rl.mu.Unlock()
-
-	cfg, ok := rl.clients[key]
-	if !ok {
-		cfg = &rateLimitConfig{limiter: rate.NewLimiter(rl.rate, rl.burst)}
-		rl.clients[key] = cfg
-	}
-	cfg.lastSeen = time.Now()
-	return cfg.limiter
 }
 
 // clientIP returns the client IP from the request, preferring X-Forwarded-For.
@@ -86,7 +137,7 @@ func clientIP(r *http.Request) string {
 func (rl *RateLimiter) LimitByIP(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := clientIP(r)
-		if !rl.getLimiter(key).Allow() {
+		if !rl.store.GetOrCreate(key, rl.rate, rl.burst).Allow() {
 			response.Error(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}
@@ -102,7 +153,7 @@ func (rl *RateLimiter) LimitByUser(next http.Handler) http.Handler {
 		if claims, ok := ClaimsFromContext(r.Context()); ok && claims.UserID != uuid.Nil {
 			key = claims.UserID.String()
 		}
-		if !rl.getLimiter(key).Allow() {
+		if !rl.store.GetOrCreate(key, rl.rate, rl.burst).Allow() {
 			response.Error(w, http.StatusTooManyRequests, "rate limit exceeded")
 			return
 		}

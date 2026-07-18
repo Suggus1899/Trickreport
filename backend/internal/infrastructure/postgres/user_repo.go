@@ -10,17 +10,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	appAuth "github.com/trickreport/backend/internal/application/auth"
 	"github.com/trickreport/backend/internal/application/user"
 	domainuser "github.com/trickreport/backend/internal/domain/user"
 )
 
-// UserRepo implements user.Repository.
+// UserRepo implements both user.Repository and auth.UserRepository.
 //
-// NOTE: The auth.UserRepository interface declares GetByID(ctx, id) with a
-// single id argument, while user.Repository declares GetByID(ctx, id, tenantID)
-// with two arguments. Go does not permit two methods with the same name on a
-// single struct, so one struct cannot satisfy both interfaces simultaneously.
-// This implementation satisfies user.Repository (the richer contract).
+// NOTE: The auth.UserRepository interface declares GetByIDNoTenant(ctx, id)
+// with a single id argument, while user.Repository declares GetByID(ctx, id,
+// tenantID) with two arguments. Go does not permit two methods with the same
+// name on a single struct, so the tenant-less lookup is named GetByIDNoTenant.
 // GetByEmail is shared and matches both interfaces.
 type UserRepo struct {
 	db *pgxpool.Pool
@@ -33,6 +33,9 @@ func NewUserRepo(db *pgxpool.Pool) *UserRepo {
 
 // Compile-time assertion that UserRepo implements user.Repository.
 var _ user.Repository = (*UserRepo)(nil)
+
+// Compile-time assertion that UserRepo implements auth.UserRepository.
+var _ appAuth.UserRepository = (*UserRepo)(nil)
 
 // List returns all users for a tenant, ordered by created_at desc.
 func (r *UserRepo) List(ctx context.Context, tenantID uuid.UUID) ([]domainuser.User, error) {
@@ -68,6 +71,13 @@ func (r *UserRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domain
 	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at FROM users WHERE id = $1 AND tenant_id = $2`
 
 	return r.scanUser(ctx, q, id, tenantID)
+}
+
+// GetByIDNoTenant returns an active user by id without tenant scoping.
+func (r *UserRepo) GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*domainuser.User, error) {
+	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at FROM users WHERE id = $1 AND active = TRUE`
+
+	return r.scanUser(ctx, q, id)
 }
 
 // GetByEmail returns an active user by email.

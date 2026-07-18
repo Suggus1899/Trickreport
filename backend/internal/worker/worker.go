@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,41 +11,68 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
-// systemUserID is the super admin from the seed migration (001_init.sql).
-// Used for worker-generated comments and history entries.
-// In a future refactor this should be configurable.
-var systemUserID = uuid.MustParse("00000000-0000-0000-0000-000000000002")
-
+// Worker checks for SLA breaches and runs automations in the background.
 type Worker struct {
-	db *pgxpool.Pool
+	db           *pgxpool.Pool
+	systemUserID uuid.UUID
+	interval     time.Duration
+
+	wg sync.WaitGroup
 }
 
-func New(db *pgxpool.Pool) *Worker {
-	return &Worker{db: db}
+// Option configures a Worker.
+type Option func(*Worker)
+
+// WithSystemUserID sets the user ID used for worker-generated comments and
+// history entries. Defaults to the seed admin UUID.
+func WithSystemUserID(id uuid.UUID) Option {
+	return func(w *Worker) { w.systemUserID = id }
 }
 
-// Start begins the background worker loop.
-// It checks for SLA breaches and runs automations.
+// WithInterval sets the poll interval. Defaults to 1 minute.
+func WithInterval(d time.Duration) Option {
+	return func(w *Worker) { w.interval = d }
+}
+
+// New creates a Worker. Pass options to customize behavior.
+func New(db *pgxpool.Pool, opts ...Option) *Worker {
+	w := &Worker{
+		db:           db,
+		systemUserID: uuid.MustParse("00000000-0000-0000-0000-000000000002"),
+		interval:     1 * time.Minute,
+	}
+	for _, opt := range opts {
+		opt(w)
+	}
+	return w
+}
+
+// Start begins the background worker loop. It blocks until ctx is cancelled.
+// Use Stop for graceful shutdown — it waits for the current check to finish.
 func (w *Worker) Start(ctx context.Context) {
-	ticker := time.NewTicker(1 * time.Minute)
+	ticker := time.NewTicker(w.interval)
 	defer ticker.Stop()
 
-	log.Info().Msg("Background worker started")
+	log.Info().Dur("interval", w.interval).Msg("Background worker started")
 
 	for {
 		select {
 		case <-ctx.Done():
+			log.Info().Msg("Background worker stopping — waiting for current check")
+			w.wg.Wait()
 			log.Info().Msg("Background worker stopped")
 			return
 		case <-ticker.C:
-			w.checkSLABreaches(ctx)
+			w.wg.Add(1)
+			func() {
+				defer w.wg.Done()
+				w.checkSLABreaches(ctx)
+			}()
 		}
 	}
 }
 
 func (w *Worker) checkSLABreaches(ctx context.Context) {
-	// Find tickets that are not resolved/closed, not already flagged as breached,
-	// and whose created_at + resolution_time_minutes < NOW().
 	q := `
 		WITH breached_tickets AS (
 			SELECT t.id, t.tenant_id, t.priority, s.resolution_time_minutes
@@ -80,22 +108,17 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 			ticketIDStr = uuid.UUID(id.Bytes).String()
 		}
 
-		// Insert internal comment — ticket_comments has no tenant_id column,
-		// it's inferred from the ticket. Column is "content", not "body".
-		// user_id is NOT NULL — use the system admin from seed data.
 		if _, err := w.db.Exec(ctx, `
 			INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
 			VALUES ($1, $2, 'SYSTEM: SLA Resolution Time Breached', TRUE)
-		`, id, systemUserID); err != nil {
+		`, id, w.systemUserID); err != nil {
 			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach comment")
 		}
 
-		// Insert history entry — ticket_history columns are field/old_value/new_value,
-		// not action/details. No tenant_id column either.
 		if _, err := w.db.Exec(ctx, `
 			INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value)
 			VALUES ($1, $2, 'sla_breached', 'false', 'true')
-		`, id, systemUserID); err != nil {
+		`, id, w.systemUserID); err != nil {
 			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach history")
 		}
 	}

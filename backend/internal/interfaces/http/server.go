@@ -3,13 +3,11 @@ package http
 import (
 	"context"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
-	"github.com/rs/zerolog"
 	"golang.org/x/time/rate"
 	"github.com/rs/zerolog/log"
 
@@ -21,7 +19,6 @@ import (
 	appTicket "github.com/trickreport/backend/internal/application/ticket"
 	appUser "github.com/trickreport/backend/internal/application/user"
 	"github.com/trickreport/backend/internal/config"
-	"github.com/trickreport/backend/internal/domain/ticket"
 	"github.com/trickreport/backend/internal/email"
 	infraAuth "github.com/trickreport/backend/internal/infrastructure/auth"
 	"github.com/trickreport/backend/internal/infrastructure/postgres"
@@ -63,7 +60,6 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	commentRepo := postgres.NewCommentRepo(pool)
 	historyRepo := postgres.NewHistoryRepo(pool)
 	userRepo := postgres.NewUserRepo(pool)
-	authUserRepo := postgres.NewAuthUserRepo(pool)
 	articleRepo := postgres.NewArticleRepo(pool)
 	slaRepo := postgres.NewSLARepo(pool)
 	automationRepo := postgres.NewAutomationRepo(pool)
@@ -94,7 +90,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 		JWTExpHours:  cfg.JWTExpHours,
 		SecureCookie: cfg.SecureCookie,
 	}
-	authSvc := appAuth.NewService(authUserRepo, hasher, ldapAuth, tokenGen, authCfg)
+	authSvc := appAuth.NewService(userRepo, hasher, ldapAuth, tokenGen, authCfg)
 
 	// ── Interface: Handlers ───────────────────────────────────────────
 	authHandler := handler.NewAuthHandler(authSvc)
@@ -104,7 +100,6 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	slaHandler := handler.NewSLAHandler(slaSvc)
 	automationHandler := handler.NewAutomationHandler(automationSvc)
 	analyticsHandler := handler.NewAnalyticsHandler(analyticsSvc)
-	webHandler := handler.NewWebHandler(authSvc, userSvc, ticketSvc, articleSvc, slaSvc, automationSvc, analyticsSvc)
 
 	// ── Router ────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -167,68 +162,14 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 		})
 	})
 
-	// ── Static files ──────────────────────────────────────────────────
-	staticDir := os.Getenv("STATIC_DIR")
-	if staticDir == "" {
-		staticDir = "./internal/interfaces/http/static"
-	}
-	fileServer := http.FileServer(http.Dir(staticDir))
-	r.Handle("/static/*", http.StripPrefix("/static/", fileServer))
-
-	// ── Web pages (HTML, server-side rendered) ────────────────────────
-	// Public: login (stricter rate limiting to mitigate brute force attacks)
-	authLimiter := httpMiddleware.NewRateLimiter(rate.Limit(5/60.0), 5, 10*time.Minute)
-	authLimiter.Start()
-
-	r.Get("/login", webHandler.LoginPage)
-	r.With(authLimiter.LimitByIP).Post("/auth/login", webHandler.LoginSubmit)
-	r.Post("/auth/logout", webHandler.Logout)
-
-	// Protected web pages (auth + tenant required)
-	r.Group(func(r chi.Router) {
-		r.Use(httpMiddleware.Authenticate(tokenGen))
-		r.Use(httpMiddleware.Tenant(tenantResolver))
-
-		r.Get("/dashboard", webHandler.Dashboard)
-
-		// Tickets
-		r.Get("/tickets", webHandler.TicketList)
-		r.Get("/tickets/new", webHandler.TicketFormPage)
-		r.Post("/tickets", webHandler.TicketCreate)
-		r.Get("/tickets/{id}", webHandler.TicketDetailPage)
-		r.Post("/tickets/{id}/comments", webHandler.TicketAddComment)
-
-		// Articles (Knowledge Base)
-		r.Get("/articles", webHandler.ArticleList)
-		r.Get("/articles/new", webHandler.ArticleFormPage)
-		r.Post("/articles", webHandler.ArticleCreate)
-		r.Get("/articles/{id}", webHandler.ArticleDetailPage)
-
-		// Admin: Users
-		r.Group(func(r chi.Router) {
-			r.Use(httpMiddleware.RequireRole("admin"))
-			r.Get("/admin/users", webHandler.UserList)
-			r.Get("/admin/users/new", webHandler.UserFormPage)
-			r.Post("/admin/users", webHandler.UserCreate)
-
-			// Admin: SLA
-			r.Get("/admin/sla", webHandler.SLAList)
-			r.Get("/admin/sla/{priority}/edit", webHandler.SLAFormPage)
-			r.Post("/admin/sla/{priority}", webHandler.SLAUpsert)
-
-			// Admin: Automations
-			r.Get("/admin/automations", webHandler.AutomationList)
-			r.Get("/admin/automations/new", webHandler.AutomationFormPage)
-			r.Post("/admin/automations", webHandler.AutomationCreate)
-
-			// Admin: Analytics
-			r.Get("/admin/analytics", webHandler.AnalyticsPage)
-		})
-	})
-
-	// Root redirect
+	// Root redirect — send browser to the Astro frontend (first allowed origin)
+	// or fall back to a JSON health message when no origin is configured.
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/dashboard", http.StatusSeeOther)
+		if len(allowedOrigins) > 0 {
+			http.Redirect(w, r, allowedOrigins[0], http.StatusSeeOther)
+			return
+		}
+		response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
 	})
 
 	// ── API routes (JSON) ─────────────────────────────────────────────
@@ -359,9 +300,3 @@ func (s *Server) Start() {
 	}
 	log.Info().Msg("Server stopped")
 }
-
-// Ensure imports are used
-var (
-	_ = zerolog.ConsoleWriter{}
-	_ = ticket.StatusOpen
-)
