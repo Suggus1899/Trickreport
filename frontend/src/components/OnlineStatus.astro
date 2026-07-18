@@ -1,0 +1,48 @@
+---
+// Online/offline indicator badge. Reflects navigator.onLine and updates
+// live via online/offline event listeners. No props.
+---
+
+<span id="online-status" class="online-status offline inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold neu-convex text-rose-700 shadow-badge-danger">
+  <span class="status-dot"></span>
+  <span class="status-label">Offline</span>
+</span>
+
+<style>
+  .online-status {
+    transition: color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .online-status .status-dot {
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+    background: currentColor;
+    display: inline-block;
+  }
+  .online-status.online {
+    color: var(--success-dark);
+    box-shadow: var(--shadow-badge-success);
+  }
+  .online-status.offline {
+    color: var(--danger-dark);
+    box-shadow: var(--shadow-badge-danger);
+  }
+</style>
+
+<script>
+  function updateOnlineStatus() {
+    const el = document.getElementById('online-status');
+    if (!el) return;
+    const label = el.querySelector('.status-label');
+    const online = navigator.onLine;
+    el.classList.toggle('online', online);
+    el.classList.toggle('offline', !online);
+    if (label) label.textContent = online ? 'Online' : 'Offline';
+  }
+
+  window.addEventListener('online', updateOnlineStatus);
+  window.addEventListener('offline', updateOnlineStatus);
+  // Set initial state on load.
+  document.addEventListener('DOMContentLoaded', updateOnlineStatus);
+  updateOnlineStatus();
+</script>

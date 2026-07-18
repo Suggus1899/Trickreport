@@ -1,0 +1,132 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NeuCard from '../../components/NeuCard.astro';
+import NeuInput from '../../components/NeuInput.astro';
+import NeuButton from '../../components/NeuButton.astro';
+import NeuBadge from '../../components/NeuBadge.astro';
+import { getMe, getUsers, createUser } from '../../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+let user;
+let users;
+let error = '';
+
+try {
+  user = await getMe(token);
+} catch (err) {
+  return Astro.redirect('/login');
+}
+
+if (user.role !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const name = form.get('name')?.toString() || '';
+  const email = form.get('email')?.toString() || '';
+  const role = form.get('role')?.toString() || 'end_user';
+  const password = form.get('password')?.toString() || '';
+  try {
+    await createUser(token, { name, email, role, password });
+    return Astro.redirect('/admin/users');
+  } catch (e: any) {
+    error = e?.message || 'Failed to create user';
+  }
+}
+
+try {
+  users = await getUsers(token);
+} catch (err) {
+  error = err instanceof Error ? err.message : 'Failed to load users';
+}
+
+const roleVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
+  admin: 'danger',
+  agent: 'info',
+  end_user: 'default',
+};
+
+const roles = [
+  { value: 'end_user', label: 'End User' },
+  { value: 'agent', label: 'Agent' },
+  { value: 'admin', label: 'Admin' },
+];
+---
+
+<Layout title="Users — Admin" user={user ? { name: user.name, role: user.role } : undefined}>
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="text-3xl font-bold">Users</h1>
+        <p class="text-muted">Manage workspace members</p>
+      </div>
+      <NeuButton href="/admin" variant="raised" size="sm">Back to Admin</NeuButton>
+    </div>
+
+    {error && (
+      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+    )}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <NeuCard class="lg:col-span-1">
+        <h2 class="text-lg font-semibold mb-4">Create user</h2>
+        <form method="POST" class="flex flex-col gap-4">
+          <NeuInput label="Name" name="name" type="text" required />
+          <NeuInput label="Email" name="email" type="email" required />
+          <div class="flex flex-col gap-2">
+            <label for="role" class="text-sm font-semibold text-main ml-1">Role</label>
+            <select id="role" name="role">
+              {roles.map((r) => <option value={r.value}>{r.label}</option>)}
+            </select>
+          </div>
+          <NeuInput label="Password" name="password" type="password" required />
+          <div class="flex justify-end pt-2">
+            <NeuButton type="submit" variant="accent" size="md">Create User</NeuButton>
+          </div>
+        </form>
+      </NeuCard>
+
+      <NeuCard class="lg:col-span-2 overflow-hidden p-0">
+        <table class="w-full text-left">
+          <thead class="neu-sunken text-xs uppercase text-muted">
+            <tr>
+              <th class="px-6 py-4 font-semibold">Name</th>
+              <th class="px-6 py-4 font-semibold">Email</th>
+              <th class="px-6 py-4 font-semibold">Role</th>
+              <th class="px-6 py-4 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {users && users.length > 0 ? users.map((u) => (
+              <tr class="hover:bg-white/30 transition-colors">
+                <td class="px-6 py-4 font-semibold text-main">{u.name}</td>
+                <td class="px-6 py-4 text-sm text-muted">{u.email}</td>
+                <td class="px-6 py-4">
+                  <NeuBadge variant={roleVariant[u.role] || 'default'}>{u.role.replace('_', ' ')}</NeuBadge>
+                </td>
+                <td class="px-6 py-4">
+                  {u.active ? (
+                    <NeuBadge variant="success">active</NeuBadge>
+                  ) : (
+                    <NeuBadge variant="default">inactive</NeuBadge>
+                  )}
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colspan="4" class="px-6 py-12 text-center text-muted">
+                  No users found.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </NeuCard>
+    </div>
+  </div>
+</Layout>

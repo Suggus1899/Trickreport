@@ -1,0 +1,152 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NeuCard from '../../components/NeuCard.astro';
+import NeuInput from '../../components/NeuInput.astro';
+import NeuButton from '../../components/NeuButton.astro';
+import NeuBadge from '../../components/NeuBadge.astro';
+import { getMe, getAutomations, createAutomation } from '../../lib/api';
+import type { AutomationRule } from '../../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+let user;
+let automations: AutomationRule[] = [];
+let error = '';
+
+try {
+  user = await getMe(token);
+} catch (err) {
+  return Astro.redirect('/login');
+}
+
+if (user.role !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const name = form.get('name')?.toString() || '';
+  const description = form.get('description')?.toString() || '';
+  const trigger_type = form.get('trigger_type')?.toString() || '';
+  const conditionsRaw = form.get('conditions')?.toString() || '{}';
+  const actionsRaw = form.get('actions')?.toString() || '[]';
+  const is_active = form.get('is_active')?.toString() === 'on';
+  let conditions: Record<string, any> = {};
+  let actions: any[] = [];
+  try {
+    conditions = JSON.parse(conditionsRaw);
+    actions = JSON.parse(actionsRaw);
+  } catch {
+    error = 'Conditions and actions must be valid JSON';
+  }
+  if (!error) {
+    try {
+      await createAutomation(token, {
+        name, description, trigger_type, conditions, actions, is_active,
+      });
+      return Astro.redirect('/admin/automations');
+    } catch (e: any) {
+      error = e?.message || 'Failed to create automation';
+    }
+  }
+}
+
+try {
+  automations = await getAutomations(token);
+} catch (err) {
+  error = err instanceof Error ? err.message : 'Failed to load automations';
+}
+
+const triggerTypes = [
+  { value: 'ticket_created', label: 'Ticket Created' },
+  { value: 'ticket_updated', label: 'Ticket Updated' },
+  { value: 'comment_added', label: 'Comment Added' },
+  { value: 'sla_breached', label: 'SLA Breached' },
+];
+---
+
+<Layout title="Automations — Admin" user={user ? { name: user.name, role: user.role } : undefined}>
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="text-3xl font-bold">Automations</h1>
+        <p class="text-muted">Rules that trigger actions automatically</p>
+      </div>
+      <NeuButton href="/admin" variant="raised" size="sm">Back to Admin</NeuButton>
+    </div>
+
+    {error && (
+      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+    )}
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <NeuCard class="lg:col-span-1">
+        <h2 class="text-lg font-semibold mb-4">Create automation</h2>
+        <form method="POST" class="flex flex-col gap-4">
+          <NeuInput label="Name" name="name" type="text" required />
+          <NeuInput label="Description" name="description" type="text" />
+          <div class="flex flex-col gap-2">
+            <label for="trigger_type" class="text-sm font-semibold text-main ml-1">Trigger type</label>
+            <select id="trigger_type" name="trigger_type">
+              {triggerTypes.map((t) => <option value={t.value}>{t.label}</option>)}
+            </select>
+          </div>
+          <div class="flex flex-col gap-2">
+            <label for="conditions" class="text-sm font-semibold text-main ml-1">Conditions (JSON) <span class="text-rose-700">*</span></label>
+            <textarea id="conditions" name="conditions" rows="3" required class="resize-y" placeholder='{"priority":"high"}'>{}</textarea>
+          </div>
+          <div class="flex flex-col gap-2">
+            <label for="actions" class="text-sm font-semibold text-main ml-1">Actions (JSON) <span class="text-rose-700">*</span></label>
+            <textarea id="actions" name="actions" rows="3" required class="resize-y" placeholder='[{"type":"assign"}'>[]</textarea>
+          </div>
+          <label class="flex items-center gap-3 text-sm font-semibold text-main">
+            <input type="checkbox" name="is_active" checked />
+            Active
+          </label>
+          <div class="flex justify-end pt-2">
+            <NeuButton type="submit" variant="accent" size="md">Create</NeuButton>
+          </div>
+        </form>
+      </NeuCard>
+
+      <NeuCard class="lg:col-span-2 overflow-hidden p-0">
+        <table class="w-full text-left">
+          <thead class="neu-sunken text-xs uppercase text-muted">
+            <tr>
+              <th class="px-6 py-4 font-semibold">Name</th>
+              <th class="px-6 py-4 font-semibold">Trigger</th>
+              <th class="px-6 py-4 font-semibold">Status</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {automations.length > 0 ? automations.map((rule) => (
+              <tr class="hover:bg-white/30 transition-colors">
+                <td class="px-6 py-4">
+                  <p class="font-semibold text-main">{rule.name}</p>
+                  {rule.description && <p class="text-xs text-muted">{rule.description}</p>}
+                </td>
+                <td class="px-6 py-4 text-sm text-muted">{rule.trigger_type.replace('_', ' ')}</td>
+                <td class="px-6 py-4">
+                  {rule.is_active ? (
+                    <NeuBadge variant="success">active</NeuBadge>
+                  ) : (
+                    <NeuBadge variant="default">inactive</NeuBadge>
+                  )}
+                </td>
+              </tr>
+            )) : (
+              <tr>
+                <td colspan="3" class="px-6 py-12 text-center text-muted">
+                  No automations configured yet.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </NeuCard>
+    </div>
+  </div>
+</Layout>

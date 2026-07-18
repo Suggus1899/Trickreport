@@ -1,0 +1,255 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NeuCard from '../../components/NeuCard.astro';
+import NeuInput from '../../components/NeuInput.astro';
+import NeuButton from '../../components/NeuButton.astro';
+import OnlineStatus from '../../components/OnlineStatus.astro';
+import { getMe, API_URL } from '../../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+let me;
+try {
+  me = await getMe(token);
+} catch {
+  return Astro.redirect('/login');
+}
+
+const priorities = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
+];
+---
+
+<Layout title="New Ticket (Offline) - Trickreport" user={me ? { name: me.name, role: me.role } : undefined}>
+  <div class="max-w-4xl mx-auto py-8">
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl font-bold text-main">New Ticket</h1>
+      <OnlineStatus />
+    </div>
+
+    <NeuCard>
+      <div id="offline-banner" class="p-4 rounded-2xl neu-sunken text-amber-700 text-sm mb-5" style="display:none;">
+        Saved offline, will sync when connected.
+      </div>
+      <div id="sync-result" class="p-4 rounded-2xl neu-sunken text-emerald-700 text-sm mb-5" style="display:none;"></div>
+      <div id="pending-count" class="p-4 rounded-2xl neu-sunken text-sm text-muted mb-5" style="display:none;"></div>
+
+      <form id="ticket-form" class="flex flex-col gap-5">
+        <NeuInput label="Title" name="title" type="text" required minlength={3} />
+        <div class="flex flex-col gap-2">
+          <label for="description" class="text-sm font-semibold text-main ml-1">Description <span class="text-rose-700">*</span></label>
+          <textarea
+            id="description"
+            name="description"
+            required
+            minlength={10}
+            rows={5}
+            class="resize-y"
+          ></textarea>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div class="flex flex-col gap-2">
+            <label for="priority" class="text-sm font-semibold text-main ml-1">Priority</label>
+            <select id="priority" name="priority">
+              {priorities.map((p) => <option value={p.value}>{p.label}</option>)}
+            </select>
+          </div>
+          <NeuInput label="Category" name="category" type="text" value="general" />
+        </div>
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <a href="/tickets" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-muted hover:text-main">Cancel</a>
+          <NeuButton type="submit" variant="accent">Create Ticket</NeuButton>
+        </div>
+      </form>
+
+      <div class="flex items-center justify-between gap-3 pt-6 mt-6" style="border-top: 1px solid rgba(163, 177, 198, 0.2);">
+        <span class="text-sm text-muted">Pending offline tickets will sync automatically when you're back online.</span>
+        <button id="sync-now" type="button" class="neu-transition px-6 py-3 rounded-2xl font-semibold neu-convex text-accent">
+          Sync now
+        </button>
+      </div>
+    </NeuCard>
+  </div>
+
+  <script is:inline define:vars={{ token, API_URL }}>
+    // ─── Offline ticket submission logic ───────────────────────────────
+
+    // Minimal inline IndexedDB helpers (kept local to avoid module resolution
+    // issues with is:inline scripts). Mirrors src/lib/offline.ts.
+    const DB_NAME = 'trickreport-offline';
+    const STORE = 'pending_tickets';
+
+    function openDB() {
+      return new Promise((resolve, reject) => {
+        const req = indexedDB.open(DB_NAME, 1);
+        req.onupgradeneeded = () => {
+          const db = req.result;
+          if (!db.objectStoreNames.contains(STORE)) {
+            db.createObjectStore(STORE, { keyPath: 'id' });
+          }
+        };
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    function store(db, mode) {
+      return db.transaction(STORE, mode).objectStore(STORE);
+    }
+
+    function reqPromise(req) {
+      return new Promise((resolve, reject) => {
+        req.onsuccess = () => resolve(req.result);
+        req.onerror = () => reject(req.error);
+      });
+    }
+
+    async function savePending(data) {
+      const ticket = { id: crypto.randomUUID(), data, createdAt: Date.now() };
+      const db = await openDB();
+      await reqPromise(store(db, 'readwrite').add(ticket));
+      db.close();
+      return ticket.id;
+    }
+
+    async function getPending() {
+      const db = await openDB();
+      const all = await reqPromise(store(db, 'readonly').getAll());
+      db.close();
+      return all.sort((a, b) => a.createdAt - b.createdAt);
+    }
+
+    async function deletePending(id) {
+      const db = await openDB();
+      await reqPromise(store(db, 'readwrite').delete(id));
+      db.close();
+    }
+
+    async function createTicketApi(data) {
+      const res = await fetch(`${API_URL}/api/v1/tickets`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Tenant-ID': 'default',
+          Authorization: `Bearer ${token}`,
+        },
+        credentials: 'include',
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body.error || `Request failed with status ${res.status}`);
+      }
+      return res.json();
+    }
+
+    async function syncPending() {
+      const pending = await getPending();
+      let synced = 0;
+      for (const ticket of pending) {
+        try {
+          await createTicketApi(ticket.data);
+          await deletePending(ticket.id);
+          synced++;
+        } catch (err) {
+          console.warn(`Failed to sync ticket ${ticket.id}:`, err);
+          break;
+        }
+      }
+      return synced;
+    }
+
+    // ─── UI wiring ─────────────────────────────────────────────────────
+    const form = document.getElementById('ticket-form');
+    const banner = document.getElementById('offline-banner');
+    const syncResult = document.getElementById('sync-result');
+    const pendingCountEl = document.getElementById('pending-count');
+    const syncNowBtn = document.getElementById('sync-now');
+
+    async function refreshPendingCount() {
+      const pending = await getPending();
+      if (pending.length > 0) {
+        pendingCountEl.style.display = 'block';
+        pendingCountEl.textContent = `${pending.length} pending ticket${pending.length > 1 ? 's' : ''} waiting to sync.`;
+      } else {
+        pendingCountEl.style.display = 'none';
+      }
+    }
+
+    async function doSync() {
+      if (!navigator.onLine) {
+        syncResult.style.display = 'block';
+        syncResult.className = 'p-4 rounded-2xl neu-sunken text-rose-700 text-sm mb-5';
+        syncResult.textContent = "You're still offline. Try again when connected.";
+        return;
+      }
+      syncResult.style.display = 'block';
+      syncResult.className = 'p-4 rounded-2xl neu-sunken text-muted text-sm mb-5';
+      syncResult.textContent = 'Syncing...';
+      try {
+        const synced = await syncPending();
+        syncResult.className = 'p-4 rounded-2xl neu-sunken text-emerald-700 text-sm mb-5';
+        syncResult.textContent = synced > 0
+          ? `Synced ${synced} ticket${synced > 1 ? 's' : ''} successfully.`
+          : 'No pending tickets to sync.';
+        await refreshPendingCount();
+      } catch (err) {
+        syncResult.className = 'p-4 rounded-2xl neu-sunken text-rose-700 text-sm mb-5';
+        syncResult.textContent = 'Sync failed: ' + (err?.message || 'unknown error');
+      }
+    }
+
+    form?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const formData = new FormData(form);
+      const data = {
+        title: formData.get('title')?.toString() || '',
+        description: formData.get('description')?.toString() || '',
+        priority: formData.get('priority')?.toString() || 'medium',
+        category: formData.get('category')?.toString() || 'general',
+      };
+
+      if (navigator.onLine) {
+        // Try to submit directly; if it fails, fall back to offline storage.
+        try {
+          await createTicketApi(data);
+          window.location.href = '/tickets';
+          return;
+        } catch (err) {
+          // Network hiccup — store offline and notify.
+          await savePending(data);
+          banner.style.display = 'block';
+          banner.textContent = 'Network error — saved offline, will sync when connected.';
+          await refreshPendingCount();
+          form.reset();
+          return;
+        }
+      }
+
+      // Offline: persist to IndexedDB.
+      await savePending(data);
+      banner.style.display = 'block';
+      banner.textContent = "Saved offline, will sync when connected.";
+      await refreshPendingCount();
+      form.reset();
+    });
+
+    syncNowBtn?.addEventListener('click', doSync);
+
+    // Auto-sync when coming back online or when the SW requests it.
+    window.addEventListener('online', () => {
+      doSync();
+    });
+    window.addEventListener('trickreport:sync-tickets', () => {
+      doSync();
+    });
+
+    refreshPendingCount();
+  </script>
+</Layout>

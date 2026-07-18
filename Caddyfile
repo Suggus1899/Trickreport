@@ -1,0 +1,20 @@
+:80 {
+	# API and infrastructure endpoints → backend
+	handle /api/* {
+		reverse_proxy backend:8080
+	}
+	handle /ws {
+		reverse_proxy backend:8080
+	}
+	handle /health {
+		reverse_proxy backend:8080
+	}
+	handle /ready {
+		reverse_proxy backend:8080
+	}
+
+	# Everything else → frontend (Astro standalone server)
+	handle {
+		reverse_proxy frontend:4321
+	}
+}

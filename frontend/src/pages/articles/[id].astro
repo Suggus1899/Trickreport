@@ -1,0 +1,53 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NeuCard from '../../components/NeuCard.astro';
+import NeuButton from '../../components/NeuButton.astro';
+import { getMe, getArticle } from '../../lib/api';
+import type { Article } from '../../lib/api';
+
+const { id } = Astro.params;
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token || !id) {
+  return Astro.redirect('/login');
+}
+
+let user;
+let article: Article | null = null;
+let error = '';
+
+try {
+  user = await getMe(token);
+  article = await getArticle(token, id);
+} catch (err) {
+  error = err instanceof Error ? err.message : 'Failed to load article';
+}
+---
+
+<Layout title={article?.title || 'Article'} user={user ? { name: user.name, role: user.role } : undefined}>
+  <div class="max-w-4xl mx-auto">
+    <div class="flex items-center justify-between mb-8">
+      <NeuButton href="/articles" variant="raised" size="sm">Back</NeuButton>
+      <h1 class="text-2xl font-bold">{article?.title || 'Article'}</h1>
+      <span></span>
+    </div>
+
+    {error && (
+      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+    )}
+
+    {article && (
+      <NeuCard>
+        <div class="flex flex-wrap gap-3 mb-4">
+          <span class="px-3 py-1 rounded-full text-xs font-bold uppercase neu-convex text-main">{article.category}</span>
+          {article.tags && article.tags.length > 0 && article.tags.map((tag) => (
+            <span class="px-3 py-1 rounded-full text-xs font-bold uppercase neu-convex text-muted">#{tag}</span>
+          ))}
+        </div>
+        <p class="text-main whitespace-pre-wrap">{article.content}</p>
+        <div class="mt-6 text-sm text-muted">
+          Written by {article.author_name || article.created_by} on {new Date(article.created_at).toLocaleString()}
+        </div>
+      </NeuCard>
+    )}
+  </div>
+</Layout>

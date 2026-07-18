@@ -1,5 +1,7 @@
 ---
 import '../styles/global.css';
+import { ON_PREMISE } from '../lib/config';
+import OnlineStatus from '../components/OnlineStatus.astro';
 
 export interface Props {
   title?: string;
@@ -12,6 +14,7 @@ const nav = [
   { label: 'Dashboard', href: '/dashboard', roles: ['admin', 'agent', 'end_user'] },
   { label: 'Tickets', href: '/tickets', roles: ['admin', 'agent', 'end_user'] },
   { label: 'Knowledge Base', href: '/articles', roles: ['admin', 'agent', 'end_user'] },
+  { label: 'Admin', href: '/admin', roles: ['admin'] },
 ];
 
 const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) : [];
@@ -22,17 +25,28 @@ const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) :
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="referrer" content="no-referrer" />
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#6d5dfc" />
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <title>{title} — Trickreport</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    {/* External resources are only loaded in non-on-premise mode */}
+    {!ON_PREMISE && (
+      <>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+      </>
+    )}
+    <script type="module" src="../scripts/register-sw.ts"></script>
   </head>
   <body class="min-h-screen">
     {user ? (
       <div class="flex min-h-screen">
         <aside class="w-64 p-6 flex flex-col gap-6 neu-raised m-4 rounded-[2rem]">
-          <div class="px-2">
+          <div class="flex items-center justify-between px-2">
             <h1 class="text-2xl font-bold tracking-tight text-main">Trickreport</h1>
+            <OnlineStatus />
           </div>
           <nav class="flex flex-col gap-3">
             {visibleNav.map((item) => (
@@ -44,9 +58,12 @@ const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) :
               </a>
             ))}
           </nav>
-          <div class="mt-auto neu-sunken rounded-2xl p-4">
-            <p class="font-semibold text-sm">{user.name}</p>
-            <p class="text-xs text-muted capitalize">{user.role.replace('_', ' ')}</p>
+          <div class="mt-auto flex flex-col gap-3">
+            <a href="/logout" class="px-4 py-3 rounded-2xl font-semibold text-sm text-muted hover:text-main neu-transition text-center">Logout</a>
+            <div class="neu-sunken rounded-2xl p-4">
+              <p class="font-semibold text-sm">{user.name}</p>
+              <p class="text-xs text-muted capitalize">{user.role.replace('_', ' ')}</p>
+            </div>
           </div>
         </aside>
         <main class="flex-1 p-6 overflow-auto">

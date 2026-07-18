@@ -1,0 +1,15 @@
+---
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (token) {
+  Astro.cookies.delete('trickreport_token', { path: '/' });
+}
+// Also explicitly overwrite in case delete doesn't clear immediately
+Astro.cookies.set('trickreport_token', '', {
+  httpOnly: true,
+  path: '/',
+  maxAge: 0,
+  sameSite: 'strict',
+  secure: import.meta.env.PROD,
+});
+return Astro.redirect('/login');
+---

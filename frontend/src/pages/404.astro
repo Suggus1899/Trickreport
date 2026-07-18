@@ -1,0 +1,16 @@
+---
+import Layout from '../layouts/Layout.astro';
+import NeuCard from '../components/NeuCard.astro';
+import NeuButton from '../components/NeuButton.astro';
+---
+
+<Layout title="Not Found">
+  <div class="min-h-screen flex items-center justify-center p-6">
+    <NeuCard class="w-full max-w-md text-center">
+      <p class="text-6xl font-bold text-accent mb-4">404</p>
+      <h1 class="text-2xl font-bold text-main mb-2">Page not found</h1>
+      <p class="text-muted mb-8">The page you are looking for doesn't exist or has been moved.</p>
+      <NeuButton href="/dashboard" variant="accent" size="md">Back to Dashboard</NeuButton>
+    </NeuCard>
+  </div>
+</Layout>

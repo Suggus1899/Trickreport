@@ -12,6 +12,7 @@ frontend/.astro/
 # Environment files
 .env
 .env.local
+.env.onpremise
 backend/.env
 frontend/.env
 frontend/.env.local

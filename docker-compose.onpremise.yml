@@ -1,0 +1,63 @@
+# On-premise / self-hosted deployment for Trickreport.
+#
+# All services run locally behind a single Caddy reverse proxy on port 80.
+# No external dependencies are required — the frontend is built in standalone
+# mode and the backend serves the API on the same origin.
+#
+# Usage:
+#   1. Copy .env.onpremise.example to .env.onpremise and edit values.
+#   2. docker compose -f docker-compose.onpremise.yml --env-file .env.onpremise up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: trickreport
+      POSTGRES_USER: ${POSTGRES_USER:-trickreport}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trickreport}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-trickreport}:${POSTGRES_PASSWORD}@postgres:5432/trickreport?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CORS_ORIGINS: http://localhost,http://localhost:80
+      COOKIE_SECURE: "false"
+      LDAP_ENABLED: "false"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    build: ./frontend
+    restart: unless-stopped
+    environment:
+      API_URL: ""
+      ON_PREMISE: "true"
+    depends_on:
+      - backend
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      - frontend
+      - backend
+
+volumes:
+  pgdata:

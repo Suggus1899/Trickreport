@@ -1,0 +1,52 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NeuCard from '../../components/NeuCard.astro';
+import { getMe } from '../../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+let user;
+let error = '';
+
+try {
+  user = await getMe(token);
+} catch (err) {
+  error = err instanceof Error ? err.message : 'Failed to load user';
+}
+
+if (user && user.role !== 'admin') {
+  return Astro.redirect('/dashboard');
+}
+
+const sections = [
+  { label: 'Users', href: '/admin/users', description: 'Manage workspace members and roles' },
+  { label: 'SLA Policies', href: '/admin/sla', description: 'Configure response and resolution targets' },
+  { label: 'Automations', href: '/admin/automations', description: 'Create rules that trigger actions automatically' },
+  { label: 'Analytics', href: '/admin/analytics', description: 'Track volume, status and resolution metrics' },
+];
+---
+
+<Layout title="Admin" user={user ? { name: user.name, role: user.role } : undefined}>
+  <div class="max-w-6xl mx-auto">
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold">Admin</h1>
+      <p class="text-muted">Workspace configuration and insights</p>
+    </header>
+
+    {error && (
+      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+    )}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {sections.map((section) => (
+        <a href={section.href} class="neu-raised neu-convex neu-transition p-6 rounded-3xl hover:brightness-105 active:neu-pressed">
+          <h2 class="text-xl font-semibold text-main mb-2">{section.label}</h2>
+          <p class="text-muted text-sm">{section.description}</p>
+        </a>
+      ))}
+    </div>
+  </div>
+</Layout>
