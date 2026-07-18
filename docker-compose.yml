@@ -5,21 +5,21 @@ services:
     container_name: trickreport_postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: trickreport
-      POSTGRES_PASSWORD: trickreport
-      POSTGRES_DB: trickreport
+      POSTGRES_USER: ${POSTGRES_USER:-trickreport}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_DB: ${POSTGRES_DB:-trickreport}
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./backend/migrations:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U trickreport"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trickreport}"]
       interval: 5s
       timeout: 5s
       retries: 10
 
-  # ─── App (Go backend + HTMX frontend, single binary) ───────────────────────
+  # ─── App (Go backend + Astro frontend) ─────────────────────────────────────
   app:
     build:
       context: ./backend
@@ -31,13 +31,16 @@ services:
         condition: service_healthy
     environment:
       PORT: 8080
-      DATABASE_URL: postgres://trickreport:trickreport@postgres:5432/trickreport?sslmode=disable
-      JWT_SECRET: dev-secret-change-in-production
-      JWT_EXP_HOURS: 8
-      LDAP_ENABLED: false
+      DATABASE_URL: postgres://${POSTGRES_USER:-trickreport}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-trickreport}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXP_HOURS: ${JWT_EXP_HOURS:-8}
+      LDAP_ENABLED: ${LDAP_ENABLED:-false}
       STATIC_DIR: /app/internal/interfaces/http/static
-      COOKIE_SECURE: "false"
-      CORS_ORIGIN: http://localhost:8080
+      COOKIE_SECURE: ${COOKIE_SECURE:-true}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:4321}
+      ENV: ${ENV:-production}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
     ports:
       - "8080:8080"
 

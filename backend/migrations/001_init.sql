@@ -48,8 +48,9 @@ CREATE INDEX idx_users_email     ON users(email);
 CREATE INDEX idx_users_active    ON users(active);
 
 -- ─────────────────────────────────────────────
--- Seed: default tenant + superadmin
--- (override credentials via env before first run)
+-- Seed: default tenant only.
+-- The initial admin user is created at server startup from
+-- ADMIN_EMAIL / ADMIN_PASSWORD env vars (see internal/bootstrap).
 -- ─────────────────────────────────────────────
 INSERT INTO tenants (id, name, slug, settings)
 VALUES (
@@ -57,15 +58,5 @@ VALUES (
     'Default Organization',
     'default',
     '{}'
-);
-
--- password: 'changeme' (bcrypt cost=10) — CHANGE IN PRODUCTION
-INSERT INTO users (id, tenant_id, name, email, role, password)
-VALUES (
-    '00000000-0000-0000-0000-000000000002',
-    '00000000-0000-0000-0000-000000000001',
-    'Super Admin',
-    'admin@trickreport.local',
-    'admin',
-    '$2a$10$FDaOn5b0yomg..3IVVQGkepzPl8hek/LctHP0fNgWbCrK43UHs6ey'
-);
+)
+ON CONFLICT (id) DO NOTHING;

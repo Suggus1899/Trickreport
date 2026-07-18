@@ -9,6 +9,7 @@ import (
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 
+	"github.com/trickreport/backend/internal/bootstrap"
 	"github.com/trickreport/backend/internal/config"
 	"github.com/trickreport/backend/internal/db"
 	httpServer "github.com/trickreport/backend/internal/interfaces/http"
@@ -39,6 +40,11 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to connect to database")
 	}
 	defer pool.Close()
+
+	// ── Bootstrap initial admin (from ADMIN_EMAIL / ADMIN_PASSWORD) ───
+	if err := bootstrap.EnsureAdmin(ctx, pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {
+		log.Error().Err(err).Msg("Admin bootstrap failed")
+	}
 
 	// ── Server ────────────────────────────────────────────────────────
 	srv := httpServer.New(ctx, cfg, pool)

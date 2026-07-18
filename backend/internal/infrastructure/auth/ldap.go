@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"crypto/tls"
 	"errors"
 	"fmt"
+	"strconv"
 
 	"github.com/go-ldap/ldap/v3"
 	"github.com/trickreport/backend/internal/config"
@@ -11,12 +13,13 @@ import (
 // LDAPAuthenticator handles authentication against an LDAP directory.
 // It implements the application/auth.LDAPAuthenticator interface.
 type LDAPAuthenticator struct {
-	host     string
-	port     int
-	bindDN   string
-	bindPW   string
-	baseDN   string
-	uidAttr  string
+	host    string
+	port    int
+	useTLS  bool
+	bindDN  string
+	bindPW  string
+	baseDN  string
+	uidAttr string
 }
 
 // NewLDAPAuthenticator creates a new LDAPAuthenticator from config.
@@ -24,6 +27,7 @@ func NewLDAPAuthenticator(cfg *config.Config) *LDAPAuthenticator {
 	return &LDAPAuthenticator{
 		host:    cfg.LDAPHost,
 		port:    cfg.LDAPPort,
+		useTLS:  cfg.LDAPUseTLS,
 		bindDN:  cfg.LDAPBindDN,
 		bindPW:  cfg.LDAPBindPW,
 		baseDN:  cfg.LDAPBaseDN,
@@ -33,14 +37,28 @@ func NewLDAPAuthenticator(cfg *config.Config) *LDAPAuthenticator {
 
 // Authenticate verifies credentials against the LDAP server.
 // Returns the user's DN on success.
+// When useTLS is true, it connects via LDAPS (TLS) on the configured port.
+// Otherwise it falls back to plaintext LDAP (not recommended for production).
 func (a *LDAPAuthenticator) Authenticate(username, password string) (string, error) {
-	addr := fmt.Sprintf("%s:%d", a.host, a.port)
+	scheme := "ldap"
+	if a.useTLS {
+		scheme = "ldaps"
+	}
+	addr := fmt.Sprintf("%s://%s:%s", scheme, a.host, strconv.Itoa(a.port))
 
-	conn, err := ldap.DialURL(fmt.Sprintf("ldap://%s", addr))
+	conn, err := ldap.DialURL(addr)
 	if err != nil {
 		return "", fmt.Errorf("ldap dial failed: %w", err)
 	}
 	defer conn.Close()
+
+	// For plaintext ldap://, attempt StartTLS upgrade if TLS is requested
+	// but the URL scheme was not ldaps:// (e.g. port 389 with StartTLS).
+	if a.useTLS && scheme == "ldap" {
+		if err := conn.StartTLS(&tls.Config{ServerName: a.host}); err != nil {
+			return "", fmt.Errorf("ldap StartTLS failed: %w", err)
+		}
+	}
 
 	// Bind as service account to search for the user
 	if err := conn.Bind(a.bindDN, a.bindPW); err != nil {

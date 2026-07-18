@@ -3,6 +3,7 @@ package realtime
 import (
 	"bytes"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -20,15 +21,46 @@ const (
 	pingPeriod = (pongWait * 9) / 10
 
 	// Maximum message size allowed from peer.
-	maxMessageSize = 512
+	maxMessageSize = 4096
 )
+
+// allowedOrigins holds the whitelist of origins permitted to open WebSocket
+// connections. It is configured at startup via ConfigureAllowedOrigins.
+var allowedOrigins = []string{}
+
+// ConfigureAllowedOrigins sets the list of origins allowed by the WebSocket
+// upgrader. Origins are compared case-insensitively, without trailing slashes.
+// Call this once at server startup before any WebSocket connection is served.
+func ConfigureAllowedOrigins(origins []string) {
+	normalized := make([]string, 0, len(origins))
+	for _, o := range origins {
+		o = strings.ToLower(strings.TrimSpace(o))
+		o = strings.TrimRight(o, "/")
+		if o != "" {
+			normalized = append(normalized, o)
+		}
+	}
+	allowedOrigins = normalized
+}
 
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// Allows all origins in dev, tighten in prod
-		return true
+		origin := strings.ToLower(strings.TrimSpace(r.Header.Get("Origin")))
+		if origin == "" {
+			// Non-browser clients (curl, etc.) have no Origin header.
+			// Allow them only when no whitelist is configured (dev mode).
+			return len(allowedOrigins) == 0
+		}
+		origin = strings.TrimRight(origin, "/")
+		for _, allowed := range allowedOrigins {
+			if allowed == origin {
+				return true
+			}
+		}
+		log.Warn().Str("origin", origin).Msg("websocket origin rejected")
+		return false
 	},
 }
 
@@ -116,7 +148,7 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, tenantID string, 
 		log.Error().Err(err).Msg("failed to upgrade websocket connection")
 		return
 	}
-	
+
 	client := &Client{
 		Hub:      hub,
 		TenantID: tenantID,

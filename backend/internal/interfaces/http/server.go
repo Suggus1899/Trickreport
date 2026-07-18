@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -46,6 +47,9 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	// ── Realtime ──────────────────────────────────────────────────────
 	hub := realtime.NewHub()
 	go hub.Run()
+
+	// Configure WebSocket origin whitelist from CORS config
+	realtime.ConfigureAllowedOrigins(cfg.AllowedOrigins())
 
 	// ── Email ─────────────────────────────────────────────────────────
 	sender := email.NewConsoleSender()
@@ -116,19 +120,47 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	globalLimiter.Start()
 	r.Use(globalLimiter.LimitByIP)
 
-	// CORS
+	// Security headers
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			origin := cfg.CORSOrigin
-			if origin == "" {
-				origin = "http://localhost:4321"
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			h.Set("X-XSS-Protection", "1; mode=block")
+			if cfg.IsProduction() {
+				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+				h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'")
 			}
-			w.Header().Set("Access-Control-Allow-Origin", origin)
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Tenant-ID")
-			w.Header().Set("Access-Control-Allow-Credentials", "true")
+			next.ServeHTTP(w, req)
+		})
+	})
+
+	// CORS — whitelist of allowed origins (comma-separated in CORS_ORIGINS)
+	allowedOrigins := cfg.AllowedOrigins()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+			origin := strings.ToLower(strings.TrimSpace(req.Header.Get("Origin")))
+			allowed := false
+			for _, o := range allowedOrigins {
+				if o == origin {
+					allowed = true
+					break
+				}
+			}
+			if allowed && origin != "" {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Tenant-ID")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Vary", "Origin")
+			}
 			if req.Method == http.MethodOptions {
-				w.WriteHeader(http.StatusNoContent)
+				if allowed {
+					w.WriteHeader(http.StatusNoContent)
+				} else {
+					w.WriteHeader(http.StatusForbidden)
+				}
 				return
 			}
 			next.ServeHTTP(w, req)

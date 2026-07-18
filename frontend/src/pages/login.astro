@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import NeuCard from '../components/NeuCard.astro';
 import NeuInput from '../components/NeuInput.astro';
 import NeuButton from '../components/NeuButton.astro';
-import { login, getMe } from '../lib/api';
+import { login } from '../lib/api';
 
 let error = '';
 
@@ -18,7 +18,8 @@ if (Astro.request.method === 'POST') {
       httpOnly: true,
       path: '/',
       maxAge: 60 * 60 * 8,
-      sameSite: 'lax',
+      sameSite: 'strict',
+      secure: import.meta.env.PROD,
     });
     return Astro.redirect('/dashboard');
   } catch (err) {
@@ -46,16 +47,12 @@ if (Astro.cookies.has('trickreport_token')) {
       )}
 
       <form method="POST" class="flex flex-col gap-5">
-        <NeuInput name="email" type="email" label="Email" placeholder="admin@trickreport.local" required value="admin@trickreport.local" />
-        <NeuInput name="password" type="password" label="Password" placeholder="••••••••" required value="changeme" />
+        <NeuInput name="email" type="email" label="Email" placeholder="you@example.com" required />
+        <NeuInput name="password" type="password" label="Password" placeholder="••••••••" required />
         <div class="pt-2">
           <NeuButton type="submit" variant="accent" size="lg" class="w-full">Sign In</NeuButton>
         </div>
       </form>
-
-      <p class="text-center text-sm text-[var(--text-muted)] mt-6">
-        Demo credentials: <span class="font-mono text-xs">admin@trickreport.local</span> / <span class="font-mono text-xs">changeme</span>
-      </p>
     </NeuCard>
   </div>
 </Layout>
