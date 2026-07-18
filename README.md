@@ -289,52 +289,6 @@ make dev
 | Email | `admin@trickreport.local` |
 | Password | `changeme` (configurable via `ADMIN_PASSWORD` en `.env`) |
 
-## 📊 Features
-
-### Core
-
-| Feature | Descripción |
-|---------|-------------|
-| **Multi-tenancy** | Aislamiento por `tenant_id` con tenant resolver cacheado |
-| **Auth** | JWT (cookie + header), refresh tokens con rotación, MFA/TOTP, password reset, account lockout (5 intentos), password complexity |
-| **Tickets** | Ciclo completo: crear, asignar, cambiar estado, comentarios, historial, attachments |
-| **Knowledge Base** | Artículos con soporte Markdown, CRUD para agents/admins |
-| **SLA** | Policies por prioridad, deadline calculation automática, worker de background escanea mora |
-| **Automations** | Reglas visuales (condiciones + acciones), motor de evaluación, test de reglas |
-| **Analytics** | Dashboard con KPIs, SVG charts (line + donut), export CSV/PDF |
-| **Real-time** | WebSocket: notificaciones de tickets en vivo, toast popups, notification bell con badge |
-| **Notifications** | Persistencia en DB + broadcast WebSocket, mark read / mark all read, unread count |
-
-### Frontend UX
-
-| Feature | Descripción |
-|---------|-------------|
-| **Dark mode** | System preference + toggle manual, persistido en localStorage |
-| **Responsive** | Sidebar colapsable con hamburger menu, mobile-first |
-| **Loading states** | Skeletons + spinners |
-| **Pagination + filtering** | Tickets y artículos con filtros por estado/prioridad/búsqueda |
-| **Form validation** | Validación en tiempo real con error states |
-| **Accessibility** | WCAG 2.2: ARIA, skip-link, sr-only, focus-visible, keyboard nav |
-| **Toasts** | Notificaciones temporales con auto-dismiss |
-| **Modals** | Diálogos accesibles |
-| **Keyboard shortcuts** | `g d` dashboard, `g t` tickets, `g a` articles, `g u` users, `n` new ticket, `?` help |
-| **Global search** | Búsqueda con navegación por teclado |
-| **PWA** | Manifest + Service Worker + offline + install prompt + update toast + push notifications |
-| **Profiles** | Admin profile (stats + quick actions), user profile (edit, password, MFA, sessions) |
-
-### Backend Reliability
-
-| Feature | Descripción |
-|---------|-------------|
-| **Transactions** | TxManager con propagación por contexto |
-| **Domain events** | Event bus in-memory para desacoplar side effects |
-| **Email queue** | Cola con retries + templates HTML |
-| **Worker** | Background con retry logic, metrics, health check |
-| **Connection pool** | Configurable via env |
-| **Rate limiting** | Global por IP + login rate limiting por email+IP |
-| **Security** | CSRF, max body size, compression, security headers, file upload validation |
-| **Observability** | Prometheus metrics (`/metrics`), request ID propagation, Swagger (`/swagger`) |
-
 ## 🔧 Variables de Entorno
 
 ### Backend Go
