@@ -131,31 +131,6 @@ Plataforma de mesa de ayuda y ticketing **multi-tenant** construida con arquitec
             └─────────────────────┘
 ```
 
-### Clean Architecture (Backend)
-
-```
-backend/internal/
-├── domain/          ← Entities + business rules (no dependencies)
-├── application/     ← Use cases / services (ports defined here)
-├── infrastructure/  ← Adapters: PostgreSQL repos, JWT, email, WebSocket
-└── interfaces/http/ ← HTTP handlers, middleware, server, wire (DI)
-```
-
-## 📱 Aplicaciones
-
-| App | Descripción | Puerto | Rol |
-|-----|-------------|--------|-----|
-| **Frontend (Astro SSR)** | App única — login, dashboard, tickets, knowledge base, admin, profile, notificaciones en vivo | 4321 | Todos los roles |
-| **Backend API (Go)** | REST API + WebSocket — auth, tickets, SLA, automations, analytics, notifications | 8080 | API server |
-
-### Roles
-
-| Rol | Permisos |
-|-----|----------|
-| **admin** | Todo: usuarios, SLA, automatizaciones, analytics, tickets, artículos |
-| **agent** | Tickets, comentarios, artículos, asignación, historial |
-| **end_user** | Crear tickets, ver los propios, knowledge base, perfil |
-
 ## 📦 Estructura del Proyecto
 
 ```
