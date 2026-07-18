@@ -15,6 +15,16 @@ import (
 	httpServer "github.com/trickreport/backend/internal/interfaces/http"
 )
 
+// @title           Trickreport API
+// @version         1.0
+// @description     Multi-tenant helpdesk / ticketing platform API.
+// @BasePath        /api/v1
+
+// @securityDefinitions.apikey BearerAuth
+// @in   header
+// @name Authorization
+// @description Bearer JWT token (or trickreport_token cookie).
+
 func main() {
 	// ── Logger ────────────────────────────────────────────────────────
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "2006-01-02 15:04:05"})

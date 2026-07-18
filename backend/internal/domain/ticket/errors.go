@@ -14,4 +14,8 @@ var (
 
 	// ErrValidation is returned when input validation fails.
 	ErrValidation = errors.New("validation error")
+
+	// ErrConcurrentModification is returned when an optimistic concurrency
+	// check fails (the row was modified by another transaction).
+	ErrConcurrentModification = errors.New("concurrent modification detected")
 )

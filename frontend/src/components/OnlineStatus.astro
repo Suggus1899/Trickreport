@@ -3,8 +3,8 @@
 // live via online/offline event listeners. No props.
 ---
 
-<span id="online-status" class="online-status offline inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold neu-convex text-rose-700 shadow-badge-danger">
-  <span class="status-dot"></span>
+<span id="online-status" class="online-status offline inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-bold neu-convex text-rose-700 shadow-badge-danger" aria-live="polite" aria-label="Connection status">
+  <span class="status-dot" aria-hidden="true"></span>
   <span class="status-label">Offline</span>
 </span>
 

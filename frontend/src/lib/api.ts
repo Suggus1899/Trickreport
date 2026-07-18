@@ -103,33 +103,188 @@ export interface ApiError {
   error: string;
 }
 
-function getHeaders(token?: string): HeadersInit {
+export interface Comment {
+  id: string;
+  ticket_id: string;
+  author_id: string;
+  author_name?: string;
+  content: string;
+  is_internal: boolean;
+  created_at: string;
+}
+
+export interface HistoryEntry {
+  id: string;
+  ticket_id: string;
+  field: string;
+  old_value: string;
+  new_value: string;
+  changed_by: string;
+  changed_by_name?: string;
+  created_at: string;
+}
+
+export interface Attachment {
+  id: string;
+  ticket_id: string;
+  filename: string;
+  size: number;
+  content_type: string;
+  uploaded_by: string;
+  uploaded_by_name?: string;
+  created_at: string;
+}
+
+/* ─── Typed API error classes ───────────────────────────────────────── */
+
+export class ApiAuthError extends Error {
+  status = 401;
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiAuthError';
+  }
+}
+
+export class ApiValidationError extends Error {
+  status: number;
+  details?: unknown;
+  constructor(message: string, status = 422, details?: unknown) {
+    super(message);
+    this.name = 'ApiValidationError';
+    this.status = status;
+    this.details = details;
+  }
+}
+
+export class ApiNetworkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiNetworkError';
+  }
+}
+
+/* ─── Token refresh support ─────────────────────────────────────────── */
+
+let refreshTokenFn: (() => Promise<string | null>) | null = null;
+
+export function setRefreshTokenStrategy(fn: (() => Promise<string | null>) | null) {
+  refreshTokenFn = fn;
+}
+
+/* ─── Core request with timeout, retry, and token refresh ───────────── */
+
+const DEFAULT_TIMEOUT = 30000;
+const MAX_RETRIES = 3;
+
+function getHeaders(token?: string, skipJson = false): HeadersInit {
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
     'X-Tenant-ID': 'default',
   };
+  if (!skipJson) {
+    headers['Content-Type'] = 'application/json';
+  }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
   return headers;
 }
 
-export async function api<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
-  const { token, ...rest } = init;
-  const res = await fetch(`${API_URL}/api/v1${path}`, {
-    ...rest,
-    headers: getHeaders(token),
-    credentials: 'include',
-  });
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isBodyJson(init: RequestInit): boolean {
+  const body = init.body;
+  if (typeof body === 'string') {
+    try {
+      JSON.parse(body);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
+}
+
+async function doFetch<T>(
+  path: string,
+  init: RequestInit & { token?: string; signal?: AbortSignal },
+  attempt = 0,
+): Promise<T> {
+  const { token, signal, ...rest } = init;
+  const skipJson = rest.body instanceof FormData || !isBodyJson(rest);
+  const headers = getHeaders(token, skipJson);
+
+  // Combine caller signal with a timeout signal.
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+  if (signal) {
+    if (signal.aborted) controller.abort();
+    else signal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}/api/v1${path}`, {
+      ...rest,
+      headers,
+      credentials: 'include',
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new ApiNetworkError('Request timed out');
+    }
+    throw new ApiNetworkError(err instanceof Error ? err.message : 'Network request failed');
+  }
+  clearTimeout(timeoutId);
+
+  // 401: attempt token refresh once, then retry.
+  if (res.status === 401 && token && refreshTokenFn && attempt === 0) {
+    const newToken = await refreshTokenFn();
+    if (newToken) {
+      return doFetch<T>(path, { ...init, token: newToken }, 1);
+    }
+    const body = await res.json().catch(() => ({})) as ApiError;
+    throw new ApiAuthError(body.error || 'Authentication required');
+  }
+
+  if (res.status === 401) {
+    const body = await res.json().catch(() => ({})) as ApiError;
+    throw new ApiAuthError(body.error || 'Authentication required');
+  }
+
+  if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+    const body = await res.json().catch(() => ({})) as ApiError;
+    throw new ApiValidationError(body.error || `Request failed with status ${res.status}`, res.status, body);
+  }
+
+  if (res.status >= 500 && attempt < MAX_RETRIES) {
+    const backoff = Math.pow(2, attempt) * 500;
+    await sleep(backoff);
+    return doFetch<T>(path, init, attempt + 1);
+  }
+
   if (!res.ok) {
     const body = await res.json().catch(() => ({})) as ApiError;
     throw new Error(body.error || `Request failed with status ${res.status}`);
   }
+
   if (res.status === 204) {
     return undefined as T;
   }
   return res.json() as Promise<T>;
 }
+
+export async function api<T>(
+  path: string,
+  init: RequestInit & { token?: string; signal?: AbortSignal } = {},
+): Promise<T> {
+  return doFetch<T>(path, init);
+}
+
+/* ─── Auth ──────────────────────────────────────────────────────────── */
 
 export async function login(input: LoginInput): Promise<LoginResult> {
   return api<LoginResult>('/auth/login', {
@@ -142,9 +297,13 @@ export async function getMe(token: string): Promise<User> {
   return api<User>('/auth/me', { token });
 }
 
+/* ─── Dashboard ─────────────────────────────────────────────────────── */
+
 export async function getSummary(token: string): Promise<Summary> {
   return api<Summary>('/dashboard/summary', { token });
 }
+
+/* ─── Tickets ───────────────────────────────────────────────────────── */
 
 export async function getTickets(token: string): Promise<Ticket[]> {
   return api<Ticket[]>('/tickets', { token });
@@ -158,6 +317,38 @@ export async function createTicket(token: string, data: { title: string; descrip
   return api<Ticket>('/tickets', { token, method: 'POST', body: JSON.stringify(data) });
 }
 
+export async function updateTicketStatus(token: string, id: string, status: string): Promise<Ticket> {
+  return api<Ticket>(`/tickets/${id}`, { token, method: 'PATCH', body: JSON.stringify({ status }) });
+}
+
+export async function assignTicket(token: string, id: string, assignedTo: string): Promise<Ticket> {
+  return api<Ticket>(`/tickets/${id}`, { token, method: 'PATCH', body: JSON.stringify({ assigned_to: assignedTo }) });
+}
+
+export async function getTicketComments(token: string, id: string): Promise<Comment[]> {
+  return api<Comment[]>(`/tickets/${id}/comments`, { token });
+}
+
+export async function addTicketComment(token: string, id: string, content: string, isInternal = false): Promise<Comment> {
+  return api<Comment>(`/tickets/${id}/comments`, { token, method: 'POST', body: JSON.stringify({ content, is_internal: isInternal }) });
+}
+
+export async function getTicketHistory(token: string, id: string): Promise<HistoryEntry[]> {
+  return api<HistoryEntry[]>(`/tickets/${id}/history`, { token });
+}
+
+export async function getTicketAttachments(token: string, id: string): Promise<Attachment[]> {
+  return api<Attachment[]>(`/tickets/${id}/attachments`, { token });
+}
+
+export async function uploadTicketAttachment(token: string, id: string, file: File): Promise<Attachment> {
+  const formData = new FormData();
+  formData.append('file', file);
+  return api<Attachment>(`/tickets/${id}/attachments`, { token, method: 'POST', body: formData });
+}
+
+/* ─── Articles ──────────────────────────────────────────────────────── */
+
 export async function getArticles(token: string, query = ''): Promise<Article[]> {
   return api<Article[]>(`/articles?q=${encodeURIComponent(query)}`, { token });
 }
@@ -169,6 +360,8 @@ export async function getArticle(token: string, id: string): Promise<Article> {
 export async function createArticle(token: string, data: Partial<Article>): Promise<Article> {
   return api<Article>('/articles', { token, method: 'POST', body: JSON.stringify(data) });
 }
+
+/* ─── Admin ─────────────────────────────────────────────────────────── */
 
 export async function getUsers(token: string): Promise<User[]> {
   return api<User[]>('/admin/users', { token });

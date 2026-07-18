@@ -3,6 +3,8 @@ package http
 // wire.go — dependency wiring helpers
 
 import (
+	"time"
+
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	appAnalytics "github.com/trickreport/backend/internal/application/analytics"
@@ -31,6 +33,9 @@ type Repos struct {
 	Analytics      *postgres.AnalyticsRepo
 	TenantResolver *postgres.TenantResolver
 	Attachment     *postgres.AttachmentRepo
+	PasswordReset  *postgres.PasswordResetRepo
+	Session        *postgres.SessionRepo
+	TxManager      *postgres.TxManager
 }
 
 // NewRepos creates all repositories from a pgxpool.
@@ -46,20 +51,26 @@ func NewRepos(pool *pgxpool.Pool) *Repos {
 		Analytics:      postgres.NewAnalyticsRepo(pool),
 		TenantResolver: postgres.NewTenantResolver(pool),
 		Attachment:     postgres.NewAttachmentRepo(pool),
+		PasswordReset:  postgres.NewPasswordResetRepo(pool),
+		Session:        postgres.NewSessionRepo(pool),
+		TxManager:      postgres.NewTxManager(pool),
 	}
 }
 
 // Services holds all application services.
 type Services struct {
-	Auth       *appAuth.Service
-	Ticket     *appTicket.UserService
-	User       *appUser.Service
-	Article    *appArticle.Service
-	SLA        *appSLA.Service
-	Automation *appAuto.Service
-	Analytics  *appAnalytics.Service
-	Engine     *appAuto.Engine
-	Attachment *appTicket.AttachmentService
+	Auth          *appAuth.Service
+	Ticket        *appTicket.UserService
+	User          *appUser.Service
+	Article       *appArticle.Service
+	SLA           *appSLA.Service
+	Automation    *appAuto.Service
+	Analytics     *appAnalytics.Service
+	Engine        *appAuto.Engine
+	Attachment    *appTicket.AttachmentService
+	MFA           *appAuth.MFAService
+	PasswordReset *appAuth.PasswordResetService
+	TokenStore    *infraAuth.MemoryTokenStore
 }
 
 // NewServices creates all application services from repos and adapters.
@@ -79,17 +90,48 @@ func NewServices(
 
 	ticketSvc := appTicket.NewService(repos.Ticket, repos.Comment, repos.History, hubAdapter, sender)
 	ticketSvc.SetEngine(engine)
+	ticketSvc.SetTxManager(repos.TxManager)
+	ticketSvc.SetSLAPolicyFetcher(repos.SLA)
+
+	// Auth service with token store, session repo, account lockout, MFA repo,
+	// and full password hasher (for password reset and MFA flows).
+	tokenStore := infraAuth.NewMemoryTokenStore()
+	authSvc := appAuth.NewService(repos.User, hasher, ldapAuth, tokenGen, authCfg)
+	authSvc.SetTokenStore(tokenStore)
+	authSvc.SetSessionRepository(repos.Session)
+	authSvc.SetAccountLockoutRepository(repos.User)
+	authSvc.SetPasswordHasherFull(hasher)
+	authSvc.SetMFARepository(repos.User)
+
+	// MFA service
+	mfaSvc := appAuth.NewMFAService(repos.User, appAuth.MFAConfig{Issuer: "Trickreport"})
+
+	// Password reset service
+	resetSvc := appAuth.NewPasswordResetService(
+		repos.User,
+		repos.PasswordReset,
+		repos.User,
+		hasher,
+		sender,
+		appAuth.PasswordResetConfig{
+			TokenExpiry: time.Hour,
+			ResetURL:    "/reset-password",
+		},
+	)
 
 	return &Services{
-		Ticket:     ticketSvc,
-		User:       appUser.NewService(repos.User, hasher),
-		Article:    appArticle.NewService(repos.Article),
-		SLA:        appSLA.NewService(repos.SLA),
-		Automation: appAuto.NewService(repos.Automation),
-		Analytics:  appAnalytics.NewService(repos.Analytics),
-		Auth:       appAuth.NewService(repos.User, hasher, ldapAuth, tokenGen, authCfg),
-		Engine:     engine,
-		Attachment: appTicket.NewAttachmentService(repos.Attachment, repos.Ticket),
+		Ticket:        ticketSvc,
+		User:          appUser.NewService(repos.User, hasher),
+		Article:       appArticle.NewService(repos.Article),
+		SLA:           appSLA.NewService(repos.SLA),
+		Automation:    appAuto.NewService(repos.Automation),
+		Analytics:     appAnalytics.NewService(repos.Analytics),
+		Auth:          authSvc,
+		Engine:        engine,
+		Attachment:    appTicket.NewAttachmentService(repos.Attachment, repos.Ticket),
+		MFA:           mfaSvc,
+		PasswordReset: resetSvc,
+		TokenStore:    tokenStore,
 	}
 }
 
@@ -107,8 +149,12 @@ type Handlers struct {
 
 // NewHandlers creates all HTTP handlers from services.
 func NewHandlers(services *Services) *Handlers {
+	authH := handler.NewAuthHandler(services.Auth)
+	authH.SetMFAService(services.MFA)
+	authH.SetPasswordResetService(services.PasswordReset)
+
 	return &Handlers{
-		Auth:       handler.NewAuthHandler(services.Auth),
+		Auth:       authH,
 		User:       handler.NewUserHandler(services.User),
 		Ticket:     handler.NewTicketHandler(services.Ticket),
 		Article:    handler.NewArticleHandler(services.Article),

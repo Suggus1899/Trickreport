@@ -2,8 +2,17 @@
 import Layout from '../../layouts/Layout.astro';
 import NeuCard from '../../components/NeuCard.astro';
 import NeuButton from '../../components/NeuButton.astro';
-import { getMe, api } from '../../lib/api';
-import type { Ticket } from '../../lib/api';
+import NeuBadge from '../../components/NeuBadge.astro';
+import NeuToast from '../../components/NeuToast.astro';
+import {
+  getMe,
+  api,
+  getTicketComments,
+  getTicketHistory,
+  getTicketAttachments,
+  getUsers,
+} from '../../lib/api';
+import type { Ticket, Comment, HistoryEntry, Attachment, User } from '../../lib/api';
 
 const { id } = Astro.params;
 const token = Astro.cookies.get('trickreport_token')?.value;
@@ -11,37 +20,118 @@ if (!token || !id) {
   return Astro.redirect('/login');
 }
 
-let user;
+let user: User | undefined;
 let ticket: Ticket | null = null;
+let comments: Comment[] = [];
+let history: HistoryEntry[] = [];
+let attachments: Attachment[] = [];
+let users: User[] = [];
 let error = '';
+let toastMessage = '';
+let toastVariant: 'success' | 'error' | 'warning' | 'info' = 'info';
 
 try {
   user = await getMe(token);
   ticket = await api<Ticket>(`/tickets/${id}`, { token });
+  // Fetch related data in parallel; tolerate missing endpoints.
+  [comments, history, attachments] = await Promise.all([
+    getTicketComments(token, id).catch(() => [] as Comment[]),
+    getTicketHistory(token, id).catch(() => [] as HistoryEntry[]),
+    getTicketAttachments(token, id).catch(() => [] as Attachment[]),
+  ]);
+  if (user.role === 'admin' || user.role === 'agent') {
+    users = await getUsers(token).catch(() => [] as User[]);
+  }
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load ticket';
 }
 
+const canManage = user?.role === 'admin' || user?.role === 'agent';
+
+// Valid status transitions map.
+const statusTransitions: Record<string, string[]> = {
+  open: ['in_progress', 'waiting_client', 'resolved', 'closed'],
+  in_progress: ['waiting_client', 'resolved', 'closed'],
+  waiting_client: ['in_progress', 'resolved', 'closed'],
+  resolved: ['closed', 'in_progress'],
+  closed: ['in_progress'],
+};
+
+const allowedTransitions = ticket ? statusTransitions[ticket.status] || [] : [];
+
+// Handle form submissions.
 if (Astro.request.method === 'POST') {
   const data = await Astro.request.formData();
-  const content = data.get('content')?.toString() || '';
+  const action = data.get('action')?.toString() || 'comment';
+
   try {
-    await api(`/tickets/${id}/comments`, {
-      token,
-      method: 'POST',
-      body: JSON.stringify({ content, is_internal: false }),
-    });
-    return Astro.redirect(`/tickets/${id}`);
+    if (action === 'comment') {
+      const content = data.get('content')?.toString() || '';
+      const isInternal = data.get('is_internal') === 'on';
+      await api(`/tickets/${id}/comments`, {
+        token,
+        method: 'POST',
+        body: JSON.stringify({ content, is_internal: isInternal }),
+      });
+      toastMessage = 'Comment added';
+      toastVariant = 'success';
+      return Astro.redirect(`/tickets/${id}?t=${Date.now()}#comments`);
+    } else if (action === 'status' && canManage) {
+      const status = data.get('status')?.toString() || '';
+      await api(`/tickets/${id}`, { token, method: 'PATCH', body: JSON.stringify({ status }) });
+      toastMessage = 'Status updated';
+      toastVariant = 'success';
+      return Astro.redirect(`/tickets/${id}?t=${Date.now()}`);
+    } else if (action === 'assign' && canManage) {
+      const assignedTo = data.get('assigned_to')?.toString() || '';
+      await api(`/tickets/${id}`, { token, method: 'PATCH', body: JSON.stringify({ assigned_to: assignedTo }) });
+      toastMessage = 'Assignment updated';
+      toastVariant = 'success';
+      return Astro.redirect(`/tickets/${id}?t=${Date.now()}`);
+    } else if (action === 'attachment') {
+      const file = data.get('file') as File | null;
+      if (file && file.size > 0) {
+        const formData = new FormData();
+        formData.append('file', file);
+        await api(`/tickets/${id}/attachments`, { token, method: 'POST', body: formData });
+        toastMessage = 'Attachment uploaded';
+        toastVariant = 'success';
+        return Astro.redirect(`/tickets/${id}?t=${Date.now()}#attachments`);
+      }
+    }
   } catch (err) {
-    error = err instanceof Error ? err.message : 'Failed to add comment';
+    error = err instanceof Error ? err.message : 'Action failed';
+    toastVariant = 'error';
+    toastMessage = error;
   }
+}
+
+const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
+  open: 'default',
+  in_progress: 'warning',
+  waiting_client: 'info',
+  resolved: 'success',
+  closed: 'default',
+};
+
+const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
+  low: 'default',
+  medium: 'info',
+  high: 'warning',
+  critical: 'danger',
+};
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 ---
 
 <Layout title={ticket?.title || 'Ticket'} user={user ? { name: user.name, role: user.role } : undefined}>
   <div class="max-w-4xl mx-auto">
     <div class="flex items-center justify-between mb-8">
-      <NeuButton href="/tickets" variant="raised" size="sm">Back</NeuButton>
+      <NeuButton href="/tickets" variant="raised" size="sm" ariaLabel="Back to tickets">Back</NeuButton>
       <h1 class="text-2xl font-bold">{ticket?.title || 'Ticket'}</h1>
       <span></span>
     </div>
@@ -52,30 +142,150 @@ if (Astro.request.method === 'POST') {
 
     {ticket && (
       <div class="flex flex-col gap-6">
+        {/* Ticket details */}
         <NeuCard>
           <div class="flex flex-wrap gap-3 mb-4">
-            <span class="px-3 py-1 rounded-full text-xs font-bold uppercase neu-convex text-main">{ticket.status.replace('_', ' ')}</span>
-            <span class="px-3 py-1 rounded-full text-xs font-bold uppercase neu-convex text-main">{ticket.priority}</span>
+            <NeuBadge variant={statusVariant[ticket.status] || 'default'}>{ticket.status.replace('_', ' ')}</NeuBadge>
+            <NeuBadge variant={priorityVariant[ticket.priority] || 'default'}>{ticket.priority}</NeuBadge>
             {ticket.sla_breached && (
-              <span class="px-3 py-1 rounded-full text-xs font-bold uppercase neu-convex text-rose-700">SLA Breached</span>
+              <NeuBadge variant="danger">SLA Breached</NeuBadge>
             )}
           </div>
           <p class="text-main whitespace-pre-wrap">{ticket.description}</p>
           <div class="mt-6 text-sm text-muted">
             Created by {ticket.creator_name || ticket.created_by} on {new Date(ticket.created_at).toLocaleString()}
+            {ticket.assignee_name && <> · Assigned to {ticket.assignee_name}</>}
           </div>
         </NeuCard>
 
-        <NeuCard>
-          <h2 class="text-lg font-semibold mb-4">Add comment</h2>
+        {/* Status change + assignment for agents/admins */}
+        {canManage && (
+          <div class="grid md:grid-cols-2 gap-6">
+            <NeuCard>
+              <h2 class="text-lg font-semibold mb-4">Change Status</h2>
+              <form method="POST" class="flex flex-col gap-4">
+                <input type="hidden" name="action" value="status" />
+                <select name="status" aria-label="New status">
+                  <option value={ticket.status} selected>{ticket.status.replace('_', ' ')} (current)</option>
+                  {allowedTransitions.map((s) => (
+                    <option value={s}>{s.replace('_', ' ')}</option>
+                  ))}
+                </select>
+                <div class="flex justify-end">
+                  <NeuButton type="submit" variant="accent" size="sm" disabled={allowedTransitions.length === 0}>Update Status</NeuButton>
+                </div>
+              </form>
+            </NeuCard>
+
+            <NeuCard>
+              <h2 class="text-lg font-semibold mb-4">Assignment</h2>
+              <form method="POST" class="flex flex-col gap-4">
+                <input type="hidden" name="action" value="assign" />
+                <select name="assigned_to" aria-label="Assign to user">
+                  <option value="">Unassigned</option>
+                  {users.filter((u) => u.role === 'agent' || u.role === 'admin').map((u) => (
+                    <option value={u.id} selected={ticket.assigned_to === u.id}>{u.name} ({u.role})</option>
+                  ))}
+                </select>
+                <div class="flex justify-end">
+                  <NeuButton type="submit" variant="accent" size="sm">Assign</NeuButton>
+                </div>
+              </form>
+            </NeuCard>
+          </div>
+        )}
+
+        {/* Comments */}
+        <NeuCard id="comments">
+          <h2 class="text-lg font-semibold mb-4">Comments ({comments.length})</h2>
+          {comments.length > 0 ? (
+            <div class="flex flex-col gap-4 mb-6">
+              {comments.map((comment) => (
+                <div class={`neu-sunken rounded-2xl p-4 ${comment.is_internal ? 'border-l-4' : ''}`} style={comment.is_internal ? 'border-left:3px solid var(--warning);' : ''}>
+                  <div class="flex items-center justify-between mb-2">
+                    <span class="font-semibold text-sm">{comment.author_name || comment.author_id}</span>
+                    <span class="text-xs text-muted">{new Date(comment.created_at).toLocaleString()}</span>
+                  </div>
+                  <p class="text-main whitespace-pre-wrap text-sm">{comment.content}</p>
+                  {comment.is_internal && <span class="text-xs text-amber-700 font-semibold mt-2 inline-block">Internal</span>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p class="text-muted text-sm mb-6">No comments yet.</p>
+          )}
+
+          <h3 class="font-semibold mb-3">Add comment</h3>
           <form method="POST" class="flex flex-col gap-4">
-            <textarea name="content" placeholder="Write a comment..." required rows="3"></textarea>
+            <input type="hidden" name="action" value="comment" />
+            <textarea name="content" placeholder="Write a comment..." required rows="3" aria-label="Comment content"></textarea>
+            <label class="flex items-center gap-2 text-sm text-muted">
+              <input type="checkbox" name="is_internal" style="width:auto;" />
+              Internal note (agents/admins only)
+            </label>
             <div class="flex justify-end">
               <NeuButton type="submit" variant="accent" size="md">Post Comment</NeuButton>
             </div>
           </form>
         </NeuCard>
+
+        {/* Attachments */}
+        <NeuCard id="attachments">
+          <h2 class="text-lg font-semibold mb-4">Attachments ({attachments.length})</h2>
+          {attachments.length > 0 ? (
+            <ul class="flex flex-col gap-3 mb-6">
+              {attachments.map((att) => (
+                <li class="neu-sunken rounded-2xl p-4 flex items-center justify-between">
+                  <div>
+                    <p class="font-semibold text-sm">{att.filename}</p>
+                    <p class="text-xs text-muted">{formatBytes(att.size)} · {att.content_type} · {att.uploaded_by_name || att.uploaded_by} · {new Date(att.created_at).toLocaleString()}</p>
+                  </div>
+                  <a href={`${att.filename}`} download class="text-accent text-sm font-semibold">Download</a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p class="text-muted text-sm mb-6">No attachments.</p>
+          )}
+
+          <h3 class="font-semibold mb-3">Upload attachment</h3>
+          <form method="POST" enctype="multipart/form-data" class="flex flex-col gap-4">
+            <input type="hidden" name="action" value="attachment" />
+            <input type="file" name="file" required aria-label="Choose file to upload" />
+            <div class="flex justify-end">
+              <NeuButton type="submit" variant="accent" size="md">Upload</NeuButton>
+            </div>
+          </form>
+        </NeuCard>
+
+        {/* History timeline */}
+        <NeuCard>
+          <h2 class="text-lg font-semibold mb-4">History</h2>
+          {history.length > 0 ? (
+            <ol class="flex flex-col gap-3">
+              {history.map((entry) => (
+                <li class="flex gap-3 items-start">
+                  <span class="neu-convex rounded-full" style="width:0.5rem;height:0.5rem;margin-top:0.5rem;flex-shrink:0;"></span>
+                  <div class="text-sm">
+                    <span class="font-semibold">{entry.changed_by_name || entry.changed_by}</span>
+                    {' changed '}
+                    <span class="font-semibold">{entry.field.replace('_', ' ')}</span>
+                    {' from '}
+                    <span class="text-muted">{entry.old_value || '—'}</span>
+                    {' to '}
+                    <span class="text-accent">{entry.new_value || '—'}</span>
+                    <span class="text-xs text-muted block">{new Date(entry.created_at).toLocaleString()}</span>
+                  </div>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p class="text-muted text-sm">No history recorded.</p>
+          )}
+        </NeuCard>
       </div>
     )}
+
+    <NeuToast message={toastMessage} variant={toastVariant} />
   </div>
 </Layout>

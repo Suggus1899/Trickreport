@@ -1,0 +1,55 @@
+---
+import Layout from '../layouts/Layout.astro';
+import NeuCard from '../components/NeuCard.astro';
+import NeuButton from '../components/NeuButton.astro';
+---
+
+<Layout title="Offline — Trickreport">
+  <div class="min-h-screen flex items-center justify-center p-6">
+    <NeuCard class="w-full max-w-md text-center">
+      <div class="mb-6">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin: 0 auto;">
+          <line x1="1" y1="1" x2="23" y2="23"></line>
+          <path d="M16.72 11.06A10.94 10.94 0 0 1 19 12.55"></path>
+          <path d="M5 12.55a10.94 10.94 0 0 1 5.17-2.39"></path>
+          <path d="M10.71 5.05A16 16 0 0 1 22.58 9"></path>
+          <path d="M1.42 9a15.91 15.91 0 0 1 4.7-2.88"></path>
+          <path d="M8.53 16.11a6 6 0 0 1 6.95 0"></path>
+          <line x1="12" y1="20" x2="12.01" y2="20"></line>
+        </svg>
+      </div>
+      <h1 class="text-2xl font-bold text-main mb-2">You're offline</h1>
+      <p class="text-muted mb-8">
+        We couldn't reach the Trickreport server. Don't worry — you can still
+        create tickets offline and they'll sync automatically when you're back
+        online.
+      </p>
+
+      <div class="flex flex-col gap-3 mb-6 text-left">
+        <h2 class="text-sm font-semibold text-muted uppercase tracking-wide">Cached content</h2>
+        <a href="/dashboard" class="neu-convex neu-transition px-4 py-3 rounded-2xl font-semibold text-main text-sm">Dashboard</a>
+        <a href="/tickets" class="neu-convex neu-transition px-4 py-3 rounded-2xl font-semibold text-main text-sm">Tickets</a>
+        <a href="/tickets/new-offline" class="neu-convex neu-transition px-4 py-3 rounded-2xl font-semibold text-main text-sm">New Ticket (offline)</a>
+        <a href="/tickets/sync-status" class="neu-convex neu-transition px-4 py-3 rounded-2xl font-semibold text-main text-sm">Sync Status</a>
+      </div>
+
+      <NeuButton id="retry-btn" variant="accent" size="md" class="w-full">Try again</NeuButton>
+    </NeuCard>
+  </div>
+
+  <script is:inline>
+    (function () {
+      const btn = document.getElementById('retry-btn');
+      btn?.addEventListener('click', () => {
+        if (navigator.onLine) {
+          window.location.href = '/dashboard';
+        } else {
+          alert("You're still offline. Please check your connection and try again.");
+        }
+      });
+      window.addEventListener('online', () => {
+        window.location.href = '/dashboard';
+      });
+    })();
+  </script>
+</Layout>

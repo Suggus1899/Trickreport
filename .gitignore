@@ -28,6 +28,10 @@ backend/coverage
 # Docker
 *.log
 
+# Backups (keep directory, ignore contents)
+backups/*
+!backups/.gitkeep
+
 # OS
 .DS_Store
 Thumbs.db

@@ -136,7 +136,7 @@ func TestUserHandler_Create_Success(t *testing.T) {
 	h := newUserHandler(repo)
 	router := setupUserRouter(h, tenant)
 
-	body := `{"name":"Jane Doe","email":"jane@x.com","role":"agent","password":"secret123"}`
+	body := `{"name":"Jane Doe","email":"jane@x.com","role":"agent","password":"SecurePass123!@"}`
 	rec := doRequest(router, http.MethodPost, "/api/users", body, &appAuth.Claims{TenantID: tenant, Role: "admin"})
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
@@ -172,7 +172,7 @@ func TestUserHandler_Create_RepoError(t *testing.T) {
 	h := newUserHandler(repo)
 	router := setupUserRouter(h, tenant)
 
-	body := `{"name":"Jane Doe","email":"jane@x.com","role":"agent","password":"secret123"}`
+	body := `{"name":"Jane Doe","email":"jane@x.com","role":"agent","password":"SecurePass123!@"}`
 	rec := doRequest(router, http.MethodPost, "/api/users", body, &appAuth.Claims{TenantID: tenant, Role: "admin"})
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d", rec.Code)

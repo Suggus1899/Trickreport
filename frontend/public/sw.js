@@ -40,15 +40,18 @@ self.addEventListener('install', (event) => {
 // ─── Activate: clean up old caches ───────────────────────────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(
-        keys
-          .filter((key) => !key.startsWith(CACHE_VERSION))
-          .map((key) => caches.delete(key))
-      )
-    )
+    (async () => {
+      await caches.keys().then((keys) =>
+        Promise.all(
+          keys
+            .filter((key) => !key.startsWith(CACHE_VERSION))
+            .map((key) => caches.delete(key))
+        )
+      );
+      await self.clients.claim();
+      await notifyClientsOfUpdate();
+    })()
   );
-  self.clients.claim();
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────
@@ -181,4 +184,64 @@ self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
+});
+
+// ─── Update notification ─────────────────────────────────────────────
+// Notify pages when a new service worker has activated so the page can
+// show a "New version available — reload" banner.
+async function notifyClientsOfUpdate() {
+  const allClients = await self.clients.matchAll({ includeUncontrolled: true });
+  allClients.forEach((client) => {
+    client.postMessage({ type: 'NEW_VERSION_CACHED' });
+  });
+}
+
+// ─── Push notifications ──────────────────────────────────────────────
+self.addEventListener('push', (event) => {
+  let payload = { title: 'Trickreport', body: 'You have a new notification.' };
+  try {
+    if (event.data) {
+      const text = event.data.text();
+      payload = text ? JSON.parse(text) : payload;
+    }
+  } catch {
+    // Non-JSON payload — use the raw text as the body.
+    if (event.data) payload.body = event.data.text();
+  }
+
+  const title = payload.title || 'Trickreport';
+  const options = {
+    body: payload.body || '',
+    icon: '/icon.svg',
+    badge: '/icon.svg',
+    data: payload.data || payload.url || { url: '/dashboard' },
+    tag: payload.tag || 'trickreport-notification',
+    renotify: !!payload.renotify,
+  };
+
+  event.waitUntil(self.registration.showNotification(title, options));
+});
+
+// ─── Notification click ──────────────────────────────────────────────
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+
+  const data = event.notification.data || {};
+  const targetUrl = (typeof data === 'string' ? data : data.url) || '/dashboard';
+
+  event.waitUntil(
+    (async () => {
+      const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      // Focus an existing tab if one is open to the target URL.
+      for (const client of allClients) {
+        if (client.url.includes(targetUrl) && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      // Otherwise open a new window.
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })()
+  );
 });

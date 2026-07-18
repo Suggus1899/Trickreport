@@ -1,0 +1,130 @@
+# Staging environment for Trickreport.
+#
+# Mirrors the on-premise topology but uses a separate staging database and a
+# staging-specific domain. Intended for pre-production validation.
+#
+# Usage:
+#   1. Copy .env.staging.example to .env.staging and edit values.
+#   2. docker compose -f docker-compose.staging.yml --env-file .env.staging up -d
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-trickreport_staging}
+      POSTGRES_USER: ${POSTGRES_USER:-trickreport}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - pgdata_staging:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-trickreport}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - trickreport_net
+
+  backend:
+    build: ./backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-trickreport}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-trickreport_staging}?sslmode=disable
+      JWT_SECRET: ${JWT_SECRET}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@staging.local}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://staging.local,http://localhost:8080}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      LDAP_ENABLED: "false"
+      ENV: staging
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - trickreport_net
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        ON_PREMISE: "true"
+    restart: unless-stopped
+    environment:
+      API_URL: ""
+      ON_PREMISE: "true"
+    depends_on:
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - trickreport_net
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${STAGING_PORT:-8081}:80"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+    depends_on:
+      - frontend
+      - backend
+    deploy:
+      resources:
+        limits:
+          cpus: '1'
+          memory: 512M
+        reservations:
+          cpus: '0.25'
+          memory: 128M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - trickreport_net
+
+volumes:
+  pgdata_staging:
+
+networks:
+  trickreport_net:
+    driver: bridge

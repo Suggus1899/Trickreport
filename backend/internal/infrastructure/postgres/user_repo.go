@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -68,21 +69,21 @@ func (r *UserRepo) List(ctx context.Context, tenantID uuid.UUID) ([]domainuser.U
 
 // GetByID returns a user by id within a tenant.
 func (r *UserRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainuser.User, error) {
-	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at FROM users WHERE id = $1 AND tenant_id = $2`
+	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at, COALESCE(failed_login_attempts, 0), COALESCE(locked_until, timestamp 'epoch'), COALESCE(mfa_secret, ''), COALESCE(mfa_enabled, false) FROM users WHERE id = $1 AND tenant_id = $2`
 
 	return r.scanUser(ctx, q, id, tenantID)
 }
 
 // GetByIDNoTenant returns an active user by id without tenant scoping.
 func (r *UserRepo) GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*domainuser.User, error) {
-	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at FROM users WHERE id = $1 AND active = TRUE`
+	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at, COALESCE(failed_login_attempts, 0), COALESCE(locked_until, timestamp 'epoch'), COALESCE(mfa_secret, ''), COALESCE(mfa_enabled, false) FROM users WHERE id = $1 AND active = TRUE`
 
 	return r.scanUser(ctx, q, id)
 }
 
 // GetByEmail returns an active user by email.
 func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*domainuser.User, error) {
-	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at FROM users WHERE email = $1 AND active = TRUE LIMIT 1`
+	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at, COALESCE(failed_login_attempts, 0), COALESCE(locked_until, timestamp 'epoch'), COALESCE(mfa_secret, ''), COALESCE(mfa_enabled, false) FROM users WHERE email = $1 AND active = TRUE LIMIT 1`
 
 	return r.scanUser(ctx, q, email)
 }
@@ -153,8 +154,9 @@ func (r *UserRepo) scanUser(ctx context.Context, query string, args ...any) (*do
 	var u domainuser.User
 	var role string
 	var id, tid pgtype.UUID
+	var lockedUntil pgtype.Timestamptz
 	err := r.db.QueryRow(ctx, query, args...).
-		Scan(&id, &tid, &u.Name, &u.Email, &role, &u.PasswordHash, &u.LDAPDN, &u.AvatarURL, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&id, &tid, &u.Name, &u.Email, &role, &u.PasswordHash, &u.LDAPDN, &u.AvatarURL, &u.Active, &u.CreatedAt, &u.UpdatedAt, &u.FailedLoginAttempts, &lockedUntil, &u.MFASecret, &u.MFAEnabled)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domainuser.ErrNotFound
@@ -164,5 +166,106 @@ func (r *UserRepo) scanUser(ctx context.Context, query string, args ...any) (*do
 	u.ID = pgToUUID(id)
 	u.TenantID = pgToUUID(tid)
 	u.Role = domainuser.Role(role)
+	if lockedUntil.Valid && !lockedUntil.Time.IsZero() {
+		u.LockedUntil = lockedUntil.Time
+	}
 	return &u, nil
 }
+
+// --- Account Lockout ---
+
+// IncrementFailedAttempts increments the failed login attempt counter for a user.
+func (r *UserRepo) IncrementFailedAttempts(ctx context.Context, userID uuid.UUID) error {
+	const q = `UPDATE users SET failed_login_attempts = COALESCE(failed_login_attempts, 0) + 1, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID)
+	if err != nil {
+		return fmt.Errorf("user_repo.IncrementFailedAttempts: %w", err)
+	}
+	return nil
+}
+
+// ResetFailedAttempts resets the failed login attempt counter to zero.
+func (r *UserRepo) ResetFailedAttempts(ctx context.Context, userID uuid.UUID) error {
+	const q = `UPDATE users SET failed_login_attempts = 0, locked_until = NULL, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID)
+	if err != nil {
+		return fmt.Errorf("user_repo.ResetFailedAttempts: %w", err)
+	}
+	return nil
+}
+
+// LockAccount sets the locked_until timestamp for a user.
+func (r *UserRepo) LockAccount(ctx context.Context, userID uuid.UUID, until time.Time) error {
+	const q = `UPDATE users SET locked_until = $2, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID, until)
+	if err != nil {
+		return fmt.Errorf("user_repo.LockAccount: %w", err)
+	}
+	return nil
+}
+
+// --- Password Update ---
+
+// UpdatePassword sets a new password hash for a user.
+func (r *UserRepo) UpdatePassword(ctx context.Context, userID uuid.UUID, passwordHash string) error {
+	const q = `UPDATE users SET password = $2, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID, passwordHash)
+	if err != nil {
+		return fmt.Errorf("user_repo.UpdatePassword: %w", err)
+	}
+	return nil
+}
+
+// --- MFA ---
+
+// GetMFASecret returns the MFA secret and enabled status for a user.
+func (r *UserRepo) GetMFASecret(ctx context.Context, userID uuid.UUID) (string, bool, error) {
+	const q = `SELECT COALESCE(mfa_secret, ''), COALESCE(mfa_enabled, false) FROM users WHERE id = $1`
+	var secret string
+	var enabled bool
+	err := r.db.QueryRow(ctx, q, userID).Scan(&secret, &enabled)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", false, domainuser.ErrNotFound
+		}
+		return "", false, fmt.Errorf("user_repo.GetMFASecret: %w", err)
+	}
+	return secret, enabled, nil
+}
+
+// SetMFASecret stores the TOTP secret for a user (MFA not yet enabled).
+func (r *UserRepo) SetMFASecret(ctx context.Context, userID uuid.UUID, secret string) error {
+	const q = `UPDATE users SET mfa_secret = $2, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID, secret)
+	if err != nil {
+		return fmt.Errorf("user_repo.SetMFASecret: %w", err)
+	}
+	return nil
+}
+
+// EnableMFA marks MFA as enabled for a user.
+func (r *UserRepo) EnableMFA(ctx context.Context, userID uuid.UUID) error {
+	const q = `UPDATE users SET mfa_enabled = TRUE, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID)
+	if err != nil {
+		return fmt.Errorf("user_repo.EnableMFA: %w", err)
+	}
+	return nil
+}
+
+// DisableMFA clears the MFA secret and disables MFA for a user.
+func (r *UserRepo) DisableMFA(ctx context.Context, userID uuid.UUID) error {
+	const q = `UPDATE users SET mfa_enabled = FALSE, mfa_secret = NULL, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, userID)
+	if err != nil {
+		return fmt.Errorf("user_repo.DisableMFA: %w", err)
+	}
+	return nil
+}
+
+// Compile-time assertions that UserRepo implements the new auth interfaces.
+var (
+	_ appAuth.AccountLockoutRepository = (*UserRepo)(nil)
+	_ appAuth.PasswordUpdater          = (*UserRepo)(nil)
+	_ appAuth.MFARepository            = (*UserRepo)(nil)
+)

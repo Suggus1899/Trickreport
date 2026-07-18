@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/trickreport/backend/internal/domain/event"
 )
 
 // Ticket is the aggregate root for the ticket domain.
@@ -20,12 +21,32 @@ type Ticket struct {
 	AssignedTo  *uuid.UUID
 	SLADeadline *time.Time
 	SLABreached bool
+	Version     int
 	CreatedAt   time.Time
 	UpdatedAt   time.Time
+
+	// Events holds domain events raised by this aggregate. They are cleared
+	// after being published by the application layer.
+	Events []event.Event
 
 	// Derived fields (populated by joins, not persisted directly)
 	CreatorName  string
 	AssigneeName *string
+}
+
+// RaiseEvent appends a domain event to the aggregate's event list.
+func (t *Ticket) RaiseEvent(name string, payload any) {
+	t.Events = append(t.Events, event.Event{
+		Name:        name,
+		AggregateID: t.ID,
+		Payload:     payload,
+		OccurredAt:  time.Now(),
+	})
+}
+
+// ClearEvents removes all pending domain events from the aggregate.
+func (t *Ticket) ClearEvents() {
+	t.Events = nil
 }
 
 // CanBeViewedBy returns true if the given user can view this ticket.
@@ -58,8 +79,13 @@ func (t *Ticket) ChangeStatus(newStatus Status) error {
 	if !t.Status.CanTransitionTo(newStatus) {
 		return fmt.Errorf("%w: %s → %s", ErrInvalidTransition, t.Status, newStatus)
 	}
+	oldStatus := t.Status
 	t.Status = newStatus
 	t.UpdatedAt = time.Now()
+	t.RaiseEvent("ticket_status_changed", map[string]any{
+		"old_status": string(oldStatus),
+		"new_status": string(newStatus),
+	})
 	return nil
 }
 
@@ -67,4 +93,7 @@ func (t *Ticket) ChangeStatus(newStatus Status) error {
 func (t *Ticket) Assign(userID uuid.UUID) {
 	t.AssignedTo = &userID
 	t.UpdatedAt = time.Now()
+	t.RaiseEvent("ticket_assigned", map[string]any{
+		"assigned_to": userID.String(),
+	})
 }

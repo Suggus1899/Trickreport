@@ -112,6 +112,20 @@ func toHistoryDTO(h *ticket.HistoryEntry) HistoryDTO {
 }
 
 func (h *TicketHandler) List(w http.ResponseWriter, r *http.Request) {
+	// @Summary      List tickets
+	// @Description  Returns tickets for the current tenant, filtered by query params.
+	// @Tags         tickets
+	// @Produce      json
+	// @Security     BearerAuth
+	// @Param        status      query  string  false  "Status filter"
+	// @Param        priority    query  string  false  "Priority filter"
+	// @Param        assigned_to query  string  false  "Assignee UUID filter"
+	// @Param        q           query  string  false  "Full-text search"
+	// @Param        limit       query  int     false  "Page size"
+	// @Param        offset      query  int     false  "Page offset"
+	// @Success      200  {array}  TicketDTO
+	// @Failure      500  {object}  response.ErrorBody
+	// @Router       /tickets [get]
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
 
@@ -141,6 +155,17 @@ func (h *TicketHandler) List(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TicketHandler) Get(w http.ResponseWriter, r *http.Request) {
+	// @Summary      Get a ticket
+	// @Description  Returns a single ticket by ID.
+	// @Tags         tickets
+	// @Produce      json
+	// @Security     BearerAuth
+	// @Param        id  path  string  true  "Ticket UUID"
+	// @Success      200  {object}  TicketDTO
+	// @Failure      400  {object}  response.ErrorBody
+	// @Failure      403  {object}  response.ErrorBody
+	// @Failure      404  {object}  response.ErrorBody
+	// @Router       /tickets/{id} [get]
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
 	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
@@ -167,6 +192,17 @@ func (h *TicketHandler) Get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *TicketHandler) Create(w http.ResponseWriter, r *http.Request) {
+	// @Summary      Create a ticket
+	// @Description  Creates a new ticket for the current tenant.
+	// @Tags         tickets
+	// @Accept       json
+	// @Produce      json
+	// @Security     BearerAuth
+	// @Param        body  body  CreateTicketReq  true  "Ticket payload"
+	// @Success      201  {object}  TicketDTO
+	// @Failure      400  {object}  response.ErrorBody
+	// @Failure      500  {object}  response.ErrorBody
+	// @Router       /tickets [post]
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
 

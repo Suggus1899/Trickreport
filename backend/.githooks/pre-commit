@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+#
+# Trickreport — backend pre-commit hook.
+#
+# Runs go vet and checks gofmt formatting before a commit is accepted.
+#
+# Enable with:
+#   git config core.hooksPath backend/.githooks
+#
+set -euo pipefail
+
+# Run from the backend directory regardless of where git invoked the hook.
+BACKEND_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$BACKEND_DIR"
+
+echo "==> go vet ./..."
+if ! go vet ./...; then
+  echo "ERROR: go vet reported issues. Fix them before committing." >&2
+  exit 1
+fi
+
+echo "==> gofmt -l ."
+UNFORMATTED="$(gofmt -l .)"
+if [ -n "$UNFORMATTED" ]; then
+  echo "ERROR: the following files are not gofmt-formatted:" >&2
+  echo "$UNFORMATTED" >&2
+  echo "Run 'gofmt -w .' from backend/ and re-stage." >&2
+  exit 1
+fi
+
+echo "==> pre-commit checks passed."

@@ -292,3 +292,467 @@ input::placeholder, textarea::placeholder {
   background: var(--bg-dark);
   border-radius: 4px;
 }
+
+/* ─── Dark theme ────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --bg-base: #2a2d35;
+    --bg-light: #3a3d45;
+    --bg-dark: #1a1d25;
+    --text-main: #e0e5ec;
+    --text-muted: #9da8b8;
+    --accent: #8b7dff;
+    --accent-light: #a89fff;
+    --accent-dark: #6d5dfc;
+    --shadow-raised: 9px 9px 16px #15171c, -9px -9px 16px #3a3d45;
+    --shadow-sunken: inset 6px 6px 10px #15171c, inset -6px -6px 10px #3a3d45;
+    --shadow-convex: 6px 6px 10px #15171c, -6px -6px 10px #3a3d45, inset 1px 1px 2px #3a3d45, inset -1px -1px 2px #15171c;
+    --shadow-concave: inset 4px 4px 8px #15171c, inset -4px -4px 8px #3a3d45;
+    --shadow-accent: 9px 9px 16px #4a3fd0, -9px -9px 16px #a89fff;
+    --shadow-accent-pressed: inset 6px 6px 10px #4a3fd0, inset -6px -6px 10px #a89fff;
+    --shadow-danger: 9px 9px 16px #c43f3f, -9px -9px 16px #ff7575;
+    --shadow-danger-pressed: inset 6px 6px 10px #c43f3f, inset -6px -6px 10px #ff7575;
+    --shadow-badge-default: 3px 3px 6px #15171c, -3px -3px 6px #3a3d45;
+    --shadow-badge-success: 3px 3px 6px rgba(52, 168, 83, 0.4), -3px -3px 6px #3a3d45;
+    --shadow-badge-warning: 3px 3px 6px rgba(255, 204, 0, 0.4), -3px -3px 6px #3a3d45;
+    --shadow-badge-danger: 3px 3px 6px rgba(255, 90, 90, 0.4), -3px -3px 6px #3a3d45;
+    --shadow-badge-info: 3px 3px 6px rgba(109, 93, 252, 0.4), -3px -3px 6px #3a3d45;
+  }
+}
+
+.dark {
+  --bg-base: #2a2d35;
+  --bg-light: #3a3d45;
+  --bg-dark: #1a1d25;
+  --text-main: #e0e5ec;
+  --text-muted: #9da8b8;
+  --accent: #8b7dff;
+  --accent-light: #a89fff;
+  --accent-dark: #6d5dfc;
+  --shadow-raised: 9px 9px 16px #15171c, -9px -9px 16px #3a3d45;
+  --shadow-sunken: inset 6px 6px 10px #15171c, inset -6px -6px 10px #3a3d45;
+  --shadow-convex: 6px 6px 10px #15171c, -6px -6px 10px #3a3d45, inset 1px 1px 2px #3a3d45, inset -1px -1px 2px #15171c;
+  --shadow-concave: inset 4px 4px 8px #15171c, inset -4px -4px 8px #3a3d45;
+  --shadow-accent: 9px 9px 16px #4a3fd0, -9px -9px 16px #a89fff;
+  --shadow-accent-pressed: inset 6px 6px 10px #4a3fd0, inset -6px -6px 10px #a89fff;
+  --shadow-danger: 9px 9px 16px #c43f3f, -9px -9px 16px #ff7575;
+  --shadow-danger-pressed: inset 6px 6px 10px #c43f3f, inset -6px -6px 10px #ff7575;
+  --shadow-badge-default: 3px 3px 6px #15171c, -3px -3px 6px #3a3d45;
+  --shadow-badge-success: 3px 3px 6px rgba(52, 168, 83, 0.4), -3px -3px 6px #3a3d45;
+  --shadow-badge-warning: 3px 3px 6px rgba(255, 204, 0, 0.4), -3px -3px 6px #3a3d45;
+  --shadow-badge-danger: 3px 3px 6px rgba(255, 90, 90, 0.4), -3px -3px 6px #3a3d45;
+  --shadow-badge-info: 3px 3px 6px rgba(109, 93, 252, 0.4), -3px -3px 6px #3a3d45;
+}
+
+.dark .neu-convex {
+  background: linear-gradient(145deg, #3a3d45, #1a1d25);
+}
+
+.dark .neu-concave {
+  background: linear-gradient(145deg, #1a1d25, #3a3d45);
+}
+
+/* ─── Skeleton loading ──────────────────────────────────────────────── */
+.skeleton {
+  background: var(--bg-base);
+  box-shadow: var(--shadow-sunken);
+  animation: skeleton-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes skeleton-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+/* ─── Spinner ───────────────────────────────────────────────────────── */
+.neu-spinner {
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: 9999px;
+  box-shadow: var(--shadow-sunken);
+  position: relative;
+  display: inline-block;
+}
+.neu-spinner::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  border-top-color: var(--accent);
+  border-right-color: var(--accent);
+  animation: neu-spin 0.7s linear infinite;
+}
+@keyframes neu-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Form validation error ─────────────────────────────────────────── */
+.neu-input-error {
+  box-shadow: var(--shadow-sunken), 0 0 0 2px var(--danger) !important;
+}
+.neu-input-helper {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-left: var(--space-1);
+  margin-top: var(--space-1);
+}
+.neu-input-error-text {
+  font-size: var(--text-xs);
+  color: var(--danger-dark);
+  margin-left: var(--space-1);
+  margin-top: var(--space-1);
+}
+.neu-char-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  margin-left: auto;
+}
+
+/* ─── Accessibility helpers ─────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.focus-visible:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 200;
+  background: var(--bg-base);
+  color: var(--accent);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-raised);
+  font-weight: 600;
+}
+.skip-link:focus {
+  left: var(--space-4);
+  top: var(--space-4);
+}
+
+/* ─── Responsive sidebar ────────────────────────────────────────────── */
+.sidebar-toggle {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .sidebar-toggle {
+    display: inline-flex;
+    position: fixed;
+    top: var(--space-4);
+    left: var(--space-4);
+    z-index: 90;
+    width: 3rem;
+    height: 3rem;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: var(--radius);
+    background: var(--bg-base);
+    box-shadow: var(--shadow-raised);
+    color: var(--text-main);
+    cursor: pointer;
+  }
+  .sidebar-toggle:active {
+    box-shadow: var(--shadow-sunken);
+  }
+  .app-sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    margin: 0 !important;
+    transform: translateX(-110%);
+    transition: transform 0.25s ease;
+    z-index: 100;
+    border-radius: 0 var(--radius-lg) var(--radius-lg) 0 !important;
+    width: 16rem;
+  }
+  .app-sidebar.open {
+    transform: translateX(0);
+  }
+  .sidebar-backdrop.open {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.4);
+    z-index: 95;
+  }
+  .app-main {
+    padding: var(--space-4) !important;
+    padding-top: 5rem !important;
+  }
+}
+
+/* ─── Toast notifications ───────────────────────────────────────────── */
+.neu-toast-container {
+  position: fixed;
+  bottom: var(--space-6);
+  right: var(--space-6);
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  max-width: 24rem;
+}
+.neu-toast {
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-raised);
+  background: var(--bg-base);
+  color: var(--text-main);
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  animation: toast-in 0.25s ease;
+}
+.neu-toast.success { color: var(--success-dark); }
+.neu-toast.error { color: var(--danger-dark); }
+.neu-toast.warning { color: var(--warning-dark); }
+.neu-toast.info { color: var(--accent); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Modal / Dialog ────────────────────────────────────────────────── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.neu-modal {
+  background: var(--bg-base);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-raised);
+  width: 100%;
+  max-width: 32rem;
+  max-height: 85vh;
+  overflow: auto;
+  padding: var(--space-6);
+  animation: modal-in 0.2s ease;
+}
+@keyframes modal-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+.neu-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+.neu-modal-close {
+  width: 2.25rem;
+  height: 2.25rem;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--bg-base);
+  box-shadow: var(--shadow-raised);
+  color: var(--text-main);
+  cursor: pointer;
+  font-size: 1.25rem;
+  line-height: 1;
+}
+.neu-modal-close:active {
+  box-shadow: var(--shadow-sunken);
+}
+
+/* ─── Pagination ────────────────────────────────────────────────────── */
+.neu-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.neu-pagination a,
+.neu-pagination button {
+  min-width: 2.5rem;
+  height: 2.5rem;
+  padding: 0 var(--space-3);
+  border: none;
+  border-radius: var(--radius);
+  background: var(--bg-base);
+  box-shadow: var(--shadow-raised);
+  color: var(--text-main);
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+.neu-pagination a:hover,
+.neu-pagination button:hover {
+  box-shadow: var(--shadow-convex);
+}
+.neu-pagination a.active,
+.neu-pagination button.active {
+  box-shadow: var(--shadow-sunken);
+  color: var(--accent);
+}
+.neu-pagination a.disabled,
+.neu-pagination button.disabled {
+  pointer-events: none;
+  opacity: 0.4;
+}
+
+/* ─── Phase 11: header, charts, modals, sync, search ────────────────── */
+.app-header {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  background: var(--bg-base);
+  padding: var(--space-3) 0;
+}
+
+/* Modal overlay (used by users edit + keyboard help) */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 120;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-4);
+}
+.modal-card {
+  animation: modal-in 0.2s ease;
+}
+
+/* ─── SVG charts ────────────────────────────────────────────────────── */
+.line-chart-wrap {
+  width: 100%;
+  overflow-x: auto;
+}
+.line-svg {
+  width: 100%;
+  min-width: 30rem;
+  height: auto;
+  display: block;
+}
+.line-dot circle {
+  cursor: pointer;
+  transition: r 0.15s ease;
+}
+.line-dot:hover circle {
+  r: 6;
+}
+.pie-chart-wrap {
+  flex-shrink: 0;
+  width: 12.5rem;
+}
+.pie-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.pie-slice {
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.15s ease;
+  transform-origin: 100px 100px;
+}
+.pie-slice:hover {
+  opacity: 0.85;
+  transform: scale(1.03);
+}
+.legend-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.25rem;
+  display: inline-block;
+  flex-shrink: 0;
+}
+.chart-tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: var(--bg-dark);
+  color: #fff;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem;
+  z-index: 30;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+  transform: translate(-50%, -100%);
+}
+.analytics-range,
+.analytics-date {
+  width: auto !important;
+  min-width: 8rem;
+  display: inline-block;
+}
+.analytics-date {
+  min-width: 7rem;
+}
+
+/* ─── Sync status rows ──────────────────────────────────────────────── */
+.sync-row {
+  transition: box-shadow 0.2s ease;
+}
+
+/* ─── Keyboard help keys ────────────────────────────────────────────── */
+.kh-keys {
+  flex-shrink: 0;
+}
+
+/* ─── Users filter inputs ───────────────────────────────────────────── */
+.users-filter {
+  width: auto !important;
+  min-width: 10rem;
+}
+
+/* ─── Update-available banner (SW) ──────────────────────────────────── */
+.update-banner {
+  position: fixed;
+  bottom: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 160;
+  background: var(--bg-base);
+  color: var(--text-main);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-raised);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  animation: toast-in 0.25s ease;
+}
+.update-banner button {
+  border: none;
+  background: var(--accent);
+  color: #fff;
+  font-weight: 600;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}

@@ -1,0 +1,50 @@
+# Trickreport — scheduled PostgreSQL backups.
+#
+# Runs pg_dump on a cron schedule and keeps daily/weekly/monthly retention.
+# Backups are written to ./backups (mounted into the container).
+#
+# Usage (overlay with the main compose file):
+#   docker compose -f docker-compose.yml -f docker-compose.backup.yml up -d backup
+#
+# Restore a backup with scripts/restore.sh:
+#   ./scripts/restore.sh backups/trickreport_2024-01-01T00:00:00Z.sql.gz
+
+services:
+  backup:
+    image: prodrigestivill/postgres-backup-local:latest
+    restart: unless-stopped
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_DB=trickreport
+      - POSTGRES_USER=trickreport
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - SCHEDULE=@daily
+      - BACKUP_KEEP_DAYS=7
+      - BACKUP_KEEP_WEEKS=4
+      - BACKUP_KEEP_MONTHS=6
+      - BACKUP_SUFFIX=.sql.gz
+      - TZ=${TZ:-UTC}
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      postgres:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          cpus: '0.1'
+          memory: 64M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - trickreport_net
+
+networks:
+  trickreport_net:
+    driver: bridge

@@ -161,7 +161,31 @@ func (rl *RateLimiter) LimitByUser(next http.Handler) http.Handler {
 	})
 }
 
+// LimitByAccount returns middleware that rate limits requests by a given
+// account identifier (e.g. email). This is intended to be used with a
+// pre-extracted key, such as in the LoginRateLimiter wrapper.
+func (rl *RateLimiter) LimitByAccount(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// The account key is expected to be stored in context by the
+		// LoginRateLimiter wrapper. Fall back to IP if not present.
+		key := clientIP(r)
+		if accountKey, ok := r.Context().Value(accountKeyCtxKey).(string); ok && accountKey != "" {
+			key = accountKey
+		}
+		if !rl.store.GetOrCreate(key, rl.rate, rl.burst).Allow() {
+			response.Error(w, http.StatusTooManyRequests, "rate limit exceeded")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // Start initializes the background cleanup goroutine.
 func (rl *RateLimiter) Start() {
 	go rl.cleanup()
 }
+
+// accountKeyCtxKey is the context key for the per-account rate limit key.
+type accountCtxKey string
+
+const accountKeyCtxKey accountCtxKey = "account_rate_limit_key"
