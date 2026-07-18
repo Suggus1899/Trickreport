@@ -88,6 +88,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	automationHandler := handlers.Automation
 	analyticsHandler := handlers.Analytics
 	attachmentHandler := handlers.Attachment
+	notificationHandler := handlers.Notification
 
 	// ── Router ────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -273,6 +274,14 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", articleHandler.Update)
 				r.With(httpMiddleware.RequireRole("admin")).Delete("/{id}", articleHandler.Delete)
 			})
+		})
+
+		// Notifications (real-time + persistent)
+		r.Route("/notifications", func(r chi.Router) {
+			r.Get("/", notificationHandler.List)
+			r.Get("/unread-count", notificationHandler.UnreadCount)
+			r.Post("/{id}/read", notificationHandler.MarkRead)
+			r.Post("/read-all", notificationHandler.MarkAllRead)
 		})
 	})
 

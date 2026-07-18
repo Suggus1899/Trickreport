@@ -94,10 +94,10 @@ const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) :
               <a href="/logout" class="px-4 py-3 rounded-2xl font-semibold text-sm text-muted hover:text-main neu-transition text-center">Logout</a>
               <ThemeToggle />
             </div>
-            <div class="neu-sunken rounded-2xl p-4">
-              <p class="font-semibold text-sm">{user.name}</p>
+            <a href={user.role === 'admin' ? '/admin/profile' : '/profile'} class="neu-sunken rounded-2xl p-4 transition-all hover:neu-convex cursor-pointer no-underline">
+              <p class="font-semibold text-sm text-main">{user.name}</p>
               <p class="text-xs text-muted capitalize">{user.role.replace('_', ' ')}</p>
-            </div>
+            </a>
           </div>
         </aside>
         <main id="main-content" class="app-main flex-1 p-6 overflow-auto">
