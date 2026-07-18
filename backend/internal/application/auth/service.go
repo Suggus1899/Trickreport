@@ -15,6 +15,11 @@ type UserRepository interface {
 	GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*user.User, error)
 }
 
+// UserCreator is the port for creating new users during self-registration.
+type UserCreator interface {
+	Create(ctx context.Context, u *user.User, passwordHash string) error
+}
+
 // PasswordHasher is the port for password verification.
 type PasswordHasher interface {
 	Compare(hash, password string) error
@@ -121,6 +126,7 @@ type Service struct {
 	lockoutRepo  AccountLockoutRepository
 	hasherFull   PasswordHasherFull
 	mfaRepo      MFARepository
+	creator      UserCreator
 }
 
 // NewService creates a new auth application service.
@@ -148,6 +154,9 @@ func (s *Service) SetPasswordHasherFull(h PasswordHasherFull) { s.hasherFull = h
 
 // SetMFARepository wires the MFA repository.
 func (s *Service) SetMFARepository(repo MFARepository) { s.mfaRepo = repo }
+
+// SetUserCreator wires the user creator for self-registration.
+func (s *Service) SetUserCreator(creator UserCreator) { s.creator = creator }
 
 // LoginInput holds the credentials for login.
 type LoginInput struct {
@@ -183,6 +192,12 @@ var ErrTokenBlacklisted = errors.New("token has been revoked")
 
 // ErrInvalidRefreshToken is returned when a refresh token is invalid or not a refresh type.
 var ErrInvalidRefreshToken = errors.New("invalid refresh token")
+
+// ErrEmailAlreadyExists is returned when a registration attempt uses an email that is already in use.
+var ErrEmailAlreadyExists = errors.New("email already registered")
+
+// ErrRegistrationDisabled is returned when self-registration is not enabled.
+var ErrRegistrationDisabled = errors.New("registration is not enabled")
 
 // Login authenticates a user and returns a JWT.
 func (s *Service) Login(ctx context.Context, input LoginInput) (*LoginResult, error) {
@@ -409,4 +424,51 @@ func (s *Service) MFALogin(ctx context.Context, input MFALoginInput) (*LoginResu
 // GetProfile returns the current user's profile.
 func (s *Service) GetProfile(ctx context.Context, userID uuid.UUID) (*user.User, error) {
 	return s.users.GetByIDNoTenant(ctx, userID)
+}
+
+// RegisterInput holds the data for self-registration.
+type RegisterInput struct {
+	Name     string
+	Email    string
+	Password string
+}
+
+// Register creates a new end_user account in the default tenant and returns login tokens.
+func (s *Service) Register(ctx context.Context, input RegisterInput) (*LoginResult, error) {
+	if s.creator == nil || s.hasherFull == nil {
+		return nil, ErrRegistrationDisabled
+	}
+	if input.Name == "" || input.Email == "" || input.Password == "" {
+		return nil, ErrInvalidCredentials
+	}
+	if len(input.Password) < 6 {
+		return nil, ErrInvalidCredentials
+	}
+
+	// Check if email is already in use.
+	existing, _ := s.users.GetByEmail(ctx, input.Email)
+	if existing != nil {
+		return nil, ErrEmailAlreadyExists
+	}
+
+	hash, err := s.hasherFull.Hash(input.Password)
+	if err != nil {
+		return nil, err
+	}
+
+	// Default tenant ID — matches the seed in migration 000001.
+	defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
+
+	u := &user.User{
+		TenantID: defaultTenantID,
+		Name:     input.Name,
+		Email:    input.Email,
+		Role:     user.RoleEndUser,
+	}
+
+	if err := s.creator.Create(ctx, u, hash); err != nil {
+		return nil, err
+	}
+
+	return s.issueTokens(ctx, u)
 }
