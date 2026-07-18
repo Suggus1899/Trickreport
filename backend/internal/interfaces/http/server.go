@@ -179,6 +179,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 			loginLimiter.Start()
 
 			r.With(loginLimiter.LoginLimit).Post("/login", authHandler.Login)
+			r.With(loginLimiter.LoginLimit).Post("/register", authHandler.Register)
 			r.Post("/logout", authHandler.Logout)
 			r.Post("/refresh", authHandler.Refresh)
 			r.Post("/password-reset", authHandler.PasswordReset)

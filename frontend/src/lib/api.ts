@@ -293,6 +293,17 @@ export async function login(input: LoginInput): Promise<LoginResult> {
   });
 }
 
+export async function register(input: {
+  name: string;
+  email: string;
+  password: string;
+}): Promise<LoginResult> {
+  return api<LoginResult>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  });
+}
+
 export async function getMe(token: string): Promise<User> {
   return api<User>('/auth/me', { token });
 }

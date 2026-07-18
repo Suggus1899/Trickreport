@@ -547,3 +547,85 @@ func (h *AuthHandler) MFALogin(w http.ResponseWriter, r *http.Request) {
 
 // Ensure user import is used (domain types referenced via service)
 var _ = user.ErrNotFound
+
+// registerReq holds the body for self-registration.
+type registerReq struct {
+	Name     string `json:"name" validate:"required,min=2,max=255"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=6,max=72"`
+}
+
+// Register handles self-registration for new end_user accounts.
+// @Summary     Register a new account
+// @Description Create a new end_user account in the default tenant
+// @Tags        auth
+// @Accept      json
+// @Produce     json
+// @Param       body  body  registerReq  true  "Registration data"
+// @Success     201   {object}  loginResp
+// @Failure     400   {object}  response.ErrorBody
+// @Failure     409   {object}  response.ErrorBody
+// @Router      /auth/register [post]
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	var req registerReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if err := validator.Validate.Struct(req); err != nil {
+		response.JSON(w, http.StatusBadRequest, map[string]any{"error": "validation failed", "details": validator.ValidationError(err)})
+		return
+	}
+
+	result, err := h.svc.Register(r.Context(), appAuth.RegisterInput{
+		Name:     req.Name,
+		Email:    req.Email,
+		Password: req.Password,
+	})
+	if err != nil {
+		switch {
+		case errors.Is(err, appAuth.ErrEmailAlreadyExists):
+			response.Error(w, http.StatusConflict, "email already registered")
+		case errors.Is(err, appAuth.ErrRegistrationDisabled):
+			response.Error(w, http.StatusServiceUnavailable, "registration is not enabled")
+		case errors.Is(err, appAuth.ErrInvalidCredentials):
+			response.Error(w, http.StatusBadRequest, "invalid input")
+		default:
+			response.Error(w, http.StatusInternalServerError, "registration failed")
+		}
+		return
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     "trickreport_token",
+		Value:    result.Token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   result.SecureCookie,
+		SameSite: http.SameSiteStrictMode,
+		Expires:  result.ExpiresAt,
+	})
+	if result.RefreshToken != "" {
+		http.SetCookie(w, &http.Cookie{
+			Name:     "trickreport_refresh",
+			Value:    result.RefreshToken,
+			Path:     "/",
+			HttpOnly: true,
+			Secure:   result.SecureCookie,
+			SameSite: http.SameSiteStrictMode,
+			Expires:  time.Now().Add(7 * 24 * time.Hour),
+		})
+	}
+
+	response.JSON(w, http.StatusCreated, loginResp{
+		Token:        result.Token,
+		RefreshToken: result.RefreshToken,
+		User: userInfo{
+			ID:       result.User.ID,
+			Name:     result.User.Name,
+			Email:    result.User.Email,
+			Role:     string(result.User.Role),
+			TenantID: result.User.TenantID,
+		},
+	})
+}

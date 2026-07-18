@@ -409,6 +409,46 @@ input::placeholder, textarea::placeholder {
   margin-left: auto;
 }
 
+/* ─── Password input with visibility toggle ─────────────────────────── */
+.neu-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.neu-input-wrapper input {
+  width: 100%;
+  padding-right: 3rem;
+}
+
+.neu-password-toggle {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm);
+  transition: color 0.2s ease;
+}
+
+.neu-password-toggle:hover {
+  color: var(--accent);
+  box-shadow: none;
+}
+
+.neu-password-toggle:focus-visible {
+  outline: 2px solid var(--accent-light);
+  outline-offset: 2px;
+}
+
 /* ─── Accessibility helpers ─────────────────────────────────────────── */
 .sr-only {
   position: absolute;

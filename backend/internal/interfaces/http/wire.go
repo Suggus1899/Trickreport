@@ -110,6 +110,7 @@ func NewServices(
 	authSvc.SetAccountLockoutRepository(repos.User)
 	authSvc.SetPasswordHasherFull(hasher)
 	authSvc.SetMFARepository(repos.User)
+	authSvc.SetUserCreator(repos.User)
 
 	// MFA service
 	mfaSvc := appAuth.NewMFAService(repos.User, appAuth.MFAConfig{Issuer: "Trickreport"})
