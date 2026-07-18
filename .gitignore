@@ -1,0 +1,35 @@
+## Trickreport — .gitignore
+
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Astro build
+frontend/dist/
+frontend/.astro/
+
+# Environment files
+.env
+.env.local
+backend/.env
+frontend/.env
+frontend/.env.local
+
+# Go build
+backend/dist/
+backend/*.exe
+
+# Docker
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE / agent configs
+.vscode/
+.idea/
+*.swp
+.atl/
+.devin/

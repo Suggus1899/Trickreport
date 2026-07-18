@@ -1,0 +1,21 @@
+---
+export interface Props {
+  variant?: 'raised' | 'sunken' | 'convex';
+  class?: string;
+  as?: 'article' | 'section' | 'div';
+}
+
+const { variant = 'raised', class: className = '', as: Tag = 'div' } = Astro.props;
+
+const variants = {
+  raised: 'neu-raised',
+  sunken: 'neu-sunken',
+  convex: 'neu-convex',
+};
+
+const classes = `p-6 rounded-3xl ${variants[variant]} ${className}`;
+---
+
+<Tag class={classes}>
+  <slot />
+</Tag>

@@ -1,0 +1,61 @@
+---
+import Layout from '../layouts/Layout.astro';
+import NeuCard from '../components/NeuCard.astro';
+import NeuInput from '../components/NeuInput.astro';
+import NeuButton from '../components/NeuButton.astro';
+import { login, getMe } from '../lib/api';
+
+let error = '';
+
+if (Astro.request.method === 'POST') {
+  const data = await Astro.request.formData();
+  const email = data.get('email')?.toString() || '';
+  const password = data.get('password')?.toString() || '';
+
+  try {
+    const result = await login({ email, password });
+    Astro.cookies.set('trickreport_token', result.token, {
+      httpOnly: true,
+      path: '/',
+      maxAge: 60 * 60 * 8,
+      sameSite: 'lax',
+    });
+    return Astro.redirect('/dashboard');
+  } catch (err) {
+    error = err instanceof Error ? err.message : 'Login failed';
+  }
+}
+
+if (Astro.cookies.has('trickreport_token')) {
+  return Astro.redirect('/dashboard');
+}
+---
+
+<Layout title="Login">
+  <div class="min-h-screen flex items-center justify-center p-6">
+    <NeuCard class="w-full max-w-md">
+      <div class="text-center mb-8">
+        <h1 class="text-3xl font-bold text-[var(--text-main)]">Trickreport</h1>
+        <p class="text-[var(--text-muted)] mt-2">Sign in to your workspace</p>
+      </div>
+
+      {error && (
+        <div class="mb-6 p-4 rounded-2xl bg-rose-50 text-rose-700 neu-sunken text-sm">
+          {error}
+        </div>
+      )}
+
+      <form method="POST" class="flex flex-col gap-5">
+        <NeuInput name="email" type="email" label="Email" placeholder="admin@trickreport.local" required value="admin@trickreport.local" />
+        <NeuInput name="password" type="password" label="Password" placeholder="••••••••" required value="changeme" />
+        <div class="pt-2">
+          <NeuButton type="submit" variant="accent" size="lg" class="w-full">Sign In</NeuButton>
+        </div>
+      </form>
+
+      <p class="text-center text-sm text-[var(--text-muted)] mt-6">
+        Demo credentials: <span class="font-mono text-xs">admin@trickreport.local</span> / <span class="font-mono text-xs">changeme</span>
+      </p>
+    </NeuCard>
+  </div>
+</Layout>

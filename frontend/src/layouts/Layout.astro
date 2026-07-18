@@ -1,0 +1,58 @@
+---
+export interface Props {
+  title?: string;
+  user?: { name: string; role: string };
+}
+
+const { title = 'Trickreport', user } = Astro.props;
+
+const nav = [
+  { label: 'Dashboard', href: '/dashboard', roles: ['admin', 'agent', 'end_user'] },
+  { label: 'Tickets', href: '/tickets', roles: ['admin', 'agent', 'end_user'] },
+  { label: 'Knowledge Base', href: '/articles', roles: ['admin', 'agent', 'end_user'] },
+];
+
+const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) : [];
+---
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{title} — Trickreport</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body class="min-h-screen">
+    {user ? (
+      <div class="flex min-h-screen">
+        <aside class="w-64 p-6 flex flex-col gap-6 neu-raised m-4 rounded-[2rem]">
+          <div class="px-2">
+            <h1 class="text-2xl font-bold tracking-tight text-[var(--text-main)]">Trickreport</h1>
+          </div>
+          <nav class="flex flex-col gap-3">
+            {visibleNav.map((item) => (
+              <a
+                href={item.href}
+                class={`px-4 py-3 rounded-2xl font-medium transition-all ${Astro.url.pathname === item.href || Astro.url.pathname.startsWith(item.href + '/') ? 'neu-concave text-[var(--accent)]' : 'hover:neu-convex'}`}
+              >
+                {item.label}
+              </a>
+            ))}
+          </nav>
+          <div class="mt-auto neu-sunken rounded-2xl p-4">
+            <p class="font-semibold text-sm">{user.name}</p>
+            <p class="text-xs text-[var(--text-muted)] capitalize">{user.role.replace('_', ' ')}</p>
+          </div>
+        </aside>
+        <main class="flex-1 p-6 overflow-auto">
+          <slot />
+        </main>
+      </div>
+    ) : (
+      <slot />
+    )}
+  </body>
+</html>

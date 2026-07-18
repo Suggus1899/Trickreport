@@ -1,0 +1,82 @@
+package views
+
+// UserList renders a list of users (admin only).
+templ UserList(users []UserData) {
+	<h1>Users</h1>
+	<div class="actions-bar">
+		<a href="/admin/users/new" class="btn btn-primary">+ New User</a>
+	</div>
+	if len(users) == 0 {
+		<div class="empty-state">
+			<h3>No users</h3>
+		</div>
+	} else {
+		<div class="card" style="padding:0">
+			<table>
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Email</th>
+						<th>Role</th>
+						<th>Status</th>
+						<th>Created</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, u := range users {
+						<tr>
+							<td>{ u.Name }</td>
+							<td>{ u.Email }</td>
+							<td><span class="badge badge-blue">{ u.Role }</span></td>
+							<td>
+								if u.Active {
+									<span class="badge badge-green">Active</span>
+								} else {
+									<span class="badge badge-gray">Inactive</span>
+								}
+							</td>
+							<td style="color:var(--text-muted);font-size:0.75rem">{ formatTime(u.CreatedAt) }</td>
+							<td>
+								<a href={ templ.SafeURL("/admin/users/" + u.ID + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+// UserForm renders the create/edit user form.
+templ UserForm(u *UserData) {
+	<h1>New User</h1>
+	<div class="card">
+		<form method="POST" action="/admin/users">
+			<div class="form-group">
+				<label for="name">Name</label>
+				<input type="text" id="name" name="name" required value={ userField(u, "name") }/>
+			</div>
+			<div class="form-group">
+				<label for="email">Email</label>
+				<input type="email" id="email" name="email" required value={ userField(u, "email") }/>
+			</div>
+			<div class="form-group">
+				<label for="role">Role</label>
+				<select id="role" name="role">
+					<option value="end_user" selected={ userRoleIs(u, "end_user") }>End User</option>
+					<option value="agent" selected={ userRoleIs(u, "agent") }>Agent</option>
+					<option value="admin" selected={ userRoleIs(u, "admin") }>Admin</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="password">Password (leave empty for LDAP)</label>
+				<input type="password" id="password" name="password"/>
+			</div>
+			<div style="display:flex;gap:0.5rem">
+				<button type="submit" class="btn btn-primary">Create User</button>
+				<a href="/admin/users" class="btn btn-ghost">Cancel</a>
+			</div>
+		</form>
+	</div>
+}

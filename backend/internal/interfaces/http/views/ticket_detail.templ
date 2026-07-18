@@ -1,0 +1,74 @@
+package views
+
+// TicketDetail renders a single ticket with comments and history.
+templ TicketDetail(t TicketData, comments []CommentData, history []HistoryData, canComment bool) {
+	<div class="ticket-header">
+		<div>
+			<h1>{ t.Title }</h1>
+			<div class="ticket-meta">
+				<span class={ statusBadgeClass(t.Status) }>{ t.Status }</span>
+				<span class={ priorityBadgeClass(t.Priority) }>{ t.Priority }</span>
+				<span class="badge badge-gray">{ t.Category }</span>
+				if t.SLABreached {
+					<span class="badge badge-red">SLA Breached</span>
+				}
+			</div>
+		</div>
+	</div>
+
+	<div class="card">
+		<div class="ticket-meta">
+			<div><strong>Created by:</strong> { t.CreatorName }</div>
+			<div><strong>Assigned to:</strong> { ptrStr(t.AssigneeName) }</div>
+			<div><strong>SLA Deadline:</strong> { formatTimePtr(t.SLADeadline) }</div>
+			<div><strong>Created:</strong> { formatTime(t.CreatedAt) }</div>
+		</div>
+		<div class="ticket-description">{ t.Description }</div>
+	</div>
+
+	if canComment {
+		<div class="card">
+			<h3>Add Comment</h3>
+			<form method="POST" action={ templ.SafeURL("/tickets/" + t.ID + "/comments") }>
+				<div class="form-group">
+					<label for="content">Comment</label>
+					<textarea id="content" name="content" required></textarea>
+				</div>
+				<button type="submit" class="btn btn-primary">Post Comment</button>
+			</form>
+		</div>
+	}
+
+	<div class="card">
+		<h3>Comments ({ intStr(len(comments)) })</h3>
+		if len(comments) == 0 {
+			<p style="color:var(--text-muted)">No comments yet.</p>
+		} else {
+			for _, c := range comments {
+				<div class={ "comment", templ.KV("comment-internal", c.IsInternal) }>
+					<div class="comment-header">
+						<span class="comment-author">{ c.UserName }</span>
+						<span class="comment-time">{ formatTime(c.CreatedAt) }</span>
+					</div>
+					if c.IsInternal {
+						<span class="badge badge-yellow" style="margin-bottom:0.25rem">Internal</span>
+					}
+					<div class="comment-body">{ c.Content }</div>
+				</div>
+			}
+		}
+	</div>
+
+	if len(history) > 0 {
+		<div class="card">
+			<h3>History</h3>
+			for _, h := range history {
+				<div style="font-size:0.875rem;padding:0.5rem 0;border-bottom:1px solid var(--border)">
+					<strong>{ h.UserName }</strong> changed <strong>{ h.Field }</strong>
+					from <em>{ ptrStr(h.OldValue) }</em> to <em>{ ptrStr(h.NewValue) }</em>
+					<span style="color:var(--text-muted);float:right">{ formatTime(h.CreatedAt) }</span>
+				</div>
+			}
+		</div>
+	}
+}

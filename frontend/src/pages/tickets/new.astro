@@ -1,0 +1,85 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NeuCard from '../../components/NeuCard.astro';
+import NeuInput from '../../components/NeuInput.astro';
+import NeuButton from '../../components/NeuButton.astro';
+import { getMe, createTicket } from '../../lib/api';
+
+const token = Astro.cookies.get('token')?.value;
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+let me;
+try {
+  me = await getMe(token);
+} catch {
+  return Astro.redirect('/login');
+}
+
+let error = '';
+if (Astro.request.method === 'POST') {
+  const form = await Astro.request.formData();
+  const title = form.get('title')?.toString() || '';
+  const description = form.get('description')?.toString() || '';
+  const priority = form.get('priority')?.toString() || 'medium';
+  const category = form.get('category')?.toString() || 'general';
+  try {
+    await createTicket(token, { title, description, priority, category });
+    return Astro.redirect('/tickets');
+  } catch (e: any) {
+    error = e?.message || 'Failed to create ticket';
+  }
+}
+
+const priorities = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'critical', label: 'Critical' },
+];
+---
+
+<Layout title="New Ticket - Trickreport">
+  <div class="max-w-4xl mx-auto px-6 py-8">
+    <h1 class="text-2xl font-bold text-[var(--text-main)] mb-6">New Ticket</h1>
+    <NeuCard>
+      <form method="POST" class="flex flex-col gap-5">
+        {error && (
+          <div class="p-4 rounded-2xl bg-[var(--danger)]/10 text-[var(--danger)] border border-[var(--danger)]/20">
+            {error}
+          </div>
+        )}
+        <NeuInput label="Title" name="title" type="text" required minlength={3} />
+        <div class="flex flex-col gap-2">
+          <label for="description" class="text-sm font-semibold text-[var(--text-main)] ml-1">Description <span class="text-[var(--danger)]">*</span></label>
+          <textarea
+            id="description"
+            name="description"
+            required
+            minlength={10}
+            rows={5}
+            class="neu-inset rounded-2xl px-4 py-3 bg-[var(--bg-main)] text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] resize-y"
+          ></textarea>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+          <div class="flex flex-col gap-2">
+            <label for="priority" class="text-sm font-semibold text-[var(--text-main)] ml-1">Priority</label>
+            <select
+              id="priority"
+              name="priority"
+              class="neu-inset rounded-2xl px-4 py-3 bg-[var(--bg-main)] text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
+            >
+              {priorities.map((p) => <option value={p.value}>{p.label}</option>)}
+            </select>
+          </div>
+          <NeuInput label="Category" name="category" type="text" value="general" />
+        </div>
+        <div class="flex items-center justify-end gap-3 pt-2">
+          <a href="/tickets" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</a>
+          <NeuButton type="submit" variant="primary">Create Ticket</NeuButton>
+        </div>
+      </form>
+    </NeuCard>
+  </div>
+</Layout>

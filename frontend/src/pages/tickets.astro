@@ -1,0 +1,94 @@
+---
+import Layout from '../layouts/Layout.astro';
+import NeuCard from '../components/NeuCard.astro';
+import NeuBadge from '../components/NeuBadge.astro';
+import NeuButton from '../components/NeuButton.astro';
+import { getMe, getTickets } from '../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+let user;
+let tickets;
+let error = '';
+
+try {
+  user = await getMe(token);
+  tickets = await getTickets(token);
+} catch (err) {
+  error = err instanceof Error ? err.message : 'Failed to load tickets';
+}
+
+const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
+  open: 'default',
+  in_progress: 'warning',
+  waiting_client: 'info',
+  resolved: 'success',
+  closed: 'default',
+};
+
+const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
+  low: 'default',
+  medium: 'info',
+  high: 'warning',
+  critical: 'danger',
+};
+---
+
+<Layout title="Tickets" user={user ? { name: user.name, role: user.role } : undefined}>
+  <div class="max-w-6xl mx-auto">
+    <div class="flex items-center justify-between mb-8">
+      <div>
+        <h1 class="text-3xl font-bold">Tickets</h1>
+        <p class="text-[var(--text-muted)]">Manage support requests</p>
+      </div>
+      <NeuButton href="/tickets/new" variant="accent" size="md">New Ticket</NeuButton>
+    </div>
+
+    {error && (
+      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+    )}
+
+    <NeuCard class="overflow-hidden p-0">
+      <table class="w-full text-left">
+        <thead class="neu-sunken text-xs uppercase text-[var(--text-muted)]">
+          <tr>
+            <th class="px-6 py-4 font-semibold">Title</th>
+            <th class="px-6 py-4 font-semibold">Status</th>
+            <th class="px-6 py-4 font-semibold">Priority</th>
+            <th class="px-6 py-4 font-semibold">Created</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-[var(--bg-dark)]/20">
+          {tickets && tickets.length > 0 ? tickets.map((ticket) => (
+            <tr class="hover:bg-white/30 transition-colors">
+              <td class="px-6 py-4">
+                <a href={`/tickets/${ticket.id}`} class="font-semibold text-[var(--text-main)] hover:text-[var(--accent)]">
+                  {ticket.title}
+                </a>
+                <p class="text-xs text-[var(--text-muted)]">{ticket.creator_name || ticket.created_by}</p>
+              </td>
+              <td class="px-6 py-4">
+                <NeuBadge variant={statusVariant[ticket.status] || 'default'}>{ticket.status.replace('_', ' ')}</NeuBadge>
+              </td>
+              <td class="px-6 py-4">
+                <NeuBadge variant={priorityVariant[ticket.priority] || 'default'}>{ticket.priority}</NeuBadge>
+              </td>
+              <td class="px-6 py-4 text-sm text-[var(--text-muted)]">
+                {new Date(ticket.created_at).toLocaleDateString()}
+              </td>
+            </tr>
+          )) : (
+            <tr>
+              <td colspan="4" class="px-6 py-12 text-center text-[var(--text-muted)]">
+                No tickets yet. Create one to get started.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </NeuCard>
+  </div>
+</Layout>

@@ -1,0 +1,26 @@
+---
+export interface Props {
+  name: string;
+  label?: string;
+  type?: 'text' | 'email' | 'password' | 'textarea';
+  placeholder?: string;
+  required?: boolean;
+  value?: string;
+  class?: string;
+}
+
+const { name, label, type = 'text', placeholder, required, value = '', class: className = '' } = Astro.props;
+---
+
+<div class={`flex flex-col gap-2 ${className}`}>
+  {label && (
+    <label for={name} class="text-sm font-semibold text-[var(--text-main)] ml-1">
+      {label}{required && <span class="text-[var(--danger)]"> *</span>}
+    </label>
+  )}
+  {type === 'textarea' ? (
+    <textarea id={name} name={name} placeholder={placeholder} required={required} rows="4">{value}</textarea>
+  ) : (
+    <input id={name} name={name} type={type} placeholder={placeholder} required={required} value={value} />
+  )}
+</div>

@@ -1,0 +1,62 @@
+---
+import Layout from '../layouts/Layout.astro';
+import NeuCard from '../components/NeuCard.astro';
+import NeuBadge from '../components/NeuBadge.astro';
+import { getMe, getSummary } from '../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+let user;
+let summary;
+let error = '';
+
+try {
+  user = await getMe(token);
+  summary = await getSummary(token);
+} catch (err) {
+  error = err instanceof Error ? err.message : 'Failed to load dashboard';
+}
+---
+
+<Layout title="Dashboard" user={user ? { name: user.name, role: user.role } : undefined}>
+  <div class="max-w-6xl mx-auto">
+    <header class="mb-8">
+      <h1 class="text-3xl font-bold">Dashboard</h1>
+      <p class="text-[var(--text-muted)]">Overview of your help desk</p>
+    </header>
+
+    {error && (
+      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+    )}
+
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <NeuCard class="flex flex-col gap-2">
+        <span class="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wide">Total</span>
+        <span class="text-4xl font-bold text-[var(--text-main)]">{summary?.total_tickets ?? 0}</span>
+      </NeuCard>
+      <NeuCard class="flex flex-col gap-2">
+        <span class="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wide">Open</span>
+        <span class="text-4xl font-bold text-[var(--accent)]">{summary?.open_tickets ?? 0}</span>
+      </NeuCard>
+      <NeuCard class="flex flex-col gap-2">
+        <span class="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wide">Resolved</span>
+        <span class="text-4xl font-bold text-emerald-600">{summary?.resolved_tickets ?? 0}</span>
+      </NeuCard>
+      <NeuCard class="flex flex-col gap-2">
+        <span class="text-sm font-semibold text-[var(--text-muted)] uppercase tracking-wide">SLA Breached</span>
+        <span class="text-4xl font-bold text-rose-600">{summary?.sla_breached ?? 0}</span>
+      </NeuCard>
+    </div>
+
+    <NeuCard>
+      <h2 class="text-xl font-semibold mb-4">Quick actions</h2>
+      <div class="flex flex-wrap gap-4">
+        <a href="/tickets" class="neu-convex neu-transition px-6 py-3 rounded-2xl font-semibold text-[var(--text-main)] hover:brightness-105 active:neu-pressed">View Tickets</a>
+        <a href="/tickets/new" class="neu-convex neu-transition px-6 py-3 rounded-2xl font-semibold text-[var(--text-main)] hover:brightness-105 active:neu-pressed">Create Ticket</a>
+      </div>
+    </NeuCard>
+  </div>
+</Layout>

@@ -1,0 +1,92 @@
+package views
+
+// AutomationList renders automation rules.
+templ AutomationList(rules []AutomationData) {
+	<h1>Automation Rules</h1>
+	<div class="actions-bar">
+		<a href="/admin/automations/new" class="btn btn-primary">+ New Rule</a>
+	</div>
+	if len(rules) == 0 {
+		<div class="empty-state">
+			<h3>No automation rules</h3>
+			<p>Create rules to automate ticket workflows.</p>
+		</div>
+	} else {
+		<div class="card" style="padding:0">
+			<table>
+				<thead>
+					<tr>
+						<th>Name</th>
+						<th>Trigger</th>
+						<th>Status</th>
+						<th>Created</th>
+						<th>Actions</th>
+					</tr>
+				</thead>
+				<tbody>
+					for _, r := range rules {
+						<tr>
+							<td>{ r.Name }</td>
+							<td><span class="badge badge-purple">{ r.TriggerType }</span></td>
+							<td>
+								if r.IsActive {
+									<span class="badge badge-green">Active</span>
+								} else {
+									<span class="badge badge-gray">Disabled</span>
+								}
+							</td>
+							<td style="color:var(--text-muted);font-size:0.75rem">{ formatTime(r.CreatedAt) }</td>
+							<td>
+								<a href={ templ.SafeURL("/admin/automations/" + r.ID + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
+							</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		</div>
+	}
+}
+
+// AutomationForm renders the create/edit automation rule form.
+templ AutomationForm(r *AutomationData) {
+	<h1>New Automation Rule</h1>
+	<div class="card">
+		<form method="POST" action="/admin/automations">
+			<div class="form-group">
+				<label for="name">Name</label>
+				<input type="text" id="name" name="name" required value={ autoField(r, "name") }/>
+			</div>
+			<div class="form-group">
+				<label for="description">Description</label>
+				<textarea id="description" name="description" style="min-height:60px">{ autoField(r, "description") }</textarea>
+			</div>
+			<div class="form-group">
+				<label for="trigger_type">Trigger Type</label>
+				<select id="trigger_type" name="trigger_type">
+					<option value="ticket_created" selected={ autoTriggerIs(r, "ticket_created") }>Ticket Created</option>
+					<option value="status_changed" selected={ autoTriggerIs(r, "status_changed") }>Status Changed</option>
+					<option value="priority_changed" selected={ autoTriggerIs(r, "priority_changed") }>Priority Changed</option>
+					<option value="sla_breached" selected={ autoTriggerIs(r, "sla_breached") }>SLA Breached</option>
+				</select>
+			</div>
+			<div class="form-group">
+				<label for="conditions">Conditions (JSON)</label>
+				<textarea id="conditions" name="conditions" style="min-height:80px">{ autoField(r, "conditions") }</textarea>
+			</div>
+			<div class="form-group">
+				<label for="actions">Actions (JSON)</label>
+				<textarea id="actions" name="actions" style="min-height:80px">{ autoField(r, "actions") }</textarea>
+			</div>
+			<div class="form-group">
+				<label>
+					<input type="checkbox" name="is_active" value="true" style="width:auto" checked={ autoActive(r) }/>
+					Active
+				</label>
+			</div>
+			<div style="display:flex;gap:0.5rem">
+				<button type="submit" class="btn btn-primary">Save Rule</button>
+				<a href="/admin/automations" class="btn btn-ghost">Cancel</a>
+			</div>
+		</form>
+	</div>
+}

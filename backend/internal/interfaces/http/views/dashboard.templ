@@ -1,0 +1,32 @@
+package views
+
+// Dashboard renders the admin dashboard with KPIs.
+templ Dashboard(data SummaryData) {
+	<h1>Dashboard</h1>
+	<div class="stats-grid">
+		<div class="stat-card">
+			<div class="stat-label">Total Tickets</div>
+			<div class="stat-value">{ intStr(data.TotalTickets) }</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-label">Open Tickets</div>
+			<div class="stat-value">{ intStr(data.OpenTickets) }</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-label">Resolved</div>
+			<div class="stat-value" style="color:var(--success)">{ intStr(data.ResolvedTickets) }</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-label">SLA Breached</div>
+			<div class="stat-value" style="color:var(--danger)">{ intStr(data.SLABreached) }</div>
+		</div>
+	</div>
+	<div class="card">
+		<h2>Quick Actions</h2>
+		<div style="display:flex;gap:0.5rem;flex-wrap:wrap">
+			<a href="/tickets/new" class="btn btn-primary">New Ticket</a>
+			<a href="/tickets" class="btn btn-primary">View Tickets</a>
+			<a href="/articles" class="btn btn-primary">Knowledge Base</a>
+		</div>
+	</div>
+}

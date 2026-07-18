@@ -1,0 +1,45 @@
+services:
+  # ─── PostgreSQL ─────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: trickreport_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: trickreport
+      POSTGRES_PASSWORD: trickreport
+      POSTGRES_DB: trickreport
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backend/migrations:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trickreport"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ─── App (Go backend + HTMX frontend, single binary) ───────────────────────
+  app:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: trickreport_app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PORT: 8080
+      DATABASE_URL: postgres://trickreport:trickreport@postgres:5432/trickreport?sslmode=disable
+      JWT_SECRET: dev-secret-change-in-production
+      JWT_EXP_HOURS: 8
+      LDAP_ENABLED: false
+      STATIC_DIR: /app/internal/interfaces/http/static
+      COOKIE_SECURE: "false"
+      CORS_ORIGIN: http://localhost:8080
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:

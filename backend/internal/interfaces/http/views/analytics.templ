@@ -1,0 +1,75 @@
+package views
+
+// Analytics renders the analytics dashboard.
+templ Analytics(summary SummaryData, volume []VolumePointData, statusDist []StatusDistData, resolution []ResolutionData) {
+	<h1>Analytics</h1>
+
+	<div class="stats-grid">
+		<div class="stat-card">
+			<div class="stat-label">Total Tickets</div>
+			<div class="stat-value">{ intStr(summary.TotalTickets) }</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-label">Open</div>
+			<div class="stat-value">{ intStr(summary.OpenTickets) }</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-label">Resolved</div>
+			<div class="stat-value" style="color:var(--success)">{ intStr(summary.ResolvedTickets) }</div>
+		</div>
+		<div class="stat-card">
+			<div class="stat-label">SLA Breached</div>
+			<div class="stat-value" style="color:var(--danger)">{ intStr(summary.SLABreached) }</div>
+		</div>
+	</div>
+
+	<div class="card">
+		<h2>Ticket Volume (Last 30 Days)</h2>
+		if len(volume) == 0 {
+			<p style="color:var(--text-muted)">No data available.</p>
+		} else {
+			<table style="margin-top:1rem">
+				<thead>
+					<tr><th>Date</th><th>Tickets</th></tr>
+				</thead>
+				<tbody>
+					for _, v := range volume {
+						<tr>
+							<td style="font-size:0.75rem">{ v.Date }</td>
+							<td>{ intStr(v.Count) }</td>
+						</tr>
+					}
+				</tbody>
+			</table>
+		}
+	</div>
+
+	<div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem">
+		<div class="card">
+			<h2>Status Distribution</h2>
+			if len(statusDist) == 0 {
+				<p style="color:var(--text-muted)">No data.</p>
+			} else {
+				for _, s := range statusDist {
+					<div style="display:flex;justify-content:space-between;padding:0.25rem 0">
+						<span class={ statusBadgeClass(s.Status) }>{ s.Status }</span>
+						<strong>{ intStr(s.Count) }</strong>
+					</div>
+				}
+			}
+		</div>
+		<div class="card">
+			<h2>Avg Resolution Time</h2>
+			if len(resolution) == 0 {
+				<p style="color:var(--text-muted)">No resolved tickets yet.</p>
+			} else {
+				for _, r := range resolution {
+					<div style="display:flex;justify-content:space-between;padding:0.25rem 0">
+						<span class={ priorityBadgeClass(r.Priority) }>{ r.Priority }</span>
+						<strong>{ floatStr(r.AvgHours) }h</strong>
+					</div>
+				}
+			}
+		</div>
+	</div>
+}
