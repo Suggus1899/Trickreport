@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 
 	"github.com/rs/zerolog"
@@ -26,11 +28,31 @@ import (
 // @description Bearer JWT token (or trickreport_token cookie).
 
 func main() {
-	// ── Logger ────────────────────────────────────────────────────────
-	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "2006-01-02 15:04:05"})
-
 	// ── Config ────────────────────────────────────────────────────────
 	cfg := config.Load()
+
+	// ── Logger ────────────────────────────────────────────────────────
+	// Single log file: backend/trickreport.log (no logs/ folder).
+	// In development: also write to stdout with console formatting.
+	// In production: write JSON to the file only.
+	logPath := filepath.Join(".", "trickreport.log")
+	logFile, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	if err != nil {
+		// Fallback to stdout-only if the file can't be opened.
+		log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "2006-01-02 15:04:05"})
+		log.Warn().Err(err).Msg("failed to open log file, falling back to stdout only")
+	} else {
+		defer logFile.Close()
+		fileWriter := zerolog.New(logFile).With().Timestamp().Logger()
+		if cfg.IsProduction() {
+			// Production: JSON to file only.
+			log.Logger = fileWriter
+		} else {
+			// Development: console to stdout + JSON to file (multi-writer).
+			consoleWriter := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: "2006-01-02 15:04:05"}
+			log.Logger = log.Output(io.MultiWriter(consoleWriter, fileWriter))
+		}
+	}
 
 	// ── Context ───────────────────────────────────────────────────────
 	ctx, cancel := context.WithCancel(context.Background())
