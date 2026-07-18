@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	appArticle "github.com/trickreport/backend/internal/application/article"
 	"github.com/trickreport/backend/internal/domain/article"
 	"github.com/trickreport/backend/internal/interfaces/http/middleware"
@@ -23,17 +24,17 @@ func NewArticleHandler(svc *appArticle.Service) *ArticleHandler {
 }
 
 type ArticleDTO struct {
-	ID        string    `json:"id"`
-	TenantID  string    `json:"tenant_id"`
-	Title     string    `json:"title"`
-	Content   string    `json:"content"`
-	Category  string    `json:"category"`
-	Tags      []string  `json:"tags"`
-	Published bool      `json:"published"`
-	CreatedBy string    `json:"created_by"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-	AuthorName string   `json:"author_name,omitempty"`
+	ID         uuid.UUID `json:"id"`
+	TenantID   uuid.UUID `json:"tenant_id"`
+	Title      string    `json:"title"`
+	Content    string    `json:"content"`
+	Category   string    `json:"category"`
+	Tags       []string  `json:"tags"`
+	Published  bool      `json:"published"`
+	CreatedBy  uuid.UUID `json:"created_by"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
+	AuthorName string    `json:"author_name,omitempty"`
 }
 
 type createArticleReq struct {
@@ -83,7 +84,11 @@ func (h *ArticleHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *ArticleHandler) Get(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	a, err := h.svc.Get(r.Context(), id, tenantID, claims.Role)
 	if err != nil {
@@ -135,7 +140,11 @@ func (h *ArticleHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *ArticleHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	var req updateArticleReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -169,7 +178,11 @@ func (h *ArticleHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *ArticleHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	if err := h.svc.Delete(r.Context(), id, tenantID); err != nil {
 		if errors.Is(err, article.ErrNotFound) {

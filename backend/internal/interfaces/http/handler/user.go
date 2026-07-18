@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	appUser "github.com/trickreport/backend/internal/application/user"
 	"github.com/trickreport/backend/internal/domain/user"
 	"github.com/trickreport/backend/internal/interfaces/http/middleware"
@@ -23,8 +24,8 @@ func NewUserHandler(svc *appUser.Service) *UserHandler {
 }
 
 type UserDTO struct {
-	ID        string    `json:"id"`
-	TenantID  string    `json:"tenant_id"`
+	ID        uuid.UUID `json:"id"`
+	TenantID  uuid.UUID `json:"tenant_id"`
 	Name      string    `json:"name"`
 	Email     string    `json:"email"`
 	Role      string    `json:"role"`
@@ -73,7 +74,11 @@ func (h *UserHandler) List(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) Get(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	u, err := h.svc.Get(r.Context(), id, tenantID)
 	if err != nil {
@@ -118,7 +123,11 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	var req updateUserReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -150,7 +159,11 @@ func (h *UserHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *UserHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	if err := h.svc.Deactivate(r.Context(), id, tenantID); err != nil {
 		if errors.Is(err, user.ErrNotFound) {

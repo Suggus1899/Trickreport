@@ -3,15 +3,16 @@ package automation
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/trickreport/backend/internal/domain/automation"
 )
 
 // Repository is the port for automation rule persistence.
 type Repository interface {
-	List(ctx context.Context, tenantID string) ([]automation.Rule, error)
+	List(ctx context.Context, tenantID uuid.UUID) ([]automation.Rule, error)
 	Create(ctx context.Context, r *automation.Rule) error
 	Update(ctx context.Context, r *automation.Rule) error
-	Delete(ctx context.Context, id, tenantID string) error
+	Delete(ctx context.Context, id, tenantID uuid.UUID) error
 }
 
 // Service is the application service for automation operations.
@@ -25,13 +26,13 @@ func NewService(repo Repository) *Service {
 }
 
 // List returns all automation rules for the tenant.
-func (s *Service) List(ctx context.Context, tenantID string) ([]automation.Rule, error) {
+func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]automation.Rule, error) {
 	return s.repo.List(ctx, tenantID)
 }
 
 // CreateInput holds the data for creating a new automation rule.
 type CreateInput struct {
-	TenantID    string
+	TenantID    uuid.UUID
 	Name        string
 	Description string
 	TriggerType string
@@ -64,8 +65,8 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*automation.Ru
 
 // UpdateInput holds the data for updating an automation rule.
 type UpdateInput struct {
-	ID          string
-	TenantID    string
+	ID          uuid.UUID
+	TenantID    uuid.UUID
 	Name        string
 	Description string
 	TriggerType string
@@ -98,6 +99,6 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (*automation.Ru
 }
 
 // Delete removes an automation rule.
-func (s *Service) Delete(ctx context.Context, id, tenantID string) error {
+func (s *Service) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
 	return s.repo.Delete(ctx, id, tenantID)
 }

@@ -5,13 +5,14 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/trickreport/backend/internal/domain/user"
 )
 
 // UserRepository is the port for user lookup during authentication.
 type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*user.User, error)
-	GetByID(ctx context.Context, id string) (*user.User, error)
+	GetByID(ctx context.Context, id uuid.UUID) (*user.User, error)
 }
 
 // PasswordHasher is the port for password verification.
@@ -26,14 +27,14 @@ type LDAPAuthenticator interface {
 
 // TokenGenerator is the port for JWT generation.
 type TokenGenerator interface {
-	Generate(userID, tenantID, role string) (string, error)
+	Generate(userID, tenantID uuid.UUID, role string) (string, error)
 	Validate(token string) (*Claims, error)
 }
 
 // Claims represents the authenticated user's JWT claims.
 type Claims struct {
-	UserID   string
-	TenantID string
+	UserID   uuid.UUID
+	TenantID uuid.UUID
 	Role     string
 }
 
@@ -123,6 +124,6 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (*LoginResult, er
 }
 
 // GetProfile returns the current user's profile.
-func (s *Service) GetProfile(ctx context.Context, userID string) (*user.User, error) {
+func (s *Service) GetProfile(ctx context.Context, userID uuid.UUID) (*user.User, error) {
 	return s.users.GetByID(ctx, userID)
 }

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 
 	authapp "github.com/trickreport/backend/internal/application/auth"
 )
@@ -34,11 +35,11 @@ func NewJWTGenerator(secret string, expHours int) *JWTGenerator {
 }
 
 // Generate creates a new HS256-signed JWT for the given user, tenant, and role.
-func (g *JWTGenerator) Generate(userID, tenantID, role string) (string, error) {
+func (g *JWTGenerator) Generate(userID, tenantID uuid.UUID, role string) (string, error) {
 	now := time.Now()
 	claims := jwtClaims{
-		UserID:   userID,
-		TenantID: tenantID,
+		UserID:   userID.String(),
+		TenantID: tenantID.String(),
 		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			IssuedAt:  jwt.NewNumericDate(now),
@@ -72,9 +73,18 @@ func (g *JWTGenerator) Validate(token string) (*authapp.Claims, error) {
 		return nil, errors.New("invalid token claims")
 	}
 
+	userID, err := uuid.Parse(claims.UserID)
+	if err != nil {
+		return nil, errors.New("invalid user id in token claims")
+	}
+	tenantID, err := uuid.Parse(claims.TenantID)
+	if err != nil {
+		return nil, errors.New("invalid tenant id in token claims")
+	}
+
 	return &authapp.Claims{
-		UserID:   claims.UserID,
-		TenantID: claims.TenantID,
+		UserID:   userID,
+		TenantID: tenantID,
 		Role:     claims.Role,
 	}, nil
 }

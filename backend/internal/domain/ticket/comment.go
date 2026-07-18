@@ -1,12 +1,16 @@
 package ticket
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Comment is a public or internal note on a ticket.
 type Comment struct {
-	ID         string
-	TicketID   string
-	UserID     string
+	ID         uuid.UUID
+	TicketID   uuid.UUID
+	UserID     uuid.UUID
 	Content    string
 	IsInternal bool
 	CreatedAt  time.Time

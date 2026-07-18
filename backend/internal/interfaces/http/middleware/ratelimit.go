@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/google/uuid"
 	"golang.org/x/time/rate"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
 )
@@ -98,8 +99,8 @@ func (rl *RateLimiter) LimitByIP(next http.Handler) http.Handler {
 func (rl *RateLimiter) LimitByUser(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		key := clientIP(r)
-		if claims, ok := ClaimsFromContext(r.Context()); ok && claims.UserID != "" {
-			key = claims.UserID
+		if claims, ok := ClaimsFromContext(r.Context()); ok && claims.UserID != uuid.Nil {
+			key = claims.UserID.String()
 		}
 		if !rl.getLimiter(key).Allow() {
 			response.Error(w, http.StatusTooManyRequests, "rate limit exceeded")

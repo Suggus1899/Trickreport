@@ -1,27 +1,31 @@
 package views
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // ViewData holds common data for all pages.
 type ViewData struct {
 	Title    string
 	UserName string
 	UserRole string
-	TenantID string
+	TenantID uuid.UUID
 	Path     string
 }
 
 // TicketData holds ticket-related view data.
 type TicketData struct {
-	ID           string
+	ID           uuid.UUID
 	Title        string
 	Description  string
 	Status       string
 	Priority     string
 	Category     string
-	CreatedBy    string
+	CreatedBy    uuid.UUID
 	CreatorName  string
-	AssignedTo   *string
+	AssignedTo   *uuid.UUID
 	AssigneeName *string
 	SLADeadline  *time.Time
 	SLABreached  bool
@@ -31,9 +35,9 @@ type TicketData struct {
 
 // CommentData holds comment view data.
 type CommentData struct {
-	ID         string
-	TicketID   string
-	UserID     string
+	ID         uuid.UUID
+	TicketID   uuid.UUID
+	UserID     uuid.UUID
 	UserName   string
 	Content    string
 	IsInternal bool
@@ -42,8 +46,8 @@ type CommentData struct {
 
 // HistoryData holds history entry view data.
 type HistoryData struct {
-	ID        string
-	UserID    string
+	ID        uuid.UUID
+	UserID    uuid.UUID
 	UserName  string
 	Field     string
 	OldValue  *string
@@ -53,13 +57,13 @@ type HistoryData struct {
 
 // ArticleData holds article view data.
 type ArticleData struct {
-	ID         string
+	ID         uuid.UUID
 	Title      string
 	Content    string
 	Category   string
 	Tags       []string
 	Published  bool
-	CreatedBy  string
+	CreatedBy  uuid.UUID
 	AuthorName string
 	CreatedAt  time.Time
 	UpdatedAt  time.Time
@@ -67,7 +71,7 @@ type ArticleData struct {
 
 // UserData holds user view data.
 type UserData struct {
-	ID        string
+	ID        uuid.UUID
 	Name      string
 	Email     string
 	Role      string
@@ -78,7 +82,7 @@ type UserData struct {
 
 // SLAPolicyData holds SLA policy view data.
 type SLAPolicyData struct {
-	ID                    string
+	ID                    uuid.UUID
 	Priority              string
 	ResponseTimeMinutes   int
 	ResolutionTimeMinutes int
@@ -87,7 +91,7 @@ type SLAPolicyData struct {
 
 // AutomationData holds automation rule view data.
 type AutomationData struct {
-	ID          string
+	ID          uuid.UUID
 	Name        string
 	Description string
 	TriggerType string

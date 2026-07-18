@@ -1,17 +1,21 @@
 package article
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Article is a knowledge base entry.
 type Article struct {
-	ID        string
-	TenantID  string
+	ID        uuid.UUID
+	TenantID  uuid.UUID
 	Title     string
 	Content   string
 	Category  string
 	Tags      []string
 	Published bool
-	CreatedBy string
+	CreatedBy uuid.UUID
 	CreatedAt time.Time
 	UpdatedAt time.Time
 

@@ -1,6 +1,7 @@
 package realtime
 
 import (
+	"github.com/google/uuid"
 	ticketapp "github.com/trickreport/backend/internal/application/ticket"
 	rt "github.com/trickreport/backend/internal/realtime"
 )
@@ -18,7 +19,7 @@ func NewHubAdapter(hub *rt.Hub) *HubAdapter {
 
 // BroadcastEvent delegates to the underlying Hub's BroadcastEvent method,
 // casting the string event type to realtime.EventType.
-func (a *HubAdapter) BroadcastEvent(tenantID string, eventType string, data any) {
+func (a *HubAdapter) BroadcastEvent(tenantID uuid.UUID, eventType string, data any) {
 	a.hub.BroadcastEvent(tenantID, rt.EventType(eventType), data)
 }
 

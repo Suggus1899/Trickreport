@@ -1,6 +1,10 @@
 package analytics
 
-import "context"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
 
 // Summary holds high-level KPI metrics for a tenant.
 type Summary struct {
@@ -30,10 +34,10 @@ type ResolutionMetrics struct {
 
 // Repository is the port for analytics queries.
 type Repository interface {
-	GetSummary(ctx context.Context, tenantID string) (Summary, error)
-	GetVolume(ctx context.Context, tenantID string) ([]VolumePoint, error)
-	GetStatusDistribution(ctx context.Context, tenantID string) ([]StatusDistribution, error)
-	GetResolutionTime(ctx context.Context, tenantID string) ([]ResolutionMetrics, error)
+	GetSummary(ctx context.Context, tenantID uuid.UUID) (Summary, error)
+	GetVolume(ctx context.Context, tenantID uuid.UUID) ([]VolumePoint, error)
+	GetStatusDistribution(ctx context.Context, tenantID uuid.UUID) ([]StatusDistribution, error)
+	GetResolutionTime(ctx context.Context, tenantID uuid.UUID) ([]ResolutionMetrics, error)
 }
 
 // Service is the application service for analytics operations.
@@ -47,21 +51,21 @@ func NewService(repo Repository) *Service {
 }
 
 // GetSummary returns KPI metrics for the tenant.
-func (s *Service) GetSummary(ctx context.Context, tenantID string) (Summary, error) {
+func (s *Service) GetSummary(ctx context.Context, tenantID uuid.UUID) (Summary, error) {
 	return s.repo.GetSummary(ctx, tenantID)
 }
 
 // GetVolume returns ticket volume per day for the last 30 days.
-func (s *Service) GetVolume(ctx context.Context, tenantID string) ([]VolumePoint, error) {
+func (s *Service) GetVolume(ctx context.Context, tenantID uuid.UUID) ([]VolumePoint, error) {
 	return s.repo.GetVolume(ctx, tenantID)
 }
 
 // GetStatusDistribution returns the breakdown of tickets by status.
-func (s *Service) GetStatusDistribution(ctx context.Context, tenantID string) ([]StatusDistribution, error) {
+func (s *Service) GetStatusDistribution(ctx context.Context, tenantID uuid.UUID) ([]StatusDistribution, error) {
 	return s.repo.GetStatusDistribution(ctx, tenantID)
 }
 
 // GetResolutionTime returns the average resolution time in hours, grouped by priority.
-func (s *Service) GetResolutionTime(ctx context.Context, tenantID string) ([]ResolutionMetrics, error) {
+func (s *Service) GetResolutionTime(ctx context.Context, tenantID uuid.UUID) ([]ResolutionMetrics, error) {
 	return s.repo.GetResolutionTime(ctx, tenantID)
 }

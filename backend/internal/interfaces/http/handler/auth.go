@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/google/uuid"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
 	"github.com/trickreport/backend/internal/domain/user"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
@@ -27,11 +28,11 @@ type loginReq struct {
 }
 
 type userInfo struct {
-	ID       string `json:"id"`
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
-	TenantID string `json:"tenant_id"`
+	ID       uuid.UUID `json:"id"`
+	Name     string    `json:"name"`
+	Email    string    `json:"email"`
+	Role     string    `json:"role"`
+	TenantID uuid.UUID `json:"tenant_id"`
 }
 
 type loginResp struct {

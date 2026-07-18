@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	appSLA "github.com/trickreport/backend/internal/application/sla"
 	"github.com/trickreport/backend/internal/domain/sla"
 	"github.com/trickreport/backend/internal/interfaces/http/middleware"
@@ -23,8 +24,8 @@ func NewSLAHandler(svc *appSLA.Service) *SLAHandler {
 }
 
 type SLAPolicyDTO struct {
-	ID                    string    `json:"id"`
-	TenantID              string    `json:"tenant_id"`
+	ID                    uuid.UUID `json:"id"`
+	TenantID              uuid.UUID `json:"tenant_id"`
 	Priority              string    `json:"priority"`
 	ResponseTimeMinutes   int       `json:"response_time_minutes"`
 	ResolutionTimeMinutes int       `json:"resolution_time_minutes"`

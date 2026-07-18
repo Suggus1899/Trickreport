@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/trickreport/backend/internal/application/user"
@@ -33,7 +35,7 @@ func NewUserRepo(db *pgxpool.Pool) *UserRepo {
 var _ user.Repository = (*UserRepo)(nil)
 
 // List returns all users for a tenant, ordered by created_at desc.
-func (r *UserRepo) List(ctx context.Context, tenantID string) ([]domainuser.User, error) {
+func (r *UserRepo) List(ctx context.Context, tenantID uuid.UUID) ([]domainuser.User, error) {
 	const q = `SELECT id, tenant_id, name, email, role, avatar_url, active, created_at FROM users WHERE tenant_id = $1 ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(ctx, q, tenantID)
@@ -46,9 +48,12 @@ func (r *UserRepo) List(ctx context.Context, tenantID string) ([]domainuser.User
 	for rows.Next() {
 		var u domainuser.User
 		var role string
-		if err := rows.Scan(&u.ID, &u.TenantID, &u.Name, &u.Email, &role, &u.AvatarURL, &u.Active, &u.CreatedAt); err != nil {
+		var id, tid pgtype.UUID
+		if err := rows.Scan(&id, &tid, &u.Name, &u.Email, &role, &u.AvatarURL, &u.Active, &u.CreatedAt); err != nil {
 			return nil, fmt.Errorf("user_repo.List: scan: %w", err)
 		}
+		u.ID = pgToUUID(id)
+		u.TenantID = pgToUUID(tid)
 		u.Role = domainuser.Role(role)
 		users = append(users, u)
 	}
@@ -59,7 +64,7 @@ func (r *UserRepo) List(ctx context.Context, tenantID string) ([]domainuser.User
 }
 
 // GetByID returns a user by id within a tenant.
-func (r *UserRepo) GetByID(ctx context.Context, id, tenantID string) (*domainuser.User, error) {
+func (r *UserRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainuser.User, error) {
 	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at FROM users WHERE id = $1 AND tenant_id = $2`
 
 	return r.scanUser(ctx, q, id, tenantID)
@@ -83,15 +88,17 @@ func (r *UserRepo) Create(ctx context.Context, u *domainuser.User, passwordHash 
 		pw = passwordHash
 	}
 
+	var id pgtype.UUID
 	if err := r.db.QueryRow(ctx, q, u.TenantID, u.Name, u.Email, string(u.Role), pw).
-		Scan(&u.ID, &u.CreatedAt, &u.UpdatedAt); err != nil {
+		Scan(&id, &u.CreatedAt, &u.UpdatedAt); err != nil {
 		return fmt.Errorf("user_repo.Create: %w", err)
 	}
+	u.ID = pgToUUID(id)
 	return nil
 }
 
 // Update updates the mutable fields of a user.
-func (r *UserRepo) Update(ctx context.Context, id, tenantID string, fields user.UpdateFields) (*domainuser.User, error) {
+func (r *UserRepo) Update(ctx context.Context, id, tenantID uuid.UUID, fields user.UpdateFields) (*domainuser.User, error) {
 	const q = `UPDATE users SET name = COALESCE($1, name), role = COALESCE($2, role::text)::user_role, avatar_url = COALESCE($3, avatar_url), active = COALESCE($4, active), updated_at = NOW() WHERE id = $5 AND tenant_id = $6 RETURNING id, tenant_id, name, email, role, avatar_url, active, created_at, updated_at`
 
 	var roleStr *string
@@ -102,20 +109,23 @@ func (r *UserRepo) Update(ctx context.Context, id, tenantID string, fields user.
 
 	var u domainuser.User
 	var role string
+	var idCol, tid pgtype.UUID
 	err := r.db.QueryRow(ctx, q, fields.Name, roleStr, fields.AvatarURL, fields.Active, id, tenantID).
-		Scan(&u.ID, &u.TenantID, &u.Name, &u.Email, &role, &u.AvatarURL, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&idCol, &tid, &u.Name, &u.Email, &role, &u.AvatarURL, &u.Active, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domainuser.ErrNotFound
 		}
 		return nil, fmt.Errorf("user_repo.Update: %w", err)
 	}
+	u.ID = pgToUUID(idCol)
+	u.TenantID = pgToUUID(tid)
 	u.Role = domainuser.Role(role)
 	return &u, nil
 }
 
 // Deactivate sets active=false for a user.
-func (r *UserRepo) Deactivate(ctx context.Context, id, tenantID string) error {
+func (r *UserRepo) Deactivate(ctx context.Context, id, tenantID uuid.UUID) error {
 	const q = `UPDATE users SET active = FALSE, updated_at = NOW() WHERE id = $1 AND tenant_id = $2`
 
 	ct, err := r.db.Exec(ctx, q, id, tenantID)
@@ -132,14 +142,17 @@ func (r *UserRepo) Deactivate(ctx context.Context, id, tenantID string) error {
 func (r *UserRepo) scanUser(ctx context.Context, query string, args ...any) (*domainuser.User, error) {
 	var u domainuser.User
 	var role string
+	var id, tid pgtype.UUID
 	err := r.db.QueryRow(ctx, query, args...).
-		Scan(&u.ID, &u.TenantID, &u.Name, &u.Email, &role, &u.PasswordHash, &u.LDAPDN, &u.AvatarURL, &u.Active, &u.CreatedAt, &u.UpdatedAt)
+		Scan(&id, &tid, &u.Name, &u.Email, &role, &u.PasswordHash, &u.LDAPDN, &u.AvatarURL, &u.Active, &u.CreatedAt, &u.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domainuser.ErrNotFound
 		}
 		return nil, fmt.Errorf("user_repo: scan: %w", err)
 	}
+	u.ID = pgToUUID(id)
+	u.TenantID = pgToUUID(tid)
 	u.Role = domainuser.Role(role)
 	return &u, nil
 }

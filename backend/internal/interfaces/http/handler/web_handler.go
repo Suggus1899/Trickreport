@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	appAnalytics "github.com/trickreport/backend/internal/application/analytics"
 	appArticle "github.com/trickreport/backend/internal/application/article"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
@@ -158,7 +159,11 @@ func (h *WebHandler) TicketList(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) TicketDetailPage(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	ticketID := chi.URLParam(r, "id")
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 
 	t, err := h.tickets.Get(r.Context(), ticketID, tenantID, claims.Role, claims.UserID)
 	if err != nil {
@@ -220,30 +225,34 @@ func (h *WebHandler) TicketCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/tickets/"+t.ID, http.StatusSeeOther)
+	http.Redirect(w, r, "/tickets/"+t.ID.String(), http.StatusSeeOther)
 }
 
 func (h *WebHandler) TicketAddComment(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	ticketID := chi.URLParam(r, "id")
-
-	if err := r.ParseForm(); err != nil {
-		http.Redirect(w, r, "/tickets/"+ticketID, http.StatusSeeOther)
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
 		return
 	}
 
-	_, err := h.tickets.AddComment(r.Context(), appTicket.AddCommentInput{
+	if err := r.ParseForm(); err != nil {
+		http.Redirect(w, r, "/tickets/"+ticketID.String(), http.StatusSeeOther)
+		return
+	}
+
+	_, err = h.tickets.AddComment(r.Context(), appTicket.AddCommentInput{
 		TicketID: ticketID, TenantID: tenantID,
 		UserID: claims.UserID, Role: claims.Role,
 		Content: r.FormValue("content"),
 	})
 	if err != nil {
-		http.Redirect(w, r, "/tickets/"+ticketID, http.StatusSeeOther)
+		http.Redirect(w, r, "/tickets/"+ticketID.String(), http.StatusSeeOther)
 		return
 	}
 
-	http.Redirect(w, r, "/tickets/"+ticketID, http.StatusSeeOther)
+	http.Redirect(w, r, "/tickets/"+ticketID.String(), http.StatusSeeOther)
 }
 
 // ─── Articles ───────────────────────────────────────────────────────────────
@@ -268,7 +277,11 @@ func (h *WebHandler) ArticleList(w http.ResponseWriter, r *http.Request) {
 func (h *WebHandler) ArticleDetailPage(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
 
 	a, err := h.articles.Get(r.Context(), id, tenantID, claims.Role)
 	if err != nil {
@@ -305,7 +318,7 @@ func (h *WebHandler) ArticleCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.Redirect(w, r, "/articles/"+a.ID, http.StatusSeeOther)
+	http.Redirect(w, r, "/articles/"+a.ID.String(), http.StatusSeeOther)
 }
 
 // ─── Admin: Users ───────────────────────────────────────────────────────────

@@ -37,7 +37,7 @@ templ AutomationList(rules []AutomationData) {
 							</td>
 							<td style="color:var(--text-muted);font-size:0.75rem">{ formatTime(r.CreatedAt) }</td>
 							<td>
-								<a href={ templ.SafeURL("/admin/automations/" + r.ID + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
+								<a href={ templ.SafeURL("/admin/automations/" + r.ID.String() + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
 							</td>
 						</tr>
 					}

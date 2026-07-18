@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
 	domainuser "github.com/trickreport/backend/internal/domain/user"
@@ -31,8 +33,9 @@ func (r *AuthUserRepo) GetByEmail(ctx context.Context, email string) (*domainuse
 		LIMIT 1`
 
 	var u domainuser.User
+	var id, tid pgtype.UUID
 	err := r.db.QueryRow(ctx, q, email).Scan(
-		&u.ID, &u.TenantID, &u.Name, &u.Email, &u.Role, &u.PasswordHash, &u.LDAPDN,
+		&id, &tid, &u.Name, &u.Email, &u.Role, &u.PasswordHash, &u.LDAPDN,
 		&u.AvatarURL, &u.Active, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -41,10 +44,12 @@ func (r *AuthUserRepo) GetByEmail(ctx context.Context, email string) (*domainuse
 		}
 		return nil, fmt.Errorf("failed to get user by email: %w", err)
 	}
+	u.ID = pgToUUID(id)
+	u.TenantID = pgToUUID(tid)
 	return &u, nil
 }
 
-func (r *AuthUserRepo) GetByID(ctx context.Context, id string) (*domainuser.User, error) {
+func (r *AuthUserRepo) GetByID(ctx context.Context, id uuid.UUID) (*domainuser.User, error) {
 	const q = `
 		SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''),
 		       avatar_url, active, created_at, updated_at
@@ -52,8 +57,9 @@ func (r *AuthUserRepo) GetByID(ctx context.Context, id string) (*domainuser.User
 		WHERE id = $1 AND active = TRUE`
 
 	var u domainuser.User
+	var idCol, tid pgtype.UUID
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&u.ID, &u.TenantID, &u.Name, &u.Email, &u.Role, &u.PasswordHash, &u.LDAPDN,
+		&idCol, &tid, &u.Name, &u.Email, &u.Role, &u.PasswordHash, &u.LDAPDN,
 		&u.AvatarURL, &u.Active, &u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
@@ -62,6 +68,8 @@ func (r *AuthUserRepo) GetByID(ctx context.Context, id string) (*domainuser.User
 		}
 		return nil, fmt.Errorf("failed to get user by id: %w", err)
 	}
+	u.ID = pgToUUID(idCol)
+	u.TenantID = pgToUUID(tid)
 	return &u, nil
 }
 

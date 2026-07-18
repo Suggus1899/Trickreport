@@ -1,11 +1,15 @@
 package automation
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Rule is an automation rule that triggers actions on ticket events.
 type Rule struct {
-	ID          string
-	TenantID    string
+	ID          uuid.UUID
+	TenantID    uuid.UUID
 	Name        string
 	Description string
 	TriggerType string

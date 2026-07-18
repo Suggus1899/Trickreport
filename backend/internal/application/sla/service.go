@@ -3,12 +3,13 @@ package sla
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/trickreport/backend/internal/domain/sla"
 )
 
 // Repository is the port for SLA policy persistence.
 type Repository interface {
-	List(ctx context.Context, tenantID string) ([]sla.Policy, error)
+	List(ctx context.Context, tenantID uuid.UUID) ([]sla.Policy, error)
 	Upsert(ctx context.Context, p *sla.Policy) error
 }
 
@@ -23,13 +24,13 @@ func NewService(repo Repository) *Service {
 }
 
 // List returns all SLA policies for the tenant.
-func (s *Service) List(ctx context.Context, tenantID string) ([]sla.Policy, error) {
+func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]sla.Policy, error) {
 	return s.repo.List(ctx, tenantID)
 }
 
 // UpsertInput holds the data for creating or updating an SLA policy.
 type UpsertInput struct {
-	TenantID              string
+	TenantID              uuid.UUID
 	Priority              string
 	ResponseTimeMinutes   int
 	ResolutionTimeMinutes int

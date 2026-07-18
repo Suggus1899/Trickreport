@@ -7,7 +7,9 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	appTicket "github.com/trickreport/backend/internal/application/ticket"
 	domainTicket "github.com/trickreport/backend/internal/domain/ticket"
@@ -22,7 +24,7 @@ func NewTicketRepo(db *pgxpool.Pool) *TicketRepo {
 	return &TicketRepo{db: db}
 }
 
-func (r *TicketRepo) List(ctx context.Context, tenantID string, filter appTicket.Filter, role, userID string) ([]domainTicket.Ticket, error) {
+func (r *TicketRepo) List(ctx context.Context, tenantID uuid.UUID, filter appTicket.Filter, role string, userID uuid.UUID) ([]domainTicket.Ticket, error) {
 	q := `
 		SELECT t.id, t.tenant_id, t.title, t.description, t.status, t.priority, t.category,
 		       t.created_by, t.assigned_to, t.sla_deadline, t.sla_breached, t.created_at, t.updated_at,
@@ -78,20 +80,26 @@ func (r *TicketRepo) List(ctx context.Context, tenantID string, filter appTicket
 	tickets := make([]domainTicket.Ticket, 0)
 	for rows.Next() {
 		var t domainTicket.Ticket
+		var id, tenantIDCol, createdBy pgtype.UUID
+		var assignedTo pgtype.UUID
 		if err := rows.Scan(
-			&t.ID, &t.TenantID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.Category,
-			&t.CreatedBy, &t.AssignedTo, &t.SLADeadline, &t.SLABreached, &t.CreatedAt, &t.UpdatedAt,
+			&id, &tenantIDCol, &t.Title, &t.Description, &t.Status, &t.Priority, &t.Category,
+			&createdBy, &assignedTo, &t.SLADeadline, &t.SLABreached, &t.CreatedAt, &t.UpdatedAt,
 			&t.CreatorName, &t.AssigneeName,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan ticket: %w", err)
 		}
+		t.ID = pgToUUID(id)
+		t.TenantID = pgToUUID(tenantIDCol)
+		t.CreatedBy = pgToUUID(createdBy)
+		t.AssignedTo = pgToUUIDPtr(assignedTo)
 		tickets = append(tickets, t)
 	}
 
 	return tickets, nil
 }
 
-func (r *TicketRepo) GetByID(ctx context.Context, id, tenantID string) (*domainTicket.Ticket, error) {
+func (r *TicketRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainTicket.Ticket, error) {
 	q := `
 		SELECT t.id, t.tenant_id, t.title, t.description, t.status, t.priority, t.category,
 		       t.created_by, t.assigned_to, t.sla_deadline, t.sla_breached, t.created_at, t.updated_at,
@@ -102,9 +110,11 @@ func (r *TicketRepo) GetByID(ctx context.Context, id, tenantID string) (*domainT
 		WHERE t.id = $1 AND t.tenant_id = $2`
 
 	var t domainTicket.Ticket
+	var idCol, tenantIDCol, createdBy pgtype.UUID
+	var assignedTo pgtype.UUID
 	err := r.db.QueryRow(ctx, q, id, tenantID).Scan(
-		&t.ID, &t.TenantID, &t.Title, &t.Description, &t.Status, &t.Priority, &t.Category,
-		&t.CreatedBy, &t.AssignedTo, &t.SLADeadline, &t.SLABreached, &t.CreatedAt, &t.UpdatedAt,
+		&idCol, &tenantIDCol, &t.Title, &t.Description, &t.Status, &t.Priority, &t.Category,
+		&createdBy, &assignedTo, &t.SLADeadline, &t.SLABreached, &t.CreatedAt, &t.UpdatedAt,
 		&t.CreatorName, &t.AssigneeName,
 	)
 	if err != nil {
@@ -113,6 +123,10 @@ func (r *TicketRepo) GetByID(ctx context.Context, id, tenantID string) (*domainT
 		}
 		return nil, fmt.Errorf("failed to get ticket: %w", err)
 	}
+	t.ID = pgToUUID(idCol)
+	t.TenantID = pgToUUID(tenantIDCol)
+	t.CreatedBy = pgToUUID(createdBy)
+	t.AssignedTo = pgToUUIDPtr(assignedTo)
 	return &t, nil
 }
 
@@ -122,15 +136,17 @@ func (r *TicketRepo) Create(ctx context.Context, t *domainTicket.Ticket) error {
 		VALUES ($1, $2, $3, $4, $5, $6)
 		RETURNING id, status, created_at, updated_at`
 
+	var id pgtype.UUID
 	err := r.db.QueryRow(ctx, q, t.TenantID, t.Title, t.Description, t.Priority, t.Category, t.CreatedBy).
-		Scan(&t.ID, &t.Status, &t.CreatedAt, &t.UpdatedAt)
+		Scan(&id, &t.Status, &t.CreatedAt, &t.UpdatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create ticket: %w", err)
 	}
+	t.ID = pgToUUID(id)
 	return nil
 }
 
-func (r *TicketRepo) UpdateStatus(ctx context.Context, id, tenantID string, status domainTicket.Status, userID string) (*domainTicket.Ticket, error) {
+func (r *TicketRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -154,14 +170,14 @@ func (r *TicketRepo) UpdateStatus(ctx context.Context, id, tenantID string, stat
 	return r.GetByID(ctx, id, tenantID)
 }
 
-func (r *TicketRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userID string) error {
+func (r *TicketRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userID uuid.UUID) error {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
-	var currentAssignee *string
+	var currentAssignee pgtype.UUID
 	err = tx.QueryRow(ctx, `SELECT assigned_to FROM tickets WHERE id = $1 AND tenant_id = $2 FOR UPDATE`, id, tenantID).Scan(&currentAssignee)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -176,11 +192,12 @@ func (r *TicketRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userI
 	}
 
 	oldVal := ""
-	if currentAssignee != nil {
-		oldVal = *currentAssignee
+	if currentAssignee.Valid {
+		oldVal = pgToUUID(currentAssignee).String()
 	}
-	if oldVal != assignedTo {
-		_, err = tx.Exec(ctx, `INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value) VALUES ($1, $2, 'assigned_to', $3, $4)`, id, userID, oldVal, assignedTo)
+	newVal := assignedTo.String()
+	if oldVal != newVal {
+		_, err = tx.Exec(ctx, `INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value) VALUES ($1, $2, 'assigned_to', $3, $4)`, id, userID, oldVal, newVal)
 		if err != nil {
 			return fmt.Errorf("failed to insert history: %w", err)
 		}
@@ -192,16 +209,16 @@ func (r *TicketRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userI
 	return nil
 }
 
-func (r *TicketRepo) GetCreator(ctx context.Context, id, tenantID string) (string, error) {
-	var createdBy string
+func (r *TicketRepo) GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid.UUID, error) {
+	var createdBy pgtype.UUID
 	err := r.db.QueryRow(ctx, `SELECT created_by FROM tickets WHERE id = $1 AND tenant_id = $2`, id, tenantID).Scan(&createdBy)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", domainTicket.ErrNotFound
+			return uuid.Nil, domainTicket.ErrNotFound
 		}
-		return "", fmt.Errorf("failed to get ticket creator: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to get ticket creator: %w", err)
 	}
-	return createdBy, nil
+	return pgToUUID(createdBy), nil
 }
 
 // CommentRepo implements ticket.CommentRepository using PostgreSQL.
@@ -213,7 +230,7 @@ func NewCommentRepo(db *pgxpool.Pool) *CommentRepo {
 	return &CommentRepo{db: db}
 }
 
-func (r *CommentRepo) List(ctx context.Context, ticketID string, role string) ([]domainTicket.Comment, error) {
+func (r *CommentRepo) List(ctx context.Context, ticketID uuid.UUID, role string) ([]domainTicket.Comment, error) {
 	q := `
 		SELECT c.id, c.ticket_id, c.user_id, c.content, c.is_internal, c.created_at, u.name
 		FROM ticket_comments c
@@ -235,9 +252,13 @@ func (r *CommentRepo) List(ctx context.Context, ticketID string, role string) ([
 	comments := make([]domainTicket.Comment, 0)
 	for rows.Next() {
 		var c domainTicket.Comment
-		if err := rows.Scan(&c.ID, &c.TicketID, &c.UserID, &c.Content, &c.IsInternal, &c.CreatedAt, &c.UserName); err != nil {
+		var id, ticketIDCol, userID pgtype.UUID
+		if err := rows.Scan(&id, &ticketIDCol, &userID, &c.Content, &c.IsInternal, &c.CreatedAt, &c.UserName); err != nil {
 			return nil, fmt.Errorf("failed to scan comment: %w", err)
 		}
+		c.ID = pgToUUID(id)
+		c.TicketID = pgToUUID(ticketIDCol)
+		c.UserID = pgToUUID(userID)
 		comments = append(comments, c)
 	}
 	return comments, nil
@@ -249,10 +270,12 @@ func (r *CommentRepo) Create(ctx context.Context, c *domainTicket.Comment) error
 		VALUES ($1, $2, $3, $4)
 		RETURNING id, created_at`
 
-	err := r.db.QueryRow(ctx, q, c.TicketID, c.UserID, c.Content, c.IsInternal).Scan(&c.ID, &c.CreatedAt)
+	var id pgtype.UUID
+	err := r.db.QueryRow(ctx, q, c.TicketID, c.UserID, c.Content, c.IsInternal).Scan(&id, &c.CreatedAt)
 	if err != nil {
 		return fmt.Errorf("failed to create comment: %w", err)
 	}
+	c.ID = pgToUUID(id)
 
 	// Fetch user name for response
 	_ = r.db.QueryRow(ctx, `SELECT name FROM users WHERE id = $1`, c.UserID).Scan(&c.UserName)
@@ -268,7 +291,7 @@ func NewHistoryRepo(db *pgxpool.Pool) *HistoryRepo {
 	return &HistoryRepo{db: db}
 }
 
-func (r *HistoryRepo) List(ctx context.Context, ticketID string) ([]domainTicket.HistoryEntry, error) {
+func (r *HistoryRepo) List(ctx context.Context, ticketID uuid.UUID) ([]domainTicket.HistoryEntry, error) {
 	q := `
 		SELECT h.id, h.ticket_id, h.user_id, h.field, h.old_value, h.new_value, h.created_at, u.name
 		FROM ticket_history h
@@ -285,9 +308,13 @@ func (r *HistoryRepo) List(ctx context.Context, ticketID string) ([]domainTicket
 	entries := make([]domainTicket.HistoryEntry, 0)
 	for rows.Next() {
 		var e domainTicket.HistoryEntry
-		if err := rows.Scan(&e.ID, &e.TicketID, &e.UserID, &e.Field, &e.OldValue, &e.NewValue, &e.CreatedAt, &e.UserName); err != nil {
+		var id, ticketIDCol, userID pgtype.UUID
+		if err := rows.Scan(&id, &ticketIDCol, &userID, &e.Field, &e.OldValue, &e.NewValue, &e.CreatedAt, &e.UserName); err != nil {
 			return nil, fmt.Errorf("failed to scan history: %w", err)
 		}
+		e.ID = pgToUUID(id)
+		e.TicketID = pgToUUID(ticketIDCol)
+		e.UserID = pgToUUID(userID)
 		entries = append(entries, e)
 	}
 	return entries, nil

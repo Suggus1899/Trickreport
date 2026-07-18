@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 	"github.com/rs/zerolog/log"
 )
@@ -67,8 +68,8 @@ var upgrader = websocket.Upgrader{
 // Client is a middleman between the websocket connection and the hub.
 type Client struct {
 	Hub      *Hub
-	TenantID string
-	UserID   string
+	TenantID uuid.UUID
+	UserID   uuid.UUID
 
 	// The websocket connection.
 	conn *websocket.Conn
@@ -142,7 +143,7 @@ func (c *Client) writePump() {
 }
 
 // ServeWs handles websocket requests from the peer.
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, tenantID string, userID string) {
+func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, userID uuid.UUID) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to upgrade websocket connection")

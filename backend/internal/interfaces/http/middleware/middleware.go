@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/trickreport/backend/internal/application/auth"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
 )
@@ -16,7 +17,7 @@ const tenantKey contextKey = "tenant_id"
 
 // TenantResolver translates a tenant slug or UUID into the canonical tenant UUID.
 type TenantResolver interface {
-	Resolve(ctx context.Context, slugOrID string) (string, error)
+	Resolve(ctx context.Context, slugOrID string) (uuid.UUID, error)
 }
 
 // ContextWithClaims stores JWT claims in the request context.
@@ -31,12 +32,12 @@ func ClaimsFromContext(ctx context.Context) (*auth.Claims, bool) {
 }
 
 // TenantFromContext retrieves the tenant identifier from the request context.
-// Returns empty string if no tenant is set — callers must check.
-func TenantFromContext(ctx context.Context) string {
-	if v, ok := ctx.Value(tenantKey).(string); ok {
+// Returns uuid.Nil if no tenant is set — callers must check.
+func TenantFromContext(ctx context.Context) uuid.UUID {
+	if v, ok := ctx.Value(tenantKey).(uuid.UUID); ok {
 		return v
 	}
-	return ""
+	return uuid.Nil
 }
 
 // Authenticate validates the JWT from the Authorization header or cookie.

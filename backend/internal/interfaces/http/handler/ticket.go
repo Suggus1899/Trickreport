@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	appTicket "github.com/trickreport/backend/internal/application/ticket"
 	"github.com/trickreport/backend/internal/domain/ticket"
 	"github.com/trickreport/backend/internal/interfaces/http/middleware"
@@ -27,15 +28,15 @@ func NewTicketHandler(svc *appTicket.UserService) *TicketHandler {
 // DTOs — HTTP-specific, separate from domain entities.
 
 type TicketDTO struct {
-	ID           string     `json:"id"`
-	TenantID     string     `json:"tenant_id"`
+	ID           uuid.UUID  `json:"id"`
+	TenantID     uuid.UUID  `json:"tenant_id"`
 	Title        string     `json:"title"`
 	Description  string     `json:"description"`
 	Status       string     `json:"status"`
 	Priority     string     `json:"priority"`
 	Category     string     `json:"category"`
-	CreatedBy    string     `json:"created_by"`
-	AssignedTo   *string    `json:"assigned_to,omitempty"`
+	CreatedBy    uuid.UUID  `json:"created_by"`
+	AssignedTo   *uuid.UUID `json:"assigned_to,omitempty"`
 	SLADeadline  *time.Time `json:"sla_deadline,omitempty"`
 	SLABreached  bool       `json:"sla_breached"`
 	CreatedAt    time.Time  `json:"created_at"`
@@ -45,9 +46,9 @@ type TicketDTO struct {
 }
 
 type CommentDTO struct {
-	ID         string    `json:"id"`
-	TicketID   string    `json:"ticket_id"`
-	UserID     string    `json:"user_id"`
+	ID         uuid.UUID `json:"id"`
+	TicketID   uuid.UUID `json:"ticket_id"`
+	UserID     uuid.UUID `json:"user_id"`
 	Content    string    `json:"content"`
 	IsInternal bool      `json:"is_internal"`
 	CreatedAt  time.Time `json:"created_at"`
@@ -55,9 +56,9 @@ type CommentDTO struct {
 }
 
 type HistoryDTO struct {
-	ID        string    `json:"id"`
-	TicketID  string    `json:"ticket_id"`
-	UserID    string    `json:"user_id"`
+	ID        uuid.UUID `json:"id"`
+	TicketID  uuid.UUID `json:"ticket_id"`
+	UserID    uuid.UUID `json:"user_id"`
 	Field     string    `json:"field"`
 	OldValue  *string   `json:"old_value,omitempty"`
 	NewValue  *string   `json:"new_value,omitempty"`
@@ -77,7 +78,7 @@ type UpdateStatusReq struct {
 }
 
 type AssignReq struct {
-	AssignedTo *string `json:"assigned_to" validate:"omitempty,uuid"`
+	AssignedTo *uuid.UUID `json:"assigned_to"`
 }
 
 type CreateCommentReq struct {
@@ -141,7 +142,11 @@ func (h *TicketHandler) List(w http.ResponseWriter, r *http.Request) {
 func (h *TicketHandler) Get(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	ticketID := chi.URLParam(r, "id")
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	t, err := h.svc.Get(r.Context(), ticketID, tenantID, claims.Role, claims.UserID)
 	if err != nil {
@@ -197,7 +202,11 @@ func (h *TicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 func (h *TicketHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	ticketID := chi.URLParam(r, "id")
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	var req UpdateStatusReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -209,7 +218,7 @@ func (h *TicketHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := h.svc.ChangeStatus(r.Context(), ticketID, tenantID, claims.UserID, claims.Role, req.Status)
+	err = h.svc.ChangeStatus(r.Context(), ticketID, tenantID, claims.UserID, claims.Role, req.Status)
 	if err != nil {
 		switch {
 		case errors.Is(err, ticket.ErrValidation):
@@ -232,7 +241,11 @@ func (h *TicketHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 func (h *TicketHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	ticketID := chi.URLParam(r, "id")
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	var req AssignReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -244,7 +257,7 @@ func (h *TicketHandler) Assign(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	assignedTo := ""
+	assignedTo := uuid.Nil
 	if req.AssignedTo != nil {
 		assignedTo = *req.AssignedTo
 	}
@@ -264,7 +277,11 @@ func (h *TicketHandler) Assign(w http.ResponseWriter, r *http.Request) {
 func (h *TicketHandler) ListComments(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	ticketID := chi.URLParam(r, "id")
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	comments, err := h.svc.ListComments(r.Context(), ticketID, tenantID, claims.Role, claims.UserID)
 	if err != nil {
@@ -290,7 +307,11 @@ func (h *TicketHandler) ListComments(w http.ResponseWriter, r *http.Request) {
 func (h *TicketHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	ticketID := chi.URLParam(r, "id")
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	var req CreateCommentReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -330,7 +351,11 @@ func (h *TicketHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 func (h *TicketHandler) ListHistory(w http.ResponseWriter, r *http.Request) {
 	claims, _ := middleware.ClaimsFromContext(r.Context())
 	tenantID := middleware.TenantFromContext(r.Context())
-	ticketID := chi.URLParam(r, "id")
+	ticketID, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	entries, err := h.svc.ListHistory(r.Context(), ticketID, tenantID, claims.Role, claims.UserID)
 	if err != nil {

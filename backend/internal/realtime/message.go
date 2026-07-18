@@ -1,5 +1,7 @@
 package realtime
 
+import "github.com/google/uuid"
+
 // EventType represents the type of a real-time event.
 type EventType string
 
@@ -12,12 +14,12 @@ const (
 // Message is the JSON payload sent to the client.
 type Message struct {
 	Type     EventType `json:"type"`
-	TenantID string    `json:"tenant_id,omitempty"`
+	TenantID uuid.UUID `json:"tenant_id,omitempty"`
 	Data     any       `json:"data"`
 }
 
 // BroadcastPayload is used internally by the Hub to route messages.
 type BroadcastPayload struct {
-	TenantID string
+	TenantID uuid.UUID
 	Message  []byte
 }

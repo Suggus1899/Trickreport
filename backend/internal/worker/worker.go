@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 )
@@ -11,7 +13,7 @@ import (
 // systemUserID is the super admin from the seed migration (001_init.sql).
 // Used for worker-generated comments and history entries.
 // In a future refactor this should be configurable.
-const systemUserID = "00000000-0000-0000-0000-000000000002"
+var systemUserID = uuid.MustParse("00000000-0000-0000-0000-000000000002")
 
 type Worker struct {
 	db *pgxpool.Pool
@@ -67,12 +69,16 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 
 	breachCount := 0
 	for rows.Next() {
-		var id, tenantID string
+		var id, tenantID pgtype.UUID
 		if err := rows.Scan(&id, &tenantID); err != nil {
 			log.Error().Err(err).Msg("Worker failed to scan breached ticket row")
 			continue
 		}
 		breachCount++
+		ticketIDStr := ""
+		if id.Valid {
+			ticketIDStr = uuid.UUID(id.Bytes).String()
+		}
 
 		// Insert internal comment — ticket_comments has no tenant_id column,
 		// it's inferred from the ticket. Column is "content", not "body".
@@ -81,7 +87,7 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 			INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
 			VALUES ($1, $2, 'SYSTEM: SLA Resolution Time Breached', TRUE)
 		`, id, systemUserID); err != nil {
-			log.Error().Err(err).Str("ticket_id", id).Msg("Worker failed to insert SLA breach comment")
+			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach comment")
 		}
 
 		// Insert history entry — ticket_history columns are field/old_value/new_value,
@@ -90,7 +96,7 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 			INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value)
 			VALUES ($1, $2, 'sla_breached', 'false', 'true')
 		`, id, systemUserID); err != nil {
-			log.Error().Err(err).Str("ticket_id", id).Msg("Worker failed to insert SLA breach history")
+			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach history")
 		}
 	}
 

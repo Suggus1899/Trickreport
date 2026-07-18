@@ -1,11 +1,15 @@
 package sla
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // Policy defines SLA deadlines for a specific priority level.
 type Policy struct {
-	ID                    string
-	TenantID              string
+	ID                    uuid.UUID
+	TenantID              uuid.UUID
 	Priority              string
 	ResponseTimeMinutes   int
 	ResolutionTimeMinutes int

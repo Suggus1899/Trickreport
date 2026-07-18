@@ -28,9 +28,9 @@ templ TicketList(tickets []TicketData) {
 				<tbody>
 					for _, t := range tickets {
 						<tr>
-							<td style="font-family:monospace;font-size:0.75rem">{ t.ID[:8] }</td>
+							<td style="font-family:monospace;font-size:0.75rem">{ t.ID.String()[:8] }</td>
 							<td>
-								<a href={ templ.SafeURL("/tickets/" + t.ID) } style="font-weight:500">{ t.Title }</a>
+								<a href={ templ.SafeURL("/tickets/" + t.ID.String()) } style="font-weight:500">{ t.Title }</a>
 							</td>
 							<td><span class={ statusBadgeClass(t.Status) }>{ t.Status }</span></td>
 							<td><span class={ priorityBadgeClass(t.Priority) }>{ t.Priority }</span></td>

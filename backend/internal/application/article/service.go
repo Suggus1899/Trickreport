@@ -3,6 +3,7 @@ package article
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/trickreport/backend/internal/domain/article"
 )
 
@@ -13,11 +14,11 @@ type Filter struct {
 
 // Repository is the port for article persistence.
 type Repository interface {
-	List(ctx context.Context, tenantID string, filter Filter, role string) ([]article.Article, error)
-	GetByID(ctx context.Context, id, tenantID string, role string) (*article.Article, error)
+	List(ctx context.Context, tenantID uuid.UUID, filter Filter, role string) ([]article.Article, error)
+	GetByID(ctx context.Context, id, tenantID uuid.UUID, role string) (*article.Article, error)
 	Create(ctx context.Context, a *article.Article) error
 	Update(ctx context.Context, a *article.Article) error
-	Delete(ctx context.Context, id, tenantID string) error
+	Delete(ctx context.Context, id, tenantID uuid.UUID) error
 }
 
 // Service is the application service for article operations.
@@ -31,24 +32,24 @@ func NewService(repo Repository) *Service {
 }
 
 // List returns articles for the tenant, filtered by role visibility.
-func (s *Service) List(ctx context.Context, tenantID string, filter Filter, role string) ([]article.Article, error) {
+func (s *Service) List(ctx context.Context, tenantID uuid.UUID, filter Filter, role string) ([]article.Article, error) {
 	return s.repo.List(ctx, tenantID, filter, role)
 }
 
 // Get returns a single article, checking role-based visibility.
-func (s *Service) Get(ctx context.Context, id, tenantID, role string) (*article.Article, error) {
+func (s *Service) Get(ctx context.Context, id, tenantID uuid.UUID, role string) (*article.Article, error) {
 	return s.repo.GetByID(ctx, id, tenantID, role)
 }
 
 // CreateInput holds the data for creating a new article.
 type CreateInput struct {
-	TenantID  string
+	TenantID  uuid.UUID
 	Title     string
 	Content   string
 	Category  string
 	Tags      []string
 	Published bool
-	CreatedBy string
+	CreatedBy uuid.UUID
 }
 
 // Create creates a new article.
@@ -83,8 +84,8 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*article.Artic
 
 // UpdateInput holds the data for updating an article.
 type UpdateInput struct {
-	ID        string
-	TenantID  string
+	ID        uuid.UUID
+	TenantID  uuid.UUID
 	Title     string
 	Content   string
 	Category  string
@@ -119,6 +120,6 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (*article.Artic
 }
 
 // Delete removes an article.
-func (s *Service) Delete(ctx context.Context, id, tenantID string) error {
+func (s *Service) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
 	return s.repo.Delete(ctx, id, tenantID)
 }

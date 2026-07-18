@@ -1,11 +1,15 @@
 package user
 
-import "time"
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
 
 // User is a person who interacts with the help desk system.
 type User struct {
-	ID           string
-	TenantID     string
+	ID           uuid.UUID
+	TenantID     uuid.UUID
 	Name         string
 	Email        string
 	Role         Role

@@ -3,17 +3,18 @@ package user
 import (
 	"context"
 
+	"github.com/google/uuid"
 	"github.com/trickreport/backend/internal/domain/user"
 )
 
 // Repository is the port for user persistence.
 type Repository interface {
-	List(ctx context.Context, tenantID string) ([]user.User, error)
-	GetByID(ctx context.Context, id, tenantID string) (*user.User, error)
+	List(ctx context.Context, tenantID uuid.UUID) ([]user.User, error)
+	GetByID(ctx context.Context, id, tenantID uuid.UUID) (*user.User, error)
 	GetByEmail(ctx context.Context, email string) (*user.User, error)
 	Create(ctx context.Context, u *user.User, passwordHash string) error
-	Update(ctx context.Context, id, tenantID string, fields UpdateFields) (*user.User, error)
-	Deactivate(ctx context.Context, id, tenantID string) error
+	Update(ctx context.Context, id, tenantID uuid.UUID, fields UpdateFields) (*user.User, error)
+	Deactivate(ctx context.Context, id, tenantID uuid.UUID) error
 }
 
 // UpdateFields holds optional fields for partial updates.
@@ -42,18 +43,18 @@ func NewService(repo Repository, hasher PasswordHasher) *Service {
 }
 
 // List returns all users in the tenant.
-func (s *Service) List(ctx context.Context, tenantID string) ([]user.User, error) {
+func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]user.User, error) {
 	return s.repo.List(ctx, tenantID)
 }
 
 // Get returns a single user by ID.
-func (s *Service) Get(ctx context.Context, id, tenantID string) (*user.User, error) {
+func (s *Service) Get(ctx context.Context, id, tenantID uuid.UUID) (*user.User, error) {
 	return s.repo.GetByID(ctx, id, tenantID)
 }
 
 // CreateInput holds the data for creating a new user.
 type CreateInput struct {
-	TenantID string
+	TenantID uuid.UUID
 	Name     string
 	Email    string
 	Role     string
@@ -99,11 +100,11 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*user.User, er
 }
 
 // Update partially updates a user.
-func (s *Service) Update(ctx context.Context, id, tenantID string, fields UpdateFields) (*user.User, error) {
+func (s *Service) Update(ctx context.Context, id, tenantID uuid.UUID, fields UpdateFields) (*user.User, error) {
 	return s.repo.Update(ctx, id, tenantID, fields)
 }
 
 // Deactivate soft-deletes a user by setting active = false.
-func (s *Service) Deactivate(ctx context.Context, id, tenantID string) error {
+func (s *Service) Deactivate(ctx context.Context, id, tenantID uuid.UUID) error {
 	return s.repo.Deactivate(ctx, id, tenantID)
 }

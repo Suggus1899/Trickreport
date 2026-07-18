@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/google/uuid"
 	domainTicket "github.com/trickreport/backend/internal/domain/ticket"
 )
 
@@ -18,28 +19,28 @@ type Filter struct {
 
 // Repository is the port for ticket persistence.
 type Repository interface {
-	List(ctx context.Context, tenantID string, filter Filter, role, userID string) ([]domainTicket.Ticket, error)
-	GetByID(ctx context.Context, id, tenantID string) (*domainTicket.Ticket, error)
+	List(ctx context.Context, tenantID uuid.UUID, filter Filter, role string, userID uuid.UUID) ([]domainTicket.Ticket, error)
+	GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainTicket.Ticket, error)
 	Create(ctx context.Context, t *domainTicket.Ticket) error
-	UpdateStatus(ctx context.Context, id, tenantID string, status domainTicket.Status, userID string) (*domainTicket.Ticket, error)
-	Assign(ctx context.Context, id, tenantID, assignedTo, userID string) error
-	GetCreator(ctx context.Context, id, tenantID string) (string, error)
+	UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error)
+	Assign(ctx context.Context, id, tenantID, assignedTo, userID uuid.UUID) error
+	GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid.UUID, error)
 }
 
 // CommentRepository is the port for comment persistence.
 type CommentRepository interface {
-	List(ctx context.Context, ticketID string, role string) ([]domainTicket.Comment, error)
+	List(ctx context.Context, ticketID uuid.UUID, role string) ([]domainTicket.Comment, error)
 	Create(ctx context.Context, c *domainTicket.Comment) error
 }
 
 // HistoryRepository is the port for history persistence.
 type HistoryRepository interface {
-	List(ctx context.Context, ticketID string) ([]domainTicket.HistoryEntry, error)
+	List(ctx context.Context, ticketID uuid.UUID) ([]domainTicket.HistoryEntry, error)
 }
 
 // EventBroadcaster is the port for real-time event broadcasting.
 type EventBroadcaster interface {
-	BroadcastEvent(tenantID string, eventType string, data any)
+	BroadcastEvent(tenantID uuid.UUID, eventType string, data any)
 }
 
 // EmailNotifier is the port for email notifications.
@@ -68,12 +69,12 @@ func NewService(repo Repository, comments CommentRepository, history HistoryRepo
 }
 
 // List returns tickets for the tenant, filtered by role and query params.
-func (s *UserService) List(ctx context.Context, tenantID string, filter Filter, role, userID string) ([]domainTicket.Ticket, error) {
+func (s *UserService) List(ctx context.Context, tenantID uuid.UUID, filter Filter, role string, userID uuid.UUID) ([]domainTicket.Ticket, error) {
 	return s.repo.List(ctx, tenantID, filter, role, userID)
 }
 
 // Get returns a single ticket, checking role-based visibility.
-func (s *UserService) Get(ctx context.Context, id, tenantID, role, userID string) (*domainTicket.Ticket, error) {
+func (s *UserService) Get(ctx context.Context, id, tenantID uuid.UUID, role string, userID uuid.UUID) (*domainTicket.Ticket, error) {
 	t, err := s.repo.GetByID(ctx, id, tenantID)
 	if err != nil {
 		return nil, err
@@ -86,12 +87,12 @@ func (s *UserService) Get(ctx context.Context, id, tenantID, role, userID string
 
 // CreateInput holds the data for creating a new ticket.
 type CreateInput struct {
-	TenantID    string
+	TenantID    uuid.UUID
 	Title       string
 	Description string
 	Priority    string
 	Category    string
-	CreatedBy   string
+	CreatedBy   uuid.UUID
 }
 
 // Create creates a new ticket and broadcasts a real-time event.
@@ -138,7 +139,7 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 }
 
 // ChangeStatus transitions a ticket to a new status with authorization checks.
-func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID, role, newStatus string) error {
+func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uuid.UUID, role, newStatus string) error {
 	status, err := domainTicket.ParseStatus(newStatus)
 	if err != nil {
 		return domainTicket.ErrValidation
@@ -172,12 +173,12 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID, ro
 }
 
 // Assign assigns a ticket to a user.
-func (s *UserService) Assign(ctx context.Context, id, tenantID, assignedTo, userID string) error {
+func (s *UserService) Assign(ctx context.Context, id, tenantID, assignedTo, userID uuid.UUID) error {
 	return s.repo.Assign(ctx, id, tenantID, assignedTo, userID)
 }
 
 // ListComments returns comments for a ticket, filtered by role visibility.
-func (s *UserService) ListComments(ctx context.Context, ticketID, tenantID, role, userID string) ([]domainTicket.Comment, error) {
+func (s *UserService) ListComments(ctx context.Context, ticketID, tenantID uuid.UUID, role string, userID uuid.UUID) ([]domainTicket.Comment, error) {
 	// Verify access
 	t, err := s.repo.GetByID(ctx, ticketID, tenantID)
 	if err != nil {
@@ -191,9 +192,9 @@ func (s *UserService) ListComments(ctx context.Context, ticketID, tenantID, role
 
 // AddCommentInput holds the data for creating a comment.
 type AddCommentInput struct {
-	TicketID   string
-	TenantID   string
-	UserID     string
+	TicketID   uuid.UUID
+	TenantID   uuid.UUID
+	UserID     uuid.UUID
 	Role       string
 	Content    string
 	IsInternal bool
@@ -239,7 +240,7 @@ func (s *UserService) AddComment(ctx context.Context, input AddCommentInput) (*d
 }
 
 // ListHistory returns the audit log for a ticket.
-func (s *UserService) ListHistory(ctx context.Context, ticketID, tenantID, role, userID string) ([]domainTicket.HistoryEntry, error) {
+func (s *UserService) ListHistory(ctx context.Context, ticketID, tenantID uuid.UUID, role string, userID uuid.UUID) ([]domainTicket.HistoryEntry, error) {
 	// Verify access
 	t, err := s.repo.GetByID(ctx, ticketID, tenantID)
 	if err != nil {

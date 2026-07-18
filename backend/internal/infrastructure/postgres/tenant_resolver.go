@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/trickreport/backend/internal/interfaces/http/middleware"
 )
@@ -22,16 +24,16 @@ func NewTenantResolver(db *pgxpool.Pool) *TenantResolver {
 
 // Resolve returns the tenant UUID for the given slug or UUID.
 // If the input is already a UUID present in the tenants table, it is returned as-is.
-func (r *TenantResolver) Resolve(ctx context.Context, slugOrID string) (string, error) {
-	var id string
+func (r *TenantResolver) Resolve(ctx context.Context, slugOrID string) (uuid.UUID, error) {
+	var id pgtype.UUID
 	err := r.db.QueryRow(ctx, `SELECT id FROM tenants WHERE slug = $1 OR id::text = $1 LIMIT 1`, slugOrID).Scan(&id)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return "", fmt.Errorf("tenant not found")
+			return uuid.Nil, fmt.Errorf("tenant not found")
 		}
-		return "", fmt.Errorf("failed to resolve tenant: %w", err)
+		return uuid.Nil, fmt.Errorf("failed to resolve tenant: %w", err)
 	}
-	return id, nil
+	return pgToUUID(id), nil
 }
 
 // Compile-time assertion that TenantResolver implements the middleware resolver.

@@ -3,6 +3,8 @@ package ticket
 import (
 	"errors"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 func TestStatus_CanTransitionTo(t *testing.T) {
@@ -108,13 +110,13 @@ func TestParsePriority(t *testing.T) {
 }
 
 func TestTicket_CanBeViewedBy(t *testing.T) {
-	creator := "user-1"
-	other := "user-2"
+	creator := uuid.New()
+	other := uuid.New()
 	ticket := &Ticket{CreatedBy: creator}
 
 	tests := []struct {
 		name   string
-		userID string
+		userID uuid.UUID
 		role   string
 		want   bool
 	}{
@@ -127,34 +129,34 @@ func TestTicket_CanBeViewedBy(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := ticket.CanBeViewedBy(tt.userID, tt.role); got != tt.want {
-				t.Errorf("CanBeViewedBy(%q, %q) = %v, want %v", tt.userID, tt.role, got, tt.want)
+				t.Errorf("CanBeViewedBy(%v, %q) = %v, want %v", tt.userID, tt.role, got, tt.want)
 			}
 		})
 	}
 }
 
 func TestCanStatusBeChangedBy(t *testing.T) {
-	creator := "user-1"
+	creator := uuid.New()
 	ticket := &Ticket{CreatedBy: creator}
 
 	tests := []struct {
 		name   string
 		role   string
-		userID string
+		userID uuid.UUID
 		target Status
 		want   bool
 	}{
-		{"admin changes to resolved", "admin", "other", StatusResolved, true},
-		{"agent changes to closed", "agent", "other", StatusClosed, true},
+		{"admin changes to resolved", "admin", uuid.New(), StatusResolved, true},
+		{"agent changes to closed", "agent", uuid.New(), StatusClosed, true},
 		{"end user closes own", "end_user", creator, StatusClosed, true},
-		{"end user closes other", "end_user", "other", StatusClosed, false},
+		{"end user closes other", "end_user", uuid.New(), StatusClosed, false},
 		{"end user reopens", "end_user", creator, StatusOpen, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			if got := CanStatusBeChangedBy(tt.role, ticket, tt.userID, tt.target); got != tt.want {
-				t.Errorf("CanStatusBeChangedBy(%q, %q, %q) = %v, want %v", tt.role, tt.userID, tt.target, got, tt.want)
+				t.Errorf("CanStatusBeChangedBy(%q, %v, %q) = %v, want %v", tt.role, tt.userID, tt.target, got, tt.want)
 			}
 		})
 	}
@@ -192,9 +194,10 @@ func TestTicket_ChangeStatus(t *testing.T) {
 
 func TestTicket_Assign(t *testing.T) {
 	ticket := &Ticket{}
-	ticket.Assign("agent-1")
+	agentID := uuid.New()
+	ticket.Assign(agentID)
 
-	if ticket.AssignedTo == nil || *ticket.AssignedTo != "agent-1" {
-		t.Errorf("expected assignee agent-1, got %v", ticket.AssignedTo)
+	if ticket.AssignedTo == nil || *ticket.AssignedTo != agentID {
+		t.Errorf("expected assignee %v, got %v", agentID, ticket.AssignedTo)
 	}
 }

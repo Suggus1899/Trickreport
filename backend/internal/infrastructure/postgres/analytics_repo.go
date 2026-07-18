@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/trickreport/backend/internal/application/analytics"
@@ -23,7 +24,7 @@ func NewAnalyticsRepo(db *pgxpool.Pool) *AnalyticsRepo {
 var _ analytics.Repository = (*AnalyticsRepo)(nil)
 
 // GetSummary returns aggregate ticket counts for a tenant.
-func (r *AnalyticsRepo) GetSummary(ctx context.Context, tenantID string) (analytics.Summary, error) {
+func (r *AnalyticsRepo) GetSummary(ctx context.Context, tenantID uuid.UUID) (analytics.Summary, error) {
 	const q = `SELECT COUNT(*), COUNT(*) FILTER (WHERE status IN ('open', 'in_progress', 'waiting_client')), COUNT(*) FILTER (WHERE status = 'resolved'), COUNT(*) FILTER (WHERE sla_breached = TRUE) FROM tickets WHERE tenant_id = $1`
 
 	var s analytics.Summary
@@ -35,7 +36,7 @@ func (r *AnalyticsRepo) GetSummary(ctx context.Context, tenantID string) (analyt
 }
 
 // GetVolume returns daily ticket volume for the last 30 days.
-func (r *AnalyticsRepo) GetVolume(ctx context.Context, tenantID string) ([]analytics.VolumePoint, error) {
+func (r *AnalyticsRepo) GetVolume(ctx context.Context, tenantID uuid.UUID) ([]analytics.VolumePoint, error) {
 	const q = `SELECT TO_CHAR(created_at, 'YYYY-MM-DD') as date, COUNT(*) FROM tickets WHERE tenant_id = $1 AND created_at >= NOW() - INTERVAL '30 days' GROUP BY date ORDER BY date ASC`
 
 	rows, err := r.db.Query(ctx, q, tenantID)
@@ -59,7 +60,7 @@ func (r *AnalyticsRepo) GetVolume(ctx context.Context, tenantID string) ([]analy
 }
 
 // GetStatusDistribution returns ticket counts grouped by status.
-func (r *AnalyticsRepo) GetStatusDistribution(ctx context.Context, tenantID string) ([]analytics.StatusDistribution, error) {
+func (r *AnalyticsRepo) GetStatusDistribution(ctx context.Context, tenantID uuid.UUID) ([]analytics.StatusDistribution, error) {
 	const q = `SELECT status, COUNT(*) FROM tickets WHERE tenant_id = $1 GROUP BY status`
 
 	rows, err := r.db.Query(ctx, q, tenantID)
@@ -83,7 +84,7 @@ func (r *AnalyticsRepo) GetStatusDistribution(ctx context.Context, tenantID stri
 }
 
 // GetResolutionTime returns average resolution hours grouped by priority.
-func (r *AnalyticsRepo) GetResolutionTime(ctx context.Context, tenantID string) ([]analytics.ResolutionMetrics, error) {
+func (r *AnalyticsRepo) GetResolutionTime(ctx context.Context, tenantID uuid.UUID) ([]analytics.ResolutionMetrics, error) {
 	const q = `SELECT priority, COALESCE(AVG(EXTRACT(EPOCH FROM (updated_at - created_at)) / 3600), 0) AS avg_hours FROM tickets WHERE tenant_id = $1 AND status IN ('resolved', 'closed') GROUP BY priority`
 
 	rows, err := r.db.Query(ctx, q, tenantID)

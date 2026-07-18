@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 	appAuto "github.com/trickreport/backend/internal/application/automation"
 	"github.com/trickreport/backend/internal/domain/automation"
 	"github.com/trickreport/backend/internal/interfaces/http/middleware"
@@ -23,16 +24,16 @@ func NewAutomationHandler(svc *appAuto.Service) *AutomationHandler {
 }
 
 type RuleDTO struct {
-	ID          string         `json:"id"`
-	TenantID    string         `json:"tenant_id"`
-	Name        string         `json:"name"`
-	Description string         `json:"description"`
-	TriggerType string         `json:"trigger_type"`
-	Conditions  map[string]any `json:"conditions"`
-	Actions     []any          `json:"actions"`
-	IsActive    bool           `json:"is_active"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
+	ID          uuid.UUID       `json:"id"`
+	TenantID    uuid.UUID       `json:"tenant_id"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	TriggerType string          `json:"trigger_type"`
+	Conditions  map[string]any  `json:"conditions"`
+	Actions     []any           `json:"actions"`
+	IsActive    bool            `json:"is_active"`
+	CreatedAt   time.Time       `json:"created_at"`
+	UpdatedAt   time.Time       `json:"updated_at"`
 }
 
 type createRuleReq struct {
@@ -109,7 +110,11 @@ func (h *AutomationHandler) Create(w http.ResponseWriter, r *http.Request) {
 
 func (h *AutomationHandler) Update(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	var req updateRuleReq
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -144,7 +149,11 @@ func (h *AutomationHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 func (h *AutomationHandler) Delete(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
-	id := chi.URLParam(r, "id")
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		response.Error(w, http.StatusBadRequest, "invalid id")
+		return
+	}
 
 	if err := h.svc.Delete(r.Context(), id, tenantID); err != nil {
 		if errors.Is(err, automation.ErrNotFound) {

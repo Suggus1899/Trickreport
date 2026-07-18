@@ -29,7 +29,7 @@ templ TicketDetail(t TicketData, comments []CommentData, history []HistoryData, 
 	if canComment {
 		<div class="card">
 			<h3>Add Comment</h3>
-			<form method="POST" action={ templ.SafeURL("/tickets/" + t.ID + "/comments") }>
+			<form method="POST" action={ templ.SafeURL("/tickets/" + t.ID.String() + "/comments") }>
 				<div class="form-group">
 					<label for="content">Comment</label>
 					<textarea id="content" name="content" required></textarea>

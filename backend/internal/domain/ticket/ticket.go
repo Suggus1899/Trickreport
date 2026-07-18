@@ -3,19 +3,21 @@ package ticket
 import (
 	"fmt"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 // Ticket is the aggregate root for the ticket domain.
 type Ticket struct {
-	ID          string
-	TenantID    string
+	ID          uuid.UUID
+	TenantID    uuid.UUID
 	Title       string
 	Description string
 	Status      Status
 	Priority    Priority
 	Category    string
-	CreatedBy   string
-	AssignedTo  *string
+	CreatedBy   uuid.UUID
+	AssignedTo  *uuid.UUID
 	SLADeadline *time.Time
 	SLABreached bool
 	CreatedAt   time.Time
@@ -28,7 +30,7 @@ type Ticket struct {
 
 // CanBeViewedBy returns true if the given user can view this ticket.
 // End users can only see their own tickets; agents and admins see all.
-func (t *Ticket) CanBeViewedBy(userID, role string) bool {
+func (t *Ticket) CanBeViewedBy(userID uuid.UUID, role string) bool {
 	if role == "admin" || role == "agent" {
 		return true
 	}
@@ -37,7 +39,7 @@ func (t *Ticket) CanBeViewedBy(userID, role string) bool {
 
 // CanStatusBeChangedBy returns true if the user role can change the status.
 // End users can only close their own tickets.
-func CanStatusBeChangedBy(role string, ticket *Ticket, userID string, target Status) bool {
+func CanStatusBeChangedBy(role string, ticket *Ticket, userID uuid.UUID, target Status) bool {
 	if role == "admin" || role == "agent" {
 		return true
 	}
@@ -62,7 +64,7 @@ func (t *Ticket) ChangeStatus(newStatus Status) error {
 }
 
 // Assign sets the assignee of the ticket.
-func (t *Ticket) Assign(userID string) {
+func (t *Ticket) Assign(userID uuid.UUID) {
 	t.AssignedTo = &userID
 	t.UpdatedAt = time.Now()
 }

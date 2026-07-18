@@ -38,7 +38,7 @@ templ UserList(users []UserData) {
 							</td>
 							<td style="color:var(--text-muted);font-size:0.75rem">{ formatTime(u.CreatedAt) }</td>
 							<td>
-								<a href={ templ.SafeURL("/admin/users/" + u.ID + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
+								<a href={ templ.SafeURL("/admin/users/" + u.ID.String() + "/edit") } class="btn btn-ghost btn-sm">Edit</a>
 							</td>
 						</tr>
 					}

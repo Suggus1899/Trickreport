@@ -14,7 +14,7 @@ templ ArticleList(articles []ArticleData) {
 	} else {
 		for _, a := range articles {
 			<div class="card">
-				<h2><a href={ templ.SafeURL("/articles/" + a.ID) } style="text-decoration:none;color:var(--text)">{ a.Title }</a></h2>
+				<h2><a href={ templ.SafeURL("/articles/" + a.ID.String()) } style="text-decoration:none;color:var(--text)">{ a.Title }</a></h2>
 				<div class="ticket-meta">
 					<span class="badge badge-gray">{ a.Category }</span>
 					if !a.Published {
@@ -51,7 +51,7 @@ templ ArticleDetail(a ArticleData) {
 		<div style="white-space:pre-wrap">{ a.Content }</div>
 	</div>
 	<div style="display:flex;gap:0.5rem;margin-top:1rem">
-		<a href={ templ.SafeURL("/articles/" + a.ID + "/edit") } class="btn btn-primary">Edit</a>
+		<a href={ templ.SafeURL("/articles/" + a.ID.String() + "/edit") } class="btn btn-primary">Edit</a>
 		<a href="/articles" class="btn btn-ghost">Back</a>
 	</div>
 }

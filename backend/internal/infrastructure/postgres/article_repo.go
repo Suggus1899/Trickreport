@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/trickreport/backend/internal/application/article"
@@ -28,7 +30,7 @@ var _ article.Repository = (*ArticleRepo)(nil)
 const articleSelectColumns = `a.id, a.tenant_id, a.title, a.content, a.category, a.tags, a.published, a.created_by, a.created_at, a.updated_at, u.name AS author_name`
 
 // List returns articles for a tenant, optionally filtered by search and role.
-func (r *ArticleRepo) List(ctx context.Context, tenantID string, filter article.Filter, role string) ([]domainarticle.Article, error) {
+func (r *ArticleRepo) List(ctx context.Context, tenantID uuid.UUID, filter article.Filter, role string) ([]domainarticle.Article, error) {
 	q := `SELECT ` + articleSelectColumns + ` FROM articles a JOIN users u ON a.created_by = u.id WHERE a.tenant_id = $1`
 	args := []any{tenantID}
 	argIdx := 2
@@ -64,7 +66,7 @@ func (r *ArticleRepo) List(ctx context.Context, tenantID string, filter article.
 }
 
 // GetByID returns a single article by id within a tenant.
-func (r *ArticleRepo) GetByID(ctx context.Context, id, tenantID string, role string) (*domainarticle.Article, error) {
+func (r *ArticleRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID, role string) (*domainarticle.Article, error) {
 	q := `SELECT ` + articleSelectColumns + ` FROM articles a JOIN users u ON a.created_by = u.id WHERE a.id = $1 AND a.tenant_id = $2`
 	if role == "end_user" {
 		q += ` AND a.published = TRUE`
@@ -82,10 +84,12 @@ func (r *ArticleRepo) GetByID(ctx context.Context, id, tenantID string, role str
 func (r *ArticleRepo) Create(ctx context.Context, a *domainarticle.Article) error {
 	const q = `INSERT INTO articles (tenant_id, title, content, category, tags, published, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id, created_at, updated_at`
 
+	var id pgtype.UUID
 	if err := r.db.QueryRow(ctx, q, a.TenantID, a.Title, a.Content, a.Category, a.Tags, a.Published, a.CreatedBy).
-		Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		Scan(&id, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		return fmt.Errorf("article_repo.Create: %w", err)
 	}
+	a.ID = pgToUUID(id)
 	return nil
 }
 
@@ -93,18 +97,20 @@ func (r *ArticleRepo) Create(ctx context.Context, a *domainarticle.Article) erro
 func (r *ArticleRepo) Update(ctx context.Context, a *domainarticle.Article) error {
 	const q = `UPDATE articles SET title = $1, content = $2, category = $3, tags = $4, published = $5, updated_at = NOW() WHERE id = $6 AND tenant_id = $7 RETURNING id, created_at, updated_at`
 
+	var id pgtype.UUID
 	if err := r.db.QueryRow(ctx, q, a.Title, a.Content, a.Category, a.Tags, a.Published, a.ID, a.TenantID).
-		Scan(&a.ID, &a.CreatedAt, &a.UpdatedAt); err != nil {
+		Scan(&id, &a.CreatedAt, &a.UpdatedAt); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return domainarticle.ErrNotFound
 		}
 		return fmt.Errorf("article_repo.Update: %w", err)
 	}
+	a.ID = pgToUUID(id)
 	return nil
 }
 
 // Delete removes an article by id within a tenant.
-func (r *ArticleRepo) Delete(ctx context.Context, id, tenantID string) error {
+func (r *ArticleRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
 	const q = `DELETE FROM articles WHERE id = $1 AND tenant_id = $2`
 
 	ct, err := r.db.Exec(ctx, q, id, tenantID)
@@ -120,12 +126,16 @@ func (r *ArticleRepo) Delete(ctx context.Context, id, tenantID string) error {
 // scanArticle scans an article from a pgx.Row-like scanner.
 func scanArticle(row pgx.Row) (*domainarticle.Article, error) {
 	var a domainarticle.Article
-	if err := row.Scan(&a.ID, &a.TenantID, &a.Title, &a.Content, &a.Category, &a.Tags, &a.Published, &a.CreatedBy, &a.CreatedAt, &a.UpdatedAt, &a.AuthorName); err != nil {
+	var id, tid, createdBy pgtype.UUID
+	if err := row.Scan(&id, &tid, &a.Title, &a.Content, &a.Category, &a.Tags, &a.Published, &createdBy, &a.CreatedAt, &a.UpdatedAt, &a.AuthorName); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, domainarticle.ErrNotFound
 		}
 		return nil, fmt.Errorf("article_repo: scan: %w", err)
 	}
+	a.ID = pgToUUID(id)
+	a.TenantID = pgToUUID(tid)
+	a.CreatedBy = pgToUUID(createdBy)
 	return &a, nil
 }
 

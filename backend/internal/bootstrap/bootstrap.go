@@ -7,13 +7,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
 )
 
-const (
-	defaultTenantID = "00000000-0000-0000-0000-000000000001"
+var (
+	defaultTenantID   = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	defaultTenantSlug = "default"
 )
 

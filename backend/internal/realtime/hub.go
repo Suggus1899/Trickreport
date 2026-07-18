@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"sync"
 
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
 )
 
@@ -12,7 +13,7 @@ type Hub struct {
 	// Registered clients mapped by tenant_id.
 	// We want to broadcast only to clients belonging to the same tenant.
 	// Structure: map[tenant_id]map[*Client]bool
-	clients map[string]map[*Client]bool
+	clients map[uuid.UUID]map[*Client]bool
 
 	// Inbound messages from the clients.
 	Broadcast chan BroadcastPayload
@@ -28,7 +29,7 @@ type Hub struct {
 
 func NewHub() *Hub {
 	return &Hub{
-		clients:    make(map[string]map[*Client]bool),
+		clients:    make(map[uuid.UUID]map[*Client]bool),
 		Broadcast:  make(chan BroadcastPayload),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
@@ -46,7 +47,7 @@ func (h *Hub) Run() {
 			}
 			h.clients[client.TenantID][client] = true
 			h.mu.Unlock()
-			log.Debug().Str("tenant_id", client.TenantID).Str("user_id", client.UserID).Msg("Client connected")
+			log.Debug().Str("tenant_id", client.TenantID.String()).Str("user_id", client.UserID.String()).Msg("Client connected")
 
 		case client := <-h.Unregister:
 			h.mu.Lock()
@@ -57,7 +58,7 @@ func (h *Hub) Run() {
 					if len(h.clients[client.TenantID]) == 0 {
 						delete(h.clients, client.TenantID)
 					}
-					log.Debug().Str("tenant_id", client.TenantID).Str("user_id", client.UserID).Msg("Client disconnected")
+					log.Debug().Str("tenant_id", client.TenantID.String()).Str("user_id", client.UserID.String()).Msg("Client disconnected")
 				}
 			}
 			h.mu.Unlock()
@@ -79,7 +80,7 @@ func (h *Hub) Run() {
 }
 
 // BroadcastEvent is a helper to encode and send a structured event.
-func (h *Hub) BroadcastEvent(tenantID string, eventType EventType, data any) {
+func (h *Hub) BroadcastEvent(tenantID uuid.UUID, eventType EventType, data any) {
 	msg := Message{
 		Type:     eventType,
 		TenantID: tenantID,

@@ -23,7 +23,7 @@ func (h *AnalyticsHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 
 	summary, err := h.svc.GetSummary(r.Context(), tenantID)
 	if err != nil {
-		log.Error().Err(err).Str("tenant_id", tenantID).Msg("analytics summary failed")
+		log.Error().Err(err).Str("tenant_id", tenantID.String()).Msg("analytics summary failed")
 		response.Error(w, http.StatusInternalServerError, "failed to get metrics")
 		return
 	}
