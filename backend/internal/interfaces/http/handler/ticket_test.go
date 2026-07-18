@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -40,7 +41,7 @@ func (m *tMockRepo) Create(ctx context.Context, t *domainTicket.Ticket) error {
 	m.createCalls++
 	return m.err
 }
-func (m *tMockRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error) {
+func (m *tMockRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, version int, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error) {
 	if m.updateErr != nil {
 		return nil, m.updateErr
 	}
@@ -48,6 +49,9 @@ func (m *tMockRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, st
 }
 func (m *tMockRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userID uuid.UUID) error {
 	return m.assignErr
+}
+func (m *tMockRepo) SetSLADeadline(ctx context.Context, id, tenantID uuid.UUID, deadline time.Time) error {
+	return nil
 }
 func (m *tMockRepo) GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid.UUID, error) {
 	return uuid.Nil, nil

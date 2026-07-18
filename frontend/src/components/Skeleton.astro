@@ -1,0 +1,17 @@
+---
+// Animated neu-sunken placeholder block for loading states.
+export interface Props {
+  width?: string;
+  height?: string;
+  rounded?: string;
+  class?: string;
+}
+
+const { width = '100%', height = '1rem', rounded = 'var(--radius-sm)', class: className = '' } = Astro.props;
+---
+
+<div
+  class={`skeleton ${className}`}
+  style={`width:${width};height:${height};border-radius:${rounded};`}
+  aria-hidden="true"
+></div>

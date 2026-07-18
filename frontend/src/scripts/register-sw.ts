@@ -33,6 +33,29 @@ export function registerServiceWorker(): void {
     if (event.data && event.data.type === 'SYNC_TICKETS') {
       window.dispatchEvent(new CustomEvent('trickreport:sync-tickets'));
     }
+    if (event.data && event.data.type === 'NEW_VERSION_CACHED') {
+      window.dispatchEvent(new CustomEvent('trickreport:update-available'));
+      showUpdateBanner();
+    }
+  });
+
+  // Also detect controller change (new SW took over).
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    showUpdateBanner();
+  });
+}
+
+function showUpdateBanner(): void {
+  if (document.getElementById('trickreport-update-banner')) return;
+  const banner = document.createElement('div');
+  banner.id = 'trickreport-update-banner';
+  banner.className = 'update-banner';
+  banner.innerHTML =
+    '<span>A new version of Trickreport is available.</span>' +
+    '<button type="button">Reload</button>';
+  document.body.appendChild(banner);
+  banner.querySelector('button')?.addEventListener('click', () => {
+    window.location.reload();
   });
 }
 

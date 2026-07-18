@@ -102,6 +102,12 @@ func (h *UserHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate password complexity before calling the service
+	if err := user.ValidatePasswordComplexity(req.Password); err != nil {
+		response.Error(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	u, err := h.svc.Create(r.Context(), appUser.CreateInput{
 		TenantID: tenantID,
 		Name:     req.Name,

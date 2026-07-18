@@ -73,6 +73,26 @@ func (r *SLARepo) Upsert(ctx context.Context, p *domainsla.Policy) error {
 	return nil
 }
 
+// GetByPriority returns the SLA policy for a tenant and priority, or
+// pgx.ErrNoRows (wrapped) if none exists.
+func (r *SLARepo) GetByPriority(ctx context.Context, tenantID uuid.UUID, priority string) (*domainsla.Policy, error) {
+	const q = `SELECT id, tenant_id, priority, response_time_minutes, resolution_time_minutes, escalation_minutes, created_at, updated_at FROM sla_policies WHERE tenant_id = $1 AND priority = $2`
+
+	var p domainsla.Policy
+	var id, tid pgtype.UUID
+	err := r.db.QueryRow(ctx, q, tenantID, priority).
+		Scan(&id, &tid, &p.Priority, &p.ResponseTimeMinutes, &p.ResolutionTimeMinutes, &p.EscalationMinutes, &p.CreatedAt, &p.UpdatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, fmt.Errorf("sla_repo.GetByPriority: not found: %w", err)
+		}
+		return nil, fmt.Errorf("sla_repo.GetByPriority: %w", err)
+	}
+	p.ID = pgToUUID(id)
+	p.TenantID = pgToUUID(tid)
+	return &p, nil
+}
+
 // ---------------------------------------------------------------------------
 // AutomationRepo
 // ---------------------------------------------------------------------------

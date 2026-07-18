@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -13,12 +14,29 @@ import (
 	appAuto "github.com/trickreport/backend/internal/application/automation"
 )
 
+// Metrics holds atomic counters for worker observability.
+type Metrics struct {
+	BreachesDetected int64
+	AutomationsRun   int64
+	Errors           int64
+}
+
+// Snapshot returns a copy of the current metric values.
+func (m *Metrics) Snapshot() (breaches, automations, errors int64) {
+	return atomic.LoadInt64(&m.BreachesDetected),
+		atomic.LoadInt64(&m.AutomationsRun),
+		atomic.LoadInt64(&m.Errors)
+}
+
 // Worker checks for SLA breaches and runs automations in the background.
 type Worker struct {
 	db           *pgxpool.Pool
 	systemUserID uuid.UUID
 	interval     time.Duration
 	engine       *appAuto.Engine
+	maxRetries   int
+
+	metrics Metrics
 
 	wg sync.WaitGroup
 }
@@ -43,12 +61,19 @@ func WithEngine(engine *appAuto.Engine) Option {
 	return func(w *Worker) { w.engine = engine }
 }
 
+// WithRetry sets the maximum number of retries for the SLA breach check.
+// Defaults to 0 (no retries).
+func WithRetry(maxRetries int) Option {
+	return func(w *Worker) { w.maxRetries = maxRetries }
+}
+
 // New creates a Worker. Pass options to customize behavior.
 func New(db *pgxpool.Pool, opts ...Option) *Worker {
 	w := &Worker{
 		db:           db,
 		systemUserID: uuid.MustParse("00000000-0000-0000-0000-000000000002"),
 		interval:     1 * time.Minute,
+		maxRetries:   0,
 	}
 	for _, opt := range opts {
 		opt(w)
@@ -75,13 +100,50 @@ func (w *Worker) Start(ctx context.Context) {
 			w.wg.Add(1)
 			func() {
 				defer w.wg.Done()
-				w.checkSLABreaches(ctx)
+				w.runWithRetry(ctx, w.checkSLABreachesErr)
 			}()
 		}
 	}
 }
 
-func (w *Worker) checkSLABreaches(ctx context.Context) {
+// runWithRetry executes fn with retry logic and exponential backoff
+// (1s, 2s, 4s). If fn returns an error, it is retried up to maxRetries times.
+func (w *Worker) runWithRetry(ctx context.Context, fn func(ctx context.Context) error) {
+	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
+	for attempt := 0; ; attempt++ {
+		if err := fn(ctx); err == nil {
+			return
+		} else {
+			atomic.AddInt64(&w.metrics.Errors, 1)
+			if attempt >= w.maxRetries {
+				log.Error().Int("attempt", attempt+1).Msg("Worker check failed after max retries")
+				return
+			}
+			backoff := backoffs[attempt%len(backoffs)]
+			log.Warn().Int("attempt", attempt+1).Dur("backoff", backoff).Msg("Worker check failed — retrying")
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+		}
+	}
+}
+
+// HealthCheck verifies database connectivity. Returns nil if the database is
+// reachable.
+func (w *Worker) HealthCheck() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	return w.db.Ping(ctx)
+}
+
+// checkSLABreachesErr wraps checkSLABreaches to return an error for retry logic.
+func (w *Worker) checkSLABreachesErr(ctx context.Context) error {
+	return w.checkSLABreaches(ctx)
+}
+
+func (w *Worker) checkSLABreaches(ctx context.Context) error {
 	q := `
 		WITH breached_tickets AS (
 			SELECT t.id, t.tenant_id, t.priority, s.resolution_time_minutes
@@ -100,7 +162,7 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 	rows, err := w.db.Query(ctx, q)
 	if err != nil {
 		log.Error().Err(err).Msg("Worker failed to check SLA breaches")
-		return
+		return err
 	}
 	defer rows.Close()
 
@@ -108,6 +170,7 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 	for rows.Next() {
 		var id, tenantID pgtype.UUID
 		if err := rows.Scan(&id, &tenantID); err != nil {
+			atomic.AddInt64(&w.metrics.Errors, 1)
 			log.Error().Err(err).Msg("Worker failed to scan breached ticket row")
 			continue
 		}
@@ -125,6 +188,7 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 			INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
 			VALUES ($1, $2, 'SYSTEM: SLA Resolution Time Breached', TRUE)
 		`, id, w.systemUserID); err != nil {
+			atomic.AddInt64(&w.metrics.Errors, 1)
 			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach comment")
 		}
 
@@ -132,6 +196,7 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 			INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value)
 			VALUES ($1, $2, 'sla_breached', 'false', 'true')
 		`, id, w.systemUserID); err != nil {
+			atomic.AddInt64(&w.metrics.Errors, 1)
 			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach history")
 		}
 
@@ -146,12 +211,17 @@ func (w *Worker) checkSLABreaches(ctx context.Context) {
 				NewValue: "true",
 			}
 			if err := w.engine.Evaluate(ctx, uuid.UUID(tenantID.Bytes), event); err != nil {
+				atomic.AddInt64(&w.metrics.Errors, 1)
 				log.Error().Err(err).Str("ticket_id", ticketIDStr).Str("tenant_id", tenantIDStr).Msg("Worker failed to evaluate automations for SLA breach")
+			} else {
+				atomic.AddInt64(&w.metrics.AutomationsRun, 1)
 			}
 		}
 	}
 
 	if breachCount > 0 {
+		atomic.AddInt64(&w.metrics.BreachesDetected, int64(breachCount))
 		log.Info().Int("breached_tickets", breachCount).Msg("SLA breaches detected and marked")
 	}
+	return nil
 }

@@ -107,6 +107,12 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 			response.Error(w, http.StatusNotFound, "ticket not found")
 		case errors.Is(err, ticket.ErrForbidden):
 			response.Error(w, http.StatusForbidden, "not allowed to access this ticket")
+		case errors.Is(err, appTicket.ErrFileTooLarge):
+			response.Error(w, http.StatusRequestEntityTooLarge, err.Error())
+		case errors.Is(err, appTicket.ErrInvalidContent):
+			response.Error(w, http.StatusUnsupportedMediaType, err.Error())
+		case errors.Is(err, appTicket.ErrEmptyFilename):
+			response.Error(w, http.StatusBadRequest, err.Error())
 		default:
 			response.Error(w, http.StatusInternalServerError, "failed to upload attachment")
 		}

@@ -1,4 +1,27 @@
+# To enable HTTPS with a real domain, replace `:80` with your domain, e.g.:
+#   trickreport.example.com {
+# Caddy will automatically provision and renew TLS certificates via Let's
+# Encrypt. Keep `:80` for local-only / on-premise deployments without DNS.
+
 :80 {
+	# Compression
+	encode gzip
+
+	# Security headers
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		# HSTS — only meaningful over HTTPS; uncomment after enabling TLS.
+		# Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	}
+
+	# Access logging
+	log {
+		output stdout
+		format json
+	}
+
 	# API and infrastructure endpoints → backend
 	handle /api/* {
 		reverse_proxy backend:8080
@@ -11,6 +34,15 @@
 	}
 	handle /ready {
 		reverse_proxy backend:8080
+	}
+
+	# Static assets — cache-friendly headers
+	@static {
+		path *.js *.css *.woff2 *.png *.jpg *.jpeg *.gif *.svg *.ico *.webp
+	}
+	handle @static {
+		header Cache-Control "public, max-age=31536000, immutable"
+		reverse_proxy frontend:4321
 	}
 
 	# Everything else → frontend (Astro standalone server)

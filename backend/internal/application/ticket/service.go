@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	appAuto "github.com/trickreport/backend/internal/application/automation"
+	domainSLA "github.com/trickreport/backend/internal/domain/sla"
 	domainTicket "github.com/trickreport/backend/internal/domain/ticket"
 )
 
@@ -13,6 +14,23 @@ import (
 // Implemented by the automation engine.
 type AutomationEvaluator interface {
 	Evaluate(ctx context.Context, tenantID uuid.UUID, event appAuto.Event) error
+}
+
+// TxManager is the port for running operations inside a database transaction.
+// The transaction is propagated to repositories via the context.
+//
+// TODO(wire): wire TxManager into wire.go's NewServices and pass it to the
+// ticket service via SetTxManager.
+type TxManager interface {
+	RunInTx(ctx context.Context, fn func(ctx context.Context) error) error
+}
+
+// SLAPolicyFetcher is the port for fetching SLA policies by priority.
+//
+// TODO(wire): wire SLAPolicyFetcher into wire.go's NewServices and pass it
+// to the ticket service via SetSLAPolicyFetcher.
+type SLAPolicyFetcher interface {
+	GetByPriority(ctx context.Context, tenantID uuid.UUID, priority string) (*domainSLA.Policy, error)
 }
 
 // Filter holds query parameters for listing tickets.
@@ -30,8 +48,9 @@ type Repository interface {
 	List(ctx context.Context, tenantID uuid.UUID, filter Filter, role string, userID uuid.UUID) ([]domainTicket.Ticket, error)
 	GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainTicket.Ticket, error)
 	Create(ctx context.Context, t *domainTicket.Ticket) error
-	UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error)
+	UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, version int, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error)
 	Assign(ctx context.Context, id, tenantID, assignedTo, userID uuid.UUID) error
+	SetSLADeadline(ctx context.Context, id, tenantID uuid.UUID, deadline time.Time) error
 	GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid.UUID, error)
 }
 
@@ -58,12 +77,14 @@ type EmailNotifier interface {
 
 // UserService is the application service for ticket operations.
 type UserService struct {
-	repo     Repository
-	comments CommentRepository
-	history  HistoryRepository
-	hub      EventBroadcaster
-	email    EmailNotifier
-	engine   AutomationEvaluator
+	repo        Repository
+	comments    CommentRepository
+	history     HistoryRepository
+	hub         EventBroadcaster
+	email       EmailNotifier
+	engine      AutomationEvaluator
+	tx          TxManager
+	slaFetcher  SLAPolicyFetcher
 }
 
 // NewService creates a new ticket application service.
@@ -81,6 +102,18 @@ func NewService(repo Repository, comments CommentRepository, history HistoryRepo
 // events are evaluated against automation rules.
 func (s *UserService) SetEngine(engine AutomationEvaluator) {
 	s.engine = engine
+}
+
+// SetTxManager wires the transaction manager. When set, Create and
+// ChangeStatus wrap their persistence calls in a single transaction.
+func (s *UserService) SetTxManager(tx TxManager) {
+	s.tx = tx
+}
+
+// SetSLAPolicyFetcher wires the SLA policy fetcher. When set, Create
+// calculates and persists the SLA deadline based on the tenant's policy.
+func (s *UserService) SetSLAPolicyFetcher(f SLAPolicyFetcher) {
+	s.slaFetcher = f
 }
 
 // evaluateAutomation fires an automation event asynchronously.
@@ -156,8 +189,42 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 		UpdatedAt:   time.Now(),
 	}
 
-	if err := s.repo.Create(ctx, t); err != nil {
-		return nil, err
+	// Fetch the SLA policy (read, outside the transaction) to calculate the
+	// resolution deadline.
+	var slaDeadline *time.Time
+	if s.slaFetcher != nil {
+		policy, err := s.slaFetcher.GetByPriority(ctx, input.TenantID, string(priority))
+		if err == nil && policy != nil && policy.ResolutionTimeMinutes > 0 {
+			d := t.CreatedAt.Add(time.Duration(policy.ResolutionTimeMinutes) * time.Minute)
+			slaDeadline = &d
+		}
+	}
+
+	// Persist the ticket (and SLA deadline) inside a transaction.
+	persist := func(ctx context.Context) error {
+		if err := s.repo.Create(ctx, t); err != nil {
+			return err
+		}
+		if slaDeadline != nil {
+			if err := s.repo.SetSLADeadline(ctx, t.ID, input.TenantID, *slaDeadline); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+
+	if s.tx != nil {
+		if err := s.tx.RunInTx(ctx, persist); err != nil {
+			return nil, err
+		}
+	} else {
+		if err := persist(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	if slaDeadline != nil {
+		t.SLADeadline = slaDeadline
 	}
 
 	if s.hub != nil {
@@ -193,13 +260,26 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uui
 	}
 
 	oldStatus := string(t.Status)
+	version := t.Version
 
 	if err := t.ChangeStatus(status); err != nil {
 		return err
 	}
 
-	if _, err := s.repo.UpdateStatus(ctx, id, tenantID, status, userID); err != nil {
+	// Persist the status update (and history insertion) inside a transaction.
+	persist := func(ctx context.Context) error {
+		_, err := s.repo.UpdateStatus(ctx, id, tenantID, version, status, userID)
 		return err
+	}
+
+	if s.tx != nil {
+		if err := s.tx.RunInTx(ctx, persist); err != nil {
+			return err
+		}
+	} else {
+		if err := persist(ctx); err != nil {
+			return err
+		}
 	}
 
 	if s.hub != nil {

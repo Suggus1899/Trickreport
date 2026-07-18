@@ -1,0 +1,35 @@
+# Prometheus alerting rules for Trickreport.
+#
+# These rules fire when the backend is unreachable or reports a high error rate
+# via its /metrics endpoint.
+
+groups:
+  - name: trickreport-service
+    rules:
+      # Fires when no successful scrape of the backend has occurred for ~1 minute.
+      - alert: TrickreportBackendDown
+        expr: up{job="trickreport-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          service: backend
+        annotations:
+          summary: "Trickreport backend is down"
+          description: "Prometheus has been unable to scrape the backend /metrics endpoint for {{ $labels.instance }} for more than 1 minute."
+
+      # Fires when the backend reports an elevated HTTP error rate (5xx).
+      # Requires the backend to expose a metric such as
+      # `http_requests_total{status=~"5.."}` or equivalent.
+      - alert: TrickreportHighErrorRate
+        expr: |
+          sum(rate(http_requests_total{job="trickreport-backend",status=~"5.."}[5m]))
+            /
+          sum(rate(http_requests_total{job="trickreport-backend"}[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: "High error rate on Trickreport backend"
+          description: "More than 5% of requests to the backend returned 5xx errors over the last 5 minutes."

@@ -44,6 +44,9 @@ type authMockTokenGen struct {
 func (m *authMockTokenGen) Generate(userID, tenantID uuid.UUID, role string) (string, error) {
 	return m.token, m.err
 }
+func (m *authMockTokenGen) GenerateRefresh(userID, tenantID uuid.UUID, role string) (string, error) {
+	return "refresh-" + m.token, m.err
+}
 func (m *authMockTokenGen) Validate(token string) (*appAuth.Claims, error) {
 	return nil, errors.New("invalid")
 }

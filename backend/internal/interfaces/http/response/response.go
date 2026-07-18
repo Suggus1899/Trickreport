@@ -23,3 +23,8 @@ func Error(w http.ResponseWriter, status int, msg string) {
 func NoContent(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// ErrorBody is the JSON error response shape, used for OpenAPI/Swagger docs.
+type ErrorBody struct {
+	Error string `json:"error" example:"error message"`
+}

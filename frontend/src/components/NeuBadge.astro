@@ -17,6 +17,6 @@ const variants: Record<string, string> = {
 const classes = `inline-flex items-center px-3 py-1 rounded-full text-xs font-bold neu-convex ${variants[variant]} ${className}`;
 ---
 
-<span class={classes}>
+<span class={classes} role="status">
   <slot />
 </span>

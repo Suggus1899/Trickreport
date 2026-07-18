@@ -7,9 +7,28 @@ export interface Props {
   required?: boolean;
   value?: string;
   class?: string;
+  error?: string;
+  helperText?: string;
+  maxChars?: number;
 }
 
-const { name, label, type = 'text', placeholder, required, value = '', class: className = '' } = Astro.props;
+const {
+  name,
+  label,
+  type = 'text',
+  placeholder,
+  required,
+  value = '',
+  class: className = '',
+  error = '',
+  helperText = '',
+  maxChars,
+} = Astro.props;
+
+const helperId = `${name}-helper`;
+const errorId = `${name}-error`;
+const describedBy = error ? errorId : helperText ? helperId : undefined;
+const inputClass = error ? 'neu-input-error' : '';
 ---
 
 <div class={`flex flex-col gap-2 ${className}`}>
@@ -19,8 +38,56 @@ const { name, label, type = 'text', placeholder, required, value = '', class: cl
     </label>
   )}
   {type === 'textarea' ? (
-    <textarea id={name} name={name} placeholder={placeholder} required={required} rows="4">{value}</textarea>
+    <textarea
+      id={name}
+      name={name}
+      placeholder={placeholder}
+      required={required}
+      rows="4"
+      class={inputClass}
+      aria-invalid={error ? 'true' : undefined}
+      aria-describedby={describedBy}
+      maxlength={maxChars}
+    >{value}</textarea>
   ) : (
-    <input id={name} name={name} type={type} placeholder={placeholder} required={required} value={value} />
+    <input
+      id={name}
+      name={name}
+      type={type}
+      placeholder={placeholder}
+      required={required}
+      value={value}
+      class={inputClass}
+      aria-invalid={error ? 'true' : undefined}
+      aria-describedby={describedBy}
+      maxlength={maxChars}
+    />
+  )}
+  {maxChars && (
+    <div class="flex items-center">
+      <span class="neu-char-count" data-char-count-for={name}>{(value || '').length}/{maxChars}</span>
+    </div>
+  )}
+  {error && (
+    <p id={errorId} class="neu-input-error-text">{error}</p>
+  )}
+  {!error && helperText && (
+    <p id={helperId} class="neu-input-helper">{helperText}</p>
   )}
 </div>
+
+<script>
+  document.querySelectorAll<HTMLElement>('[data-char-count-for]').forEach((counter) => {
+    const targetId = counter.dataset.charCountFor;
+    if (!targetId) return;
+    const input = document.getElementById(targetId) as HTMLInputElement | HTMLTextAreaElement | null;
+    if (!input) return;
+    const max = input.getAttribute('maxlength');
+    if (!max) return;
+    const update = () => {
+      counter.textContent = `${(input.value || '').length}/${max}`;
+    };
+    input.addEventListener('input', update);
+    update();
+  });
+</script>

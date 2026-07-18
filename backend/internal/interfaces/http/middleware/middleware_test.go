@@ -34,6 +34,10 @@ func (m *mockTokenGen) Generate(userID, tenantID uuid.UUID, role string) (string
 	return "token", nil
 }
 
+func (m *mockTokenGen) GenerateRefresh(userID, tenantID uuid.UUID, role string) (string, error) {
+	return "refresh-token", nil
+}
+
 func (m *mockTokenGen) Validate(token string) (*auth.Claims, error) {
 	m.got = token
 	return m.claims, m.err

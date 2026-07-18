@@ -88,7 +88,7 @@ func TestAttachmentService_Upload_Forbidden(t *testing.T) {
 
 	_, err := svc.Upload(context.Background(), UploadInput{
 		TenantID: tk.TenantID, TicketID: tk.ID, UserID: uuid.New(), Role: "end_user",
-		Filename: "file.png", FileData: []byte("x"),
+		Filename: "file.png", ContentType: "image/png", FileData: []byte("x"),
 	})
 	if !errors.Is(err, domainTicket.ErrForbidden) {
 		t.Errorf("expected ErrForbidden, got %v", err)
@@ -105,7 +105,7 @@ func TestAttachmentService_Upload_TicketNotFound(t *testing.T) {
 
 	_, err := svc.Upload(context.Background(), UploadInput{
 		TicketID: uuid.New(), TenantID: uuid.New(), UserID: uuid.New(), Role: "agent",
-		Filename: "f", FileData: []byte("x"),
+		Filename: "f", ContentType: "image/png", FileData: []byte("x"),
 	})
 	if !errors.Is(err, domainTicket.ErrNotFound) {
 		t.Errorf("expected ErrNotFound, got %v", err)
@@ -121,7 +121,7 @@ func TestAttachmentService_Upload_CreateError(t *testing.T) {
 
 	_, err := svc.Upload(context.Background(), UploadInput{
 		TenantID: tk.TenantID, TicketID: tk.ID, UserID: creator, Role: "end_user",
-		Filename: "f", FileData: []byte("x"),
+		Filename: "f", ContentType: "image/png", FileData: []byte("x"),
 	})
 	if err == nil {
 		t.Fatal("expected error")

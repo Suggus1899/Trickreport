@@ -10,6 +10,11 @@ if (!token) {
   return Astro.redirect('/login');
 }
 
+// Read filter params from URL.
+const statusFilter = Astro.url.searchParams.get('status') || '';
+const priorityFilter = Astro.url.searchParams.get('priority') || '';
+const search = Astro.url.searchParams.get('q') || '';
+
 let user;
 let tickets;
 let error = '';
@@ -35,21 +40,77 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
   high: 'warning',
   critical: 'danger',
 };
+
+// Apply filters client-side (API may not support query params yet).
+let filteredTickets = tickets || [];
+if (statusFilter) {
+  filteredTickets = filteredTickets.filter((t) => t.status === statusFilter);
+}
+if (priorityFilter) {
+  filteredTickets = filteredTickets.filter((t) => t.priority === priorityFilter);
+}
+if (search) {
+  const q = search.toLowerCase();
+  filteredTickets = filteredTickets.filter(
+    (t) => t.title.toLowerCase().includes(q) || (t.description || '').toLowerCase().includes(q),
+  );
+}
+
+const hasFilters = statusFilter || priorityFilter || search;
+
+const ticketsJson = JSON.stringify(filteredTickets || []);
 ---
 
 <Layout title="Tickets" user={user ? { name: user.name, role: user.role } : undefined}>
   <div class="max-w-6xl mx-auto">
-    <div class="flex items-center justify-between mb-8">
+    <div class="flex items-center justify-between mb-8 flex-wrap gap-3">
       <div>
         <h1 class="text-3xl font-bold">Tickets</h1>
         <p class="text-muted">Manage support requests</p>
       </div>
-      <NeuButton href="/tickets/new" variant="accent" size="md">New Ticket</NeuButton>
+      <div class="flex items-center gap-3">
+        <NeuButton id="export-csv" variant="raised" size="md">Export CSV</NeuButton>
+        <NeuButton href="/tickets/new" variant="accent" size="md">New Ticket</NeuButton>
+      </div>
     </div>
 
     {error && (
       <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
     )}
+
+    <NeuCard class="mb-6">
+      <form method="GET" class="flex flex-col gap-3 sm:flex-row sm:items-end gap-5">
+        <div class="flex flex-col gap-2 flex-1">
+          <label for="q" class="text-sm font-semibold text-main ml-1">Search</label>
+          <input id="q" name="q" type="text" placeholder="Search title or description..." value={search} />
+        </div>
+        <div class="flex flex-col gap-2">
+          <label for="status" class="text-sm font-semibold text-main ml-1">Status</label>
+          <select id="status" name="status">
+            <option value="">All</option>
+            <option value="open" selected={statusFilter === 'open'}>Open</option>
+            <option value="in_progress" selected={statusFilter === 'in_progress'}>In Progress</option>
+            <option value="waiting_client" selected={statusFilter === 'waiting_client'}>Waiting Client</option>
+            <option value="resolved" selected={statusFilter === 'resolved'}>Resolved</option>
+            <option value="closed" selected={statusFilter === 'closed'}>Closed</option>
+          </select>
+        </div>
+        <div class="flex flex-col gap-2">
+          <label for="priority" class="text-sm font-semibold text-main ml-1">Priority</label>
+          <select id="priority" name="priority">
+            <option value="">All</option>
+            <option value="low" selected={priorityFilter === 'low'}>Low</option>
+            <option value="medium" selected={priorityFilter === 'medium'}>Medium</option>
+            <option value="high" selected={priorityFilter === 'high'}>High</option>
+            <option value="critical" selected={priorityFilter === 'critical'}>Critical</option>
+          </select>
+        </div>
+        <NeuButton type="submit" variant="accent" size="md">Filter</NeuButton>
+        {hasFilters && (
+          <a href="/tickets" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-muted hover:text-main">Clear</a>
+        )}
+      </form>
+    </NeuCard>
 
     <NeuCard class="overflow-hidden p-0">
       <table class="w-full text-left">
@@ -62,7 +123,7 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
           </tr>
         </thead>
         <tbody class="divide-y">
-          {tickets && tickets.length > 0 ? tickets.map((ticket) => (
+          {filteredTickets.length > 0 ? filteredTickets.map((ticket) => (
             <tr class="hover:bg-white/30 transition-colors">
               <td class="px-6 py-4">
                 <a href={`/tickets/${ticket.id}`} class="font-semibold text-main hover:text-accent">
@@ -83,7 +144,7 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
           )) : (
             <tr>
               <td colspan="4" class="px-6 py-12 text-center text-muted">
-                No tickets yet. Create one to get started.
+                {hasFilters ? 'No tickets match your filters.' : 'No tickets yet. Create one to get started.'}
               </td>
             </tr>
           )}
@@ -91,4 +152,43 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
       </table>
     </NeuCard>
   </div>
+
+  <script is:inline define:vars={{ ticketsJson }}>
+    (function () {
+      const tickets = JSON.parse(ticketsJson);
+      const btn = document.getElementById('export-csv');
+      if (!btn) return;
+      btn.addEventListener('click', () => {
+        if (!tickets.length) { alert('No tickets to export.'); return; }
+        const rows = tickets.map((t) => ({
+          id: t.id,
+          title: t.title,
+          status: t.status,
+          priority: t.priority,
+          category: t.category,
+          created_by: t.creator_name || t.created_by,
+          assigned_to: t.assignee_name || t.assigned_to || '',
+          sla_breached: t.sla_breached,
+          created_at: t.created_at,
+          updated_at: t.updated_at,
+        }));
+        const headers = Object.keys(rows[0]);
+        const esc = (v) => {
+          if (v === null || v === undefined) return '';
+          const s = String(v);
+          return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+        };
+        const lines = [headers.join(',')].concat(rows.map((r) => headers.map((h) => esc(r[h])).join(',')));
+        const blob = new Blob([lines.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `tickets-${new Date().toISOString().slice(0, 10)}.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+    })();
+  </script>
 </Layout>

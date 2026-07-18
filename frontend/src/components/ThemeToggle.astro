@@ -1,0 +1,57 @@
+---
+// Theme toggle button. Toggles `.dark` class on <html>, persists choice to
+// localStorage, and respects the system preference on first load.
+---
+
+<button
+  id="theme-toggle"
+  class="theme-toggle neu-transition inline-flex items-center justify-center w-10 h-10 rounded-full neu-raised neu-convex text-main"
+  aria-label="Toggle dark mode"
+  type="button"
+>
+  <span class="theme-icon-light" aria-hidden="true">☀</span>
+  <span class="theme-icon-dark" aria-hidden="true">☾</span>
+</button>
+
+<style>
+  .theme-toggle:active {
+    box-shadow: var(--shadow-sunken);
+    transform: translateY(1px);
+  }
+  .theme-icon-dark { display: none; }
+  .theme-icon-light { display: inline; }
+  :global(.dark) .theme-icon-dark { display: inline; }
+  :global(.dark) .theme-icon-light { display: none; }
+</style>
+
+<script>
+  function applyTheme(theme: 'light' | 'dark') {
+    const root = document.documentElement;
+    if (theme === 'dark') {
+      root.classList.add('dark');
+      root.classList.remove('light');
+    } else {
+      root.classList.remove('dark');
+      root.classList.add('light');
+    }
+  }
+
+  function initTheme() {
+    const stored = localStorage.getItem('trickreport-theme');
+    if (stored === 'light' || stored === 'dark') {
+      applyTheme(stored);
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      applyTheme('dark');
+    }
+  }
+
+  initTheme();
+
+  const btn = document.getElementById('theme-toggle');
+  btn?.addEventListener('click', () => {
+    const isDark = document.documentElement.classList.contains('dark');
+    const next = isDark ? 'light' : 'dark';
+    applyTheme(next);
+    localStorage.setItem('trickreport-theme', next);
+  });
+</script>

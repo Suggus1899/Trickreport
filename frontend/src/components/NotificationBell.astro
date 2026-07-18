@@ -1,0 +1,240 @@
+---
+// Bell icon with unread badge and a dropdown panel of recent notifications.
+// Polls /api/v1/notifications on load and opens a WebSocket for real-time
+// updates when available. Falls back to periodic polling otherwise.
+import { API_URL } from '../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value || '';
+// Derive a WebSocket URL from the API base (ws:// or wss://).
+const wsUrl = API_URL
+  ? API_URL.replace(/^http/, 'ws') + '/ws/notifications'
+  : `${new URL(Astro.url.href).origin.replace(/^http/, 'ws')}/ws/notifications`;
+---
+
+<div class="notif-bell" id="notif-bell">
+  <button type="button" id="notif-toggle" class="notif-toggle" aria-label="Notifications" aria-haspopup="true" aria-expanded="false">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+      <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+    </svg>
+    <span id="notif-badge" class="notif-badge" style="display:none;">0</span>
+  </button>
+  <div id="notif-panel" class="notif-panel" style="display:none;" role="dialog" aria-label="Notifications">
+    <div class="notif-header">
+      <span class="notif-title">Notifications</span>
+      <button type="button" id="notif-markall" class="notif-markall">Mark all read</button>
+    </div>
+    <div id="notif-list" class="notif-list"></div>
+  </div>
+</div>
+
+<style>
+  .notif-bell { position: relative; }
+  .notif-toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    border-radius: var(--radius-full);
+    background: var(--bg-base);
+    box-shadow: var(--shadow-convex);
+    color: var(--text-main);
+    border: none;
+    cursor: pointer;
+    transition: box-shadow 0.2s ease;
+  }
+  .notif-toggle:hover { box-shadow: var(--shadow-raised); }
+  .notif-toggle:active { box-shadow: var(--shadow-sunken); transform: translateY(1px); }
+  .notif-badge {
+    position: absolute;
+    top: -0.15rem;
+    right: -0.15rem;
+    min-width: 1.1rem;
+    height: 1.1rem;
+    padding: 0 0.3rem;
+    border-radius: var(--radius-full);
+    background: var(--danger);
+    color: #fff;
+    font-size: 0.65rem;
+    font-weight: 700;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+  }
+  .notif-panel {
+    position: absolute;
+    top: calc(100% + 0.5rem);
+    right: 0;
+    width: 22rem;
+    max-width: 90vw;
+    z-index: 60;
+    background: var(--bg-base);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-raised);
+    padding: 0.5rem;
+    max-height: 26rem;
+    overflow-y: auto;
+  }
+  .notif-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.5rem 0.75rem;
+  }
+  .notif-title { font-weight: 700; font-size: 0.9rem; color: var(--text-main); }
+  .notif-markall {
+    background: none;
+    border: none;
+    color: var(--accent);
+    font-size: 0.75rem;
+    font-weight: 600;
+    cursor: pointer;
+    padding: 0;
+  }
+  .notif-list { display: flex; flex-direction: column; }
+  .notif-item {
+    padding: 0.625rem 0.75rem;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+  }
+  .notif-item:hover { background: rgba(109, 93, 252, 0.1); }
+  .notif-item.unread { background: rgba(109, 93, 252, 0.06); }
+  .notif-item-title { font-weight: 600; font-size: 0.85rem; color: var(--text-main); }
+  .notif-item-body { font-size: 0.78rem; color: var(--text-muted); }
+  .notif-item-time { font-size: 0.7rem; color: var(--text-muted); }
+  .notif-empty { padding: 1.25rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+</style>
+
+<script is:inline define:vars={{ API_URL, token, wsUrl }}>
+  (function () {
+    const bell = document.getElementById('notif-bell');
+    if (!bell) return;
+    const toggle = document.getElementById('notif-toggle');
+    const panel = document.getElementById('notif-panel');
+    const list = document.getElementById('notif-list');
+    const badge = document.getElementById('notif-badge');
+    const markAll = document.getElementById('notif-markall');
+    let notifications = [];
+    let open = false;
+
+    function headers() {
+      const h = { 'Content-Type': 'application/json', 'X-Tenant-ID': 'default' };
+      if (token) h['Authorization'] = 'Bearer ' + token;
+      return h;
+    }
+
+    function escapeHtml(s) {
+      return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    }
+
+    function timeAgo(iso) {
+      try {
+        const d = new Date(iso).getTime();
+        const s = Math.floor((Date.now() - d) / 1000);
+        if (s < 60) return 'just now';
+        if (s < 3600) return Math.floor(s / 60) + 'm ago';
+        if (s < 86400) return Math.floor(s / 3600) + 'h ago';
+        return Math.floor(s / 86400) + 'd ago';
+      } catch { return ''; }
+    }
+
+    function render() {
+      const unread = notifications.filter((n) => !n.read).length;
+      if (unread > 0) {
+        badge.style.display = 'flex';
+        badge.textContent = unread > 9 ? '9+' : String(unread);
+      } else {
+        badge.style.display = 'none';
+      }
+      if (!notifications.length) {
+        list.innerHTML = '<div class="notif-empty">No notifications yet.</div>';
+        return;
+      }
+      list.innerHTML = notifications.slice(0, 20).map((n) =>
+        `<div class="notif-item ${n.read ? '' : 'unread'}" data-id="${n.id}">
+          <span class="notif-item-title">${escapeHtml(n.title)}</span>
+          <span class="notif-item-body">${escapeHtml(n.body)}</span>
+          <span class="notif-item-time">${timeAgo(n.created_at)}</span>
+        </div>`
+      ).join('');
+    }
+
+    async function load() {
+      try {
+        const res = await fetch(`${API_URL}/api/v1/notifications`, { headers: headers(), credentials: 'include' });
+        if (!res.ok) return;
+        notifications = await res.json();
+        render();
+      } catch (err) { /* silent */ }
+    }
+
+    async function markRead(id) {
+      try {
+        await fetch(`${API_URL}/api/v1/notifications/${id}/read`, {
+          method: 'POST', headers: headers(), credentials: 'include',
+        });
+        const n = notifications.find((x) => x.id === id);
+        if (n) n.read = true;
+        render();
+      } catch (err) { /* silent */ }
+    }
+
+    async function markAllRead() {
+      const unread = notifications.filter((n) => !n.read);
+      for (const n of unread) { await markRead(n.id); }
+    }
+
+    toggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      open = !open;
+      panel.style.display = open ? 'block' : 'none';
+      toggle.setAttribute('aria-expanded', String(open));
+      if (open) load();
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!bell.contains(e.target)) { open = false; panel.style.display = 'none'; toggle.setAttribute('aria-expanded', 'false'); }
+    });
+
+    list.addEventListener('click', (e) => {
+      const item = e.target.closest('.notif-item');
+      if (!item) return;
+      markRead(item.getAttribute('data-id'));
+    });
+
+    markAll.addEventListener('click', (e) => { e.stopPropagation(); markAllRead(); });
+
+    // Initial load.
+    load();
+
+    // WebSocket for real-time updates (with polling fallback).
+    let ws = null;
+    function connectWs() {
+      if (!('WebSocket' in window) || !token) { return; }
+      try {
+        ws = new WebSocket(wsUrl);
+        ws.addEventListener('message', (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            if (data && (data.type === 'notification' || data.title)) {
+              notifications.unshift(data.notification || data);
+              render();
+            }
+          } catch { /* ignore non-JSON */ }
+        });
+        ws.addEventListener('close', () => { ws = null; });
+        ws.addEventListener('error', () => { try { ws.close(); } catch {} });
+      } catch { ws = null; }
+    }
+    connectWs();
+
+    // Poll every 60s as a fallback / supplement to the WebSocket.
+    setInterval(load, 60000);
+  })();
+</script>

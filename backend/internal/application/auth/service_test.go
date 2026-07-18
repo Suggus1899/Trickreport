@@ -60,13 +60,18 @@ func (m *mockLDAP) Authenticate(username, password string) (string, error) {
 }
 
 type mockTokenGen struct {
-	token      string
-	err        error
-	gotUserID  uuid.UUID
-	gotTenant  uuid.UUID
-	gotRole    string
-	validateCl *Claims
-	validateEr error
+	token            string
+	err              error
+	gotUserID        uuid.UUID
+	gotTenant        uuid.UUID
+	gotRole          string
+	validateCl       *Claims
+	validateEr       error
+	refreshToken     string
+	refreshErr       error
+	refreshGotUserID uuid.UUID
+	refreshGotTenant uuid.UUID
+	refreshGotRole   string
 }
 
 func (m *mockTokenGen) Generate(userID, tenantID uuid.UUID, role string) (string, error) {
@@ -74,6 +79,16 @@ func (m *mockTokenGen) Generate(userID, tenantID uuid.UUID, role string) (string
 	m.gotTenant = tenantID
 	m.gotRole = role
 	return m.token, m.err
+}
+
+func (m *mockTokenGen) GenerateRefresh(userID, tenantID uuid.UUID, role string) (string, error) {
+	m.refreshGotUserID = userID
+	m.refreshGotTenant = tenantID
+	m.refreshGotRole = role
+	if m.refreshToken != "" {
+		return m.refreshToken, m.refreshErr
+	}
+	return "refresh-" + m.token, m.refreshErr
 }
 
 func (m *mockTokenGen) Validate(token string) (*Claims, error) {

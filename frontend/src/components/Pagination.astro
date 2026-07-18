@@ -1,0 +1,62 @@
+---
+// Page navigation with prev/next and numbered pages, neu styling.
+export interface Props {
+  currentPage: number;
+  totalPages: number;
+  href: string;
+}
+
+const { currentPage, totalPages, href } = Astro.props;
+
+const base = href.includes('?') ? href : href;
+const sep = href.includes('?') ? '&' : '?';
+
+function pageHref(page: number): string {
+  return `${base}${sep}page=${page}`;
+}
+
+// Build a compact page list with ellipsis.
+function pageList(): (number | '...')[] {
+  const pages: (number | '...')[] = [];
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) pages.push(i);
+    return pages;
+  }
+  pages.push(1);
+  if (currentPage > 3) pages.push('...');
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
+  for (let i = start; i <= end; i++) pages.push(i);
+  if (currentPage < totalPages - 2) pages.push('...');
+  pages.push(totalPages);
+  return pages;
+}
+
+const pages = pageList();
+const hasPrev = currentPage > 1;
+const hasNext = currentPage < totalPages;
+---
+
+<nav class="neu-pagination mt-6" aria-label="Pagination">
+  {hasPrev ? (
+    <a href={pageHref(currentPage - 1)} aria-label="Previous page" rel="prev">‹</a>
+  ) : (
+    <span class="disabled" aria-disabled="true">‹</span>
+  )}
+
+  {pages.map((p) => (
+    p === '...' ? (
+      <span class="disabled">…</span>
+    ) : p === currentPage ? (
+      <span class="active" aria-current="page">{p}</span>
+    ) : (
+      <a href={pageHref(p)} aria-label={`Page ${p}`}>{p}</a>
+    )
+  ))}
+
+  {hasNext ? (
+    <a href={pageHref(currentPage + 1)} aria-label="Next page" rel="next">›</a>
+  ) : (
+    <span class="disabled" aria-disabled="true">›</span>
+  )}
+</nav>

@@ -25,6 +25,7 @@ type mockRepo struct {
 	gotRole     string
 	gotUserID   uuid.UUID
 	gotStatus   domainTicket.Status
+	gotVersion  int
 	gotAssigned uuid.UUID
 	createCalls int
 	updateCalls int
@@ -50,10 +51,11 @@ func (m *mockRepo) Create(ctx context.Context, t *domainTicket.Ticket) error {
 	return m.err
 }
 
-func (m *mockRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error) {
+func (m *mockRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, version int, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error) {
 	m.updateCalls++
 	m.gotStatus = status
 	m.gotUserID = userID
+	m.gotVersion = version
 	if m.updateErr != nil {
 		return nil, m.updateErr
 	}
@@ -65,6 +67,10 @@ func (m *mockRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userID 
 	m.gotAssigned = assignedTo
 	m.gotUserID = userID
 	return m.assignErr
+}
+
+func (m *mockRepo) SetSLADeadline(ctx context.Context, id, tenantID uuid.UUID, deadline time.Time) error {
+	return nil
 }
 
 func (m *mockRepo) GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid.UUID, error) {

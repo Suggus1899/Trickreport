@@ -58,7 +58,12 @@ func multipartBody(t *testing.T, filename, contentType string) (*bytes.Buffer, s
 	t.Helper()
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
-	fw, err := w.CreateFormFile("file", filename)
+	// Create a custom part with the specified content type so the handler
+	// receives a whitelisted MIME type instead of the default octet-stream.
+	h := make(map[string][]string)
+	h["Content-Disposition"] = []string{`form-data; name="file"; filename="` + filename + `"`}
+	h["Content-Type"] = []string{contentType}
+	fw, err := w.CreatePart(h)
 	if err != nil {
 		t.Fatalf("create form file: %v", err)
 	}

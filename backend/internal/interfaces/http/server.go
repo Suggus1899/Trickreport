@@ -19,6 +19,7 @@ import (
 	infraEmail "github.com/trickreport/backend/internal/infrastructure/email"
 	infraRealtime "github.com/trickreport/backend/internal/infrastructure/realtime"
 	httpMiddleware "github.com/trickreport/backend/internal/interfaces/http/middleware"
+	"github.com/trickreport/backend/internal/interfaces/http/handler"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
 	"github.com/trickreport/backend/internal/realtime"
 	"github.com/trickreport/backend/internal/worker"
@@ -97,6 +98,15 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.Timeout(30 * time.Second))
 
+	// Metrics (Prometheus)
+	r.Use(httpMiddleware.Metrics)
+
+	// Compression (gzip)
+	r.Use(httpMiddleware.Compress())
+
+	// Request body size limit (10MB max)
+	r.Use(httpMiddleware.MaxBodySize(10 << 20))
+
 	// Rate limiting
 	globalLimiter := httpMiddleware.NewRateLimiter(rate.Limit(100), 200, 10*time.Minute)
 	globalLimiter.Start()
@@ -163,9 +173,26 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Public: auth (no tenant required)
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/login", authHandler.Login)
+			// Login rate limiting (per email+IP)
+			loginLimiter := httpMiddleware.NewLoginRateLimiter(rate.Limit(5), 10, 15)
+			loginLimiter.Start()
+
+			r.With(loginLimiter.LoginLimit).Post("/login", authHandler.Login)
 			r.Post("/logout", authHandler.Logout)
+			r.Post("/refresh", authHandler.Refresh)
+			r.Post("/password-reset", authHandler.PasswordReset)
+			r.Post("/password-reset/confirm", authHandler.PasswordResetConfirm)
+			r.Post("/mfa/login", authHandler.MFALogin)
 			r.With(httpMiddleware.Authenticate(tokenGen)).Get("/me", authHandler.Me)
+
+			// MFA management (requires auth)
+			r.Group(func(r chi.Router) {
+				r.Use(httpMiddleware.Authenticate(tokenGen))
+				r.Post("/mfa/setup", authHandler.MFASetup)
+				r.Post("/mfa/verify", authHandler.MFAVerify)
+				r.Post("/mfa/enable", authHandler.MFAEnable)
+				r.Post("/mfa/disable", authHandler.MFADisable)
+			})
 		})
 
 		// Protected routes (auth + tenant required)
@@ -248,6 +275,12 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 			})
 		})
 	})
+
+	// Metrics endpoint (Prometheus)
+	r.Handle("/metrics", handler.MetricsHandler())
+
+	// Swagger UI
+	r.Handle("/swagger/*", handler.SwaggerHandler())
 
 	// Health check — includes database connectivity
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
