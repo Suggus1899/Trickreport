@@ -41,6 +41,12 @@ func main() {
 	}
 	defer pool.Close()
 
+	// ── Migrations (embedded, versioned) ──────────────────────────────
+	if err := db.RunMigrations(cfg.DatabaseURL); err != nil {
+		log.Fatal().Err(err).Msg("Failed to run database migrations")
+	}
+	log.Info().Msg("Database migrations up to date")
+
 	// ── Bootstrap initial admin (from ADMIN_EMAIL / ADMIN_PASSWORD) ───
 	if err := bootstrap.EnsureAdmin(ctx, pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		log.Error().Err(err).Msg("Admin bootstrap failed")

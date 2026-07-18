@@ -2,7 +2,6 @@
 BINARY     := trickreport-api
 BUILD_DIR  := ./dist
 CMD_PATH   := ./cmd/api
-MIGRATIONS := ./migrations
 
 .PHONY: all run build test migrate clean
 
@@ -23,17 +22,9 @@ build:
 test:
 	go test ./... -v -race
 
-## migrate: apply SQL migrations to the database
-## Usage: make migrate DB_URL=postgres://user:pass@host:5432/dbname
+## migrate: apply database migrations (runs the API, which applies them on startup)
 migrate:
-	@if [ -z "$(DB_URL)" ]; then \
-		echo "Error: DB_URL is required. Usage: make migrate DB_URL=..."; exit 1; \
-	fi
-	@for f in $(MIGRATIONS)/*.sql; do \
-		echo "Applying $$f..."; \
-		psql "$(DB_URL)" -f "$$f" || exit 1; \
-	done
-	@echo "All migrations applied."
+	go run $(CMD_PATH)/main.go
 
 ## clean: remove build artifacts
 clean:

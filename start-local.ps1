@@ -3,12 +3,13 @@
 .SYNOPSIS
     Starts Trickreport backend and frontend locally without Docker.
 .DESCRIPTION
-    Creates the database (if it does not exist), applies migrations, starts the
-    Go backend and the Astro frontend dev server.
+    Creates the database (if it does not exist), starts the Go backend
+    (which applies embedded database migrations on startup) and the
+    Astro frontend dev server.
 .PARAMETER PostgresPassword
     Password for the local postgres user.
 .PARAMETER SkipDb
-    Skip database creation and migrations.
+    Skip database creation.
 .PARAMETER SkipBackend
     Skip starting the backend.
 .PARAMETER SkipFrontend
@@ -44,21 +45,7 @@ if (-not $SkipDb) {
     } else {
         Write-Host '  Database already exists.'
     }
-
-    Write-Host 'Applying migrations...' -ForegroundColor Cyan
-    $migrations = @(
-        '001_init.sql',
-        '002_tickets.sql',
-        '003_knowledge_base.sql',
-        '004_sla_policies.sql',
-        '005_automations.sql',
-        '006_sla_breached.sql'
-    )
-    foreach ($m in $migrations) {
-        $path = Join-Path $root 'backend' 'migrations' $m
-        Invoke-PSQL @('-U', 'postgres', '-d', 'trickreport', '-f', $path)
-        Write-Host "  Applied $m"
-    }
+    Write-Host '  Migrations will be applied automatically by the Go server on startup.' -ForegroundColor DarkGray
 }
 
 $backendJob = $null

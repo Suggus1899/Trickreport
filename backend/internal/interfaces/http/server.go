@@ -11,19 +11,11 @@ import (
 	"golang.org/x/time/rate"
 	"github.com/rs/zerolog/log"
 
-	appAnalytics "github.com/trickreport/backend/internal/application/analytics"
-	appArticle "github.com/trickreport/backend/internal/application/article"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
-	appAuto "github.com/trickreport/backend/internal/application/automation"
-	appSLA "github.com/trickreport/backend/internal/application/sla"
-	appTicket "github.com/trickreport/backend/internal/application/ticket"
-	appUser "github.com/trickreport/backend/internal/application/user"
 	"github.com/trickreport/backend/internal/config"
 	"github.com/trickreport/backend/internal/email"
 	infraAuth "github.com/trickreport/backend/internal/infrastructure/auth"
-	"github.com/trickreport/backend/internal/infrastructure/postgres"
 	infraRealtime "github.com/trickreport/backend/internal/infrastructure/realtime"
-	"github.com/trickreport/backend/internal/interfaces/http/handler"
 	httpMiddleware "github.com/trickreport/backend/internal/interfaces/http/middleware"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
 	"github.com/trickreport/backend/internal/realtime"
@@ -56,15 +48,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	go wrk.Start(ctx)
 
 	// ── Infrastructure: Repositories ──────────────────────────────────
-	ticketRepo := postgres.NewTicketRepo(pool)
-	commentRepo := postgres.NewCommentRepo(pool)
-	historyRepo := postgres.NewHistoryRepo(pool)
-	userRepo := postgres.NewUserRepo(pool)
-	articleRepo := postgres.NewArticleRepo(pool)
-	slaRepo := postgres.NewSLARepo(pool)
-	automationRepo := postgres.NewAutomationRepo(pool)
-	analyticsRepo := postgres.NewAnalyticsRepo(pool)
-	tenantResolver := postgres.NewTenantResolver(pool)
+	repos := NewRepos(pool)
 
 	// ── Infrastructure: Adapters ──────────────────────────────────────
 	hasher := infraAuth.NewBcryptHasher()
@@ -78,28 +62,22 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	}
 
 	// ── Application: Services ─────────────────────────────────────────
-	ticketSvc := appTicket.NewService(ticketRepo, commentRepo, historyRepo, hubAdapter, sender)
-	userSvc := appUser.NewService(userRepo, hasher)
-	articleSvc := appArticle.NewService(articleRepo)
-	slaSvc := appSLA.NewService(slaRepo)
-	automationSvc := appAuto.NewService(automationRepo)
-	analyticsSvc := appAnalytics.NewService(analyticsRepo)
-
 	authCfg := appAuth.Config{
 		JWTSecret:    cfg.JWTSecret,
 		JWTExpHours:  cfg.JWTExpHours,
 		SecureCookie: cfg.SecureCookie,
 	}
-	authSvc := appAuth.NewService(userRepo, hasher, ldapAuth, tokenGen, authCfg)
+	services := NewServices(repos, hasher, tokenGen, hubAdapter, sender, ldapAuth, authCfg)
 
 	// ── Interface: Handlers ───────────────────────────────────────────
-	authHandler := handler.NewAuthHandler(authSvc)
-	userHandler := handler.NewUserHandler(userSvc)
-	ticketHandler := handler.NewTicketHandler(ticketSvc)
-	articleHandler := handler.NewArticleHandler(articleSvc)
-	slaHandler := handler.NewSLAHandler(slaSvc)
-	automationHandler := handler.NewAutomationHandler(automationSvc)
-	analyticsHandler := handler.NewAnalyticsHandler(analyticsSvc)
+	handlers := NewHandlers(services)
+	authHandler := handlers.Auth
+	userHandler := handlers.User
+	ticketHandler := handlers.Ticket
+	articleHandler := handlers.Article
+	slaHandler := handlers.SLA
+	automationHandler := handlers.Automation
+	analyticsHandler := handlers.Analytics
 
 	// ── Router ────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -184,7 +162,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 		// Protected routes (auth + tenant required)
 		r.Group(func(r chi.Router) {
 			r.Use(httpMiddleware.Authenticate(tokenGen))
-			r.Use(httpMiddleware.Tenant(tenantResolver))
+			r.Use(httpMiddleware.Tenant(repos.TenantResolver))
 
 			// WebSockets
 			r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {

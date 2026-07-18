@@ -4,9 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
 	"time"
 
+	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -25,53 +25,44 @@ func NewTicketRepo(db *pgxpool.Pool) *TicketRepo {
 }
 
 func (r *TicketRepo) List(ctx context.Context, tenantID uuid.UUID, filter appTicket.Filter, role string, userID uuid.UUID) ([]domainTicket.Ticket, error) {
-	q := `
-		SELECT t.id, t.tenant_id, t.title, t.description, t.status, t.priority, t.category,
-		       t.created_by, t.assigned_to, t.sla_deadline, t.sla_breached, t.created_at, t.updated_at,
-		       c.name AS creator_name, a.name AS assignee_name
-		FROM tickets t
-		JOIN users c ON t.created_by = c.id
-		LEFT JOIN users a ON t.assigned_to = a.id
-		WHERE t.tenant_id = $1`
+	psql := squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
-	args := []any{tenantID}
-	argIdx := 2
+	q := psql.Select(
+		"t.id", "t.tenant_id", "t.title", "t.description", "t.status", "t.priority", "t.category",
+		"t.created_by", "t.assigned_to", "t.sla_deadline", "t.sla_breached", "t.created_at", "t.updated_at",
+		"c.name AS creator_name", "a.name AS assignee_name",
+	).
+		From("tickets t").
+		Join("users c ON t.created_by = c.id").
+		LeftJoin("users a ON t.assigned_to = a.id").
+		Where(squirrel.Eq{"t.tenant_id": tenantID}).
+		OrderBy("t.created_at DESC")
 
 	if role == "end_user" {
-		q += ` AND t.created_by = $` + strconv.Itoa(argIdx)
-		args = append(args, userID)
-		argIdx++
+		q = q.Where(squirrel.Eq{"t.created_by": userID})
 	}
 	if filter.Status != "" {
-		q += ` AND t.status = $` + strconv.Itoa(argIdx)
-		args = append(args, filter.Status)
-		argIdx++
+		q = q.Where(squirrel.Eq{"t.status": filter.Status})
 	}
 	if filter.Priority != "" {
-		q += ` AND t.priority = $` + strconv.Itoa(argIdx)
-		args = append(args, filter.Priority)
-		argIdx++
+		q = q.Where(squirrel.Eq{"t.priority": filter.Priority})
 	}
 	if filter.AssignedTo != "" {
-		q += ` AND t.assigned_to = $` + strconv.Itoa(argIdx)
-		args = append(args, filter.AssignedTo)
-		argIdx++
+		q = q.Where(squirrel.Eq{"t.assigned_to": filter.AssignedTo})
 	}
-
-	q += ` ORDER BY t.created_at DESC`
-
 	if filter.Limit > 0 {
-		q += ` LIMIT $` + strconv.Itoa(argIdx)
-		args = append(args, filter.Limit)
-		argIdx++
+		q = q.Limit(uint64(filter.Limit))
 	}
 	if filter.Offset > 0 {
-		q += ` OFFSET $` + strconv.Itoa(argIdx)
-		args = append(args, filter.Offset)
-		argIdx++
+		q = q.Offset(uint64(filter.Offset))
 	}
 
-	rows, err := r.db.Query(ctx, q, args...)
+	sql, args, err := q.ToSql()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build query: %w", err)
+	}
+
+	rows, err := r.db.Query(ctx, sql, args...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list tickets: %w", err)
 	}
