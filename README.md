@@ -6,7 +6,7 @@ Trickreport is a clean-architecture Help Desk and Ticketing System built with **
 
 | Layer | Technology |
 |-------|------------|
-| Backend | Go 1.23+ (chi, pgx, gorilla/websocket, a-h/templ) |
+| Backend | Go 1.23+ (chi, pgx, gorilla/websocket) |
 | Frontend | Astro 5.x (SSR with Node adapter) + Tailwind CSS |
 | UI Style | Neumorphism 2.0 — soft shadows, depth, tactile interactions |
 | Database | PostgreSQL 14+ |
@@ -16,10 +16,11 @@ Trickreport is a clean-architecture Help Desk and Ticketing System built with **
 
 - Go 1.23+
 - Node.js 20+ / npm 10+
-- PostgreSQL 14+
-- `templ` CLI (`go install github.com/a-h/templ/cmd/templ@v0.3.1020`)
+- PostgreSQL 14+ (running locally on `localhost:5432`)
 
-## Local setup without Docker
+## Quick start (local, no Docker)
+
+> **Local development ALWAYS runs without Docker.** Docker is only for production/staging deployments (see [Deployment](#deployment-docker--on-premise)).
 
 ### 1. Database
 
@@ -30,18 +31,12 @@ Start PostgreSQL and create the database:
 psql -U postgres -c "CREATE DATABASE trickreport;"
 ```
 
-Apply migrations:
-
-```powershell
-cd backend
-$env:PGPASSWORD='YOUR_POSTGRES_PASSWORD'
-psql -U postgres -d trickreport -f migrations/001_init.sql
-psql -U postgres -d trickreport -f migrations/002_tickets.sql
-psql -U postgres -d trickreport -f migrations/003_knowledge_base.sql
-psql -U postgres -d trickreport -f migrations/004_sla_policies.sql
-psql -U postgres -d trickreport -f migrations/005_automations.sql
-psql -U postgres -d trickreport -f migrations/006_sla_breached.sql
+```bash
+# Linux / macOS
+createdb trickreport
 ```
+
+Migrations run **automatically** on backend startup — no manual migration step needed.
 
 ### 2. Backend
 
@@ -50,21 +45,37 @@ Copy and customize the environment file:
 ```powershell
 cd backend
 copy .env.example .env
+# Edit .env: set DATABASE_URL with your local PostgreSQL credentials
+```
+
+```bash
+# Linux / macOS
+cd backend
+cp .env.example .env
+# Edit .env: set DATABASE_URL with your local PostgreSQL credentials
 ```
 
 Run the server:
 
-```powershell
-templ generate ./internal/interfaces/http/views/
+```bash
+cd backend
 go run cmd/api/main.go
 ```
 
+Or use the Makefile:
+
+```bash
+cd backend
+make run
+```
+
 The backend runs at `http://localhost:8080`.
+Migrations are applied automatically on startup.
 
 Default credentials:
 
 - Email: `admin@trickreport.local`
-- Password: `changeme`
+- Password: `changeme` (set `ADMIN_PASSWORD` in `.env`)
 
 ### 3. Frontend
 
@@ -77,7 +88,121 @@ npm install
 npm run dev
 ```
 
+```bash
+# Linux / macOS
+cd frontend
+cp .env.example .env.local
+npm install
+npm run dev
+```
+
 The frontend runs at `http://localhost:4321`.
+
+### 4. One-command dev (both backend + frontend)
+
+From the project root:
+
+```powershell
+# Windows PowerShell
+.\scripts\dev.ps1
+```
+
+```bash
+# Linux / macOS
+./scripts/dev.sh
+```
+
+This starts the backend and frontend concurrently. Press `Ctrl+C` to stop both.
+
+Or with the root Makefile:
+
+```bash
+make dev
+```
+
+## Project structure
+
+```
+backend/
+  cmd/api/main.go          # Entry point
+  internal/
+    application/           # Use cases / services
+    domain/                # Domain models and rules
+    infrastructure/        # Repositories, auth, realtime
+    interfaces/http/       # HTTP handlers, middleware, server, wire
+  internal/db/migrations/  # Embedded SQL migrations (auto-applied)
+
+frontend/
+  src/
+    components/            # NeuButton, NeuCard, NeuInput, NeuBadge, NotificationBell, ...
+    layouts/               # App shell with sidebar + header
+    pages/                 # Routes (Astro file-based routing)
+    lib/api.ts             # API client for the Go backend
+  src/styles/global.css    # Neumorphism 2.0 design tokens
+```
+
+## Features
+
+1. **Multi-tenancy:** Tenant isolation via `tenant_id` (default tenant seeded).
+2. **Authentication:** JWT-based Auth with RBAC (End User, Agent, Admin), refresh tokens, MFA/TOTP, password reset, account lockout.
+3. **Tickets:** Full ticket lifecycle, status management, assignment, comments, history, attachments.
+4. **Knowledge Base:** Markdown-supported articles with CRUD for agents/admins.
+5. **SLAs & Automations:** SLA deadlines tracked by a background worker, visual automation builder.
+6. **Analytics:** Dashboard with KPI cards, SVG charts, ticket metrics, CSV/PDF export.
+7. **Real-Time:** WebSockets for live ticket notifications, toast popups, notification bell.
+8. **Profiles:** Admin profile with system stats, user profile with MFA/sessions management.
+9. **UX:** Dark mode, responsive sidebar, loading states, pagination, accessibility (WCAG 2.2), keyboard shortcuts, PWA with offline support.
+
+## Development
+
+### Running tests
+
+```bash
+# Backend
+cd backend
+make test          # go test ./... -v -race
+make coverage      # generates coverage.out and prints per-function coverage
+
+# Frontend
+cd frontend
+npm run build      # type-checks + builds
+npx vitest run     # unit tests
+```
+
+### Linting & formatting
+
+```bash
+# Backend
+cd backend
+make lint          # golangci-lint
+make fmt           # go fmt
+make security      # govulncheck
+
+# Frontend
+cd frontend
+npm run lint       # eslint
+npm run format     # prettier
+```
+
+### Pre-commit hooks
+
+**Frontend (husky + lint-staged):** after `npm install` in `frontend/`, husky
+is wired automatically via the `prepare` script. Staged `.js/.ts/.astro` files
+are linted and formatted; `.css/.json/.md` files are formatted.
+
+**Backend (go vet + gofmt):** enable the backend hook with:
+
+```bash
+git config core.hooksPath backend/.githooks
+```
+
+This runs `go vet ./...` and `gofmt -l .` before each commit.
+
+### API documentation
+
+Interactive API docs are served at the `/swagger` endpoint when the Swagger
+handler is enabled (run `make install-tools` then `swag init` in `backend/` to
+generate the spec). See the backend `Makefile` `install-tools` target.
 
 ## Production build
 
@@ -96,40 +221,11 @@ npm run build
 node ./dist/server/entry.mjs
 ```
 
-## Project structure
+## Deployment (Docker / On-Premise)
 
-```
-backend/
-  cmd/api/main.go          # Entry point
-  internal/
-    application/           # Use cases / services
-    domain/                # Domain models and rules
-    infrastructure/        # Repositories, auth, realtime
-    interfaces/http/       # HTTP handlers, middleware, views (Templ)
-  migrations/              # Plain SQL migrations
+> Docker is **only for production/staging deployments**. Local development always runs natively (see [Quick start](#quick-start-local-no-docker)).
 
-frontend/
-  src/
-    components/            # NeuButton, NeuCard, NeuInput, NeuBadge
-    layouts/               # App shell
-    pages/                 # Routes (Astro file-based routing)
-    lib/api.ts             # API client for the Go backend
-  src/styles/global.css    # Neumorphism 2.0 design tokens
-```
-
-## Features
-
-1. **Multi-tenancy:** Tenant isolation via `tenant_id` (default tenant seeded).
-2. **Authentication:** JWT-based Auth with RBAC (End User, Agent, Admin).
-3. **Tickets:** Full ticket lifecycle, status management, assignment, comments and history.
-4. **Knowledge Base:** Markdown-supported articles with CRUD for agents/admins.
-5. **SLAs & Automations:** SLA deadlines tracked by a background worker.
-6. **Analytics:** Dashboard with KPI cards and ticket metrics.
-7. **Real-Time:** WebSockets integration for live UI updates.
-
-## Docker Quick Start
-
-The fastest way to run the whole stack is with Docker Compose.
+### Docker Quick Start
 
 1. Create a `.env` file with the required secrets:
 
@@ -154,7 +250,7 @@ The API is available at `http://localhost:8080`, PostgreSQL on `5432`.
 All services run on a dedicated `trickreport_net` bridge network with resource
 limits and rotated JSON logs.
 
-## On-Premise Deployment
+### On-Premise Deployment
 
 For self-hosted deployments behind a single Caddy reverse proxy on port 80:
 
@@ -173,7 +269,7 @@ For self-hosted deployments behind a single Caddy reverse proxy on port 80:
 The app is then served on `http://localhost` (port 80) with the frontend and
 backend on the same origin.
 
-## Staging Environment
+### Staging Environment
 
 A staging compose file mirrors on-premise but uses a separate database
 (`trickreport_staging`) and a staging domain.
@@ -193,7 +289,7 @@ A staging compose file mirrors on-premise but uses a separate database
 By default staging is exposed on host port `8081` (configurable via
 `STAGING_PORT` in `.env.staging`).
 
-## Monitoring
+### Monitoring
 
 A Prometheus + Grafana + Alertmanager stack is provided as an overlay.
 
@@ -211,7 +307,7 @@ Scrape config lives in `monitoring/prometheus.yml`, alert rules in
 `monitoring/rules.yml`, and Alertmanager routing in
 `monitoring/alertmanager.yml`.
 
-## Backup & Restore
+### Backup & Restore
 
 Scheduled PostgreSQL backups run via a sidecar service that writes gzipped
 dumps to `./backups` on a daily cron, with 7-day / 4-week / 6-month retention.
@@ -235,49 +331,21 @@ Restore a backup:
 
 | Symptom | Likely cause | Fix |
 |---------|--------------|-----|
-| `failed to connect to database` / `pg_isready` fails | Wrong `POSTGRES_PASSWORD` or DB not ready | Verify `.env` values match; wait for the `postgres` healthcheck to pass (`docker compose ps`). |
-| `port is already allocated` (5432 / 8080 / 80) | Another process holds the port | Stop the conflicting process or remap the host port in the compose file. |
-| `JWT_SECRET must be set` on startup | `ENV=production` without a secret | Set a strong `JWT_SECRET` in `.env`; it must not contain the word "change". |
-| `ADMIN_PASSWORD must be set` on startup | `ENV=production` without admin password | Set `ADMIN_PASSWORD` in `.env`. |
-| Migration errors on startup | Out-of-order or partially applied migrations | Inspect `schema_migrations` table; re-run with a clean volume (`docker compose down -v`) for dev only. |
-| Frontend cannot reach API | `CORS_ORIGINS` missing the frontend origin | Add the frontend origin to `CORS_ORIGINS` (comma-separated). |
-| `COOKIE_SECURE` warning in production | Secure cookies disabled in prod | Set `COOKIE_SECURE=true` (forced automatically in production). |
+| `failed to connect to database` | Wrong `DATABASE_URL` in `.env` or PostgreSQL not running | Verify PostgreSQL is running on `localhost:5432`; check credentials in `backend/.env` |
+| `JWT_SECRET must be set` on startup | `ENV=production` without a secret | Set a strong `JWT_SECRET` in `backend/.env` |
+| `ADMIN_PASSWORD must be set` on startup | `ENV=production` without admin password | Set `ADMIN_PASSWORD` in `backend/.env` |
+| Frontend cannot reach API | `CORS_ORIGINS` missing the frontend origin | Add `http://localhost:4321` to `CORS_ORIGINS` in `backend/.env` |
+| `port is already allocated` (5432 / 8080) | Another process holds the port | Stop the conflicting process or change `PORT` in `.env` |
+| WebSocket notifications not working | Token not passed or origin blocked | Check `CORS_ORIGINS` includes frontend origin; WebSocket uses `?token=` query param |
+| `COOKIE_SECURE` warning in production | Secure cookies disabled in prod | Set `COOKIE_SECURE=true` (forced automatically in production) |
 
 ## Contributing
 
-### Development environment
-
-1. Install prerequisites (Go 1.23+, Node 20+, PostgreSQL 14+, `templ` CLI).
+1. Install prerequisites (Go 1.23+, Node 20+, PostgreSQL 14+).
 2. Fork and clone the repository.
-3. Backend: `cd backend && go run cmd/api/main.go` (apply migrations first — see [Local setup without Docker](#local-setup-without-docker)).
+3. Backend: `cd backend && go run cmd/api/main.go` (migrations auto-applied on startup).
 4. Frontend: `cd frontend && npm install && npm run dev`.
-
-### Pre-commit hooks
-
-**Frontend (husky + lint-staged):** after `npm install` in `frontend/`, husky
-is wired automatically via the `prepare` script. Staged `.js/.ts/.astro` files
-are linted and formatted; `.css/.json/.md` files are formatted.
-
-**Backend (go vet + gofmt):** enable the backend hook with:
-
-```bash
-git config core.hooksPath backend/.githooks
-```
-
-This runs `go vet ./...` and `gofmt -l .` before each commit.
-
-### Running tests
-
-```bash
-# Backend
-cd backend
-make test          # go test ./... -v -race
-make coverage      # generates coverage.out and prints per-func coverage
-
-# Frontend
-cd frontend
-npm run build      # type-checks + builds
-```
+5. Or use `make dev` from the root to start both.
 
 ### Submitting pull requests
 
@@ -286,13 +354,6 @@ npm run build      # type-checks + builds
 3. Ensure `make test` and `make lint` pass locally.
 4. Open a PR describing the change, motivation, and any migration/deploy notes.
 
-## API documentation
-
-Interactive API docs are served at the `/swagger` endpoint when the Swagger
-handler is enabled (run `make install-tools` then `swag init` in `backend/` to
-generate the spec). See the backend `Makefile` `install-tools` target.
-
 ## License
 
 Released under the **MIT License**. See `LICENSE` for details.
-
