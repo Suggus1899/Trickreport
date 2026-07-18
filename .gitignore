@@ -21,6 +21,10 @@ frontend/.env.local
 backend/dist/
 backend/*.exe
 
+# Go coverage
+backend/*cov*
+backend/coverage
+
 # Docker
 *.log
 
