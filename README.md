@@ -37,7 +37,7 @@ Plataforma de mesa de ayuda y ticketing **multi-tenant** construida con arquitec
 <br><sub>Utility-first</sub>
 </td>
 <td align="center" width="120">
-<a href="https://www.pwabuilder.com/" target="_blank"><img src="https://cdn.simpleicons.org/pwa/5A0FC8" width="48" height="48" alt="PWA" /></a>
+<a href="https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps" target="_blank"><img src="https://cdn.simpleicons.org/pwa/5A0FC8" width="48" height="48" alt="PWA" /></a>
 <br><sub><b><a href="https://developer.mozilla.org/en-US/docs/Web/Progressive_web_apps" target="_blank">PWA</a></b></sub>
 <br><sub>Offline + installable</sub>
 </td>
@@ -74,7 +74,7 @@ Plataforma de mesa de ayuda y ticketing **multi-tenant** construida con arquitec
 <td align="center" width="120">
 <a href="https://github.com/gorilla/websocket" target="_blank"><img src="https://cdn.simpleicons.org/websocket/010101" width="48" height="48" alt="WebSocket" /></a>
 <br><sub><b><a href="https://github.com/gorilla/websocket" target="_blank">WebSocket</a></b></sub>
-<br><sub>Real-time</sub>
+<br><sub>Real-time notifications</sub>
 </td>
 </tr>
 <tr>
@@ -243,16 +243,7 @@ createdb trickreport
 
 ### 2. Variables de entorno
 
-```bash
-cd backend
-cp .env.example .env
-# Editar .env: setear DATABASE_URL con tus credredenciales de PostgreSQL
-```
-
-```bash
-cd frontend
-cp .env.example .env.local
-```
+Ver sección [🔧 Variables de Entorno](#-variables-de-entorno) abajo.
 
 ### 3. Backend (Go)
 
@@ -489,7 +480,15 @@ git config core.hooksPath backend/.githooks
 
 ## 📜 Licencia
 
-Released under the **MIT License**. See `LICENSE` for details.
+**© 2026 Gustavo Colina (@Suggus1899). Todos los derechos reservados.**
+
+Este software y su código fuente son **propiedad exclusiva** de Gustavo Colina (@Suggus1899). 
+
+- **No** está permitido copiar, modificar, distribuir, sublicenciar ni usar este código, total o parcialmente, sin autorización expresa y por escrito del autor.
+- **No** está permitido usar este código con fines comerciales ni privados sin una licencia válida.
+- Cualquier uso no autorizado constituye una violación de los derechos de autor y será perseguido conforme a la ley.
+
+**Este es un software propietario. No es código abierto (open source) ni software libre.**
 
 ---
 
