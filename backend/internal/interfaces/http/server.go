@@ -84,7 +84,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 
 	r.Use(chiMiddleware.RequestID)
 	r.Use(chiMiddleware.RealIP)
-	r.Use(chiMiddleware.Logger)
+	r.Use(httpMiddleware.RequestLogger)
 	r.Use(chiMiddleware.Recoverer)
 	r.Use(chiMiddleware.Timeout(30 * time.Second))
 
@@ -240,11 +240,26 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 		defer cancel()
 
 		if err := pool.Ping(ctx); err != nil {
-			log.Error().Err(err).Msg("health check failed")
+			httpMiddleware.LoggerFromContext(r.Context()).Error().Err(err).Msg("health check failed")
 			response.Error(w, http.StatusServiceUnavailable, "database unavailable")
 			return
 		}
 		response.JSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	})
+
+	// Readiness check — verifies DB connectivity and worker availability.
+	// The worker runs in the background; if the process is up and the DB is
+	// reachable, the worker is considered running.
+	r.Get("/ready", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+		defer cancel()
+
+		if err := pool.Ping(ctx); err != nil {
+			httpMiddleware.LoggerFromContext(r.Context()).Error().Err(err).Msg("ready check failed")
+			response.Error(w, http.StatusServiceUnavailable, "database unavailable")
+			return
+		}
+		response.JSON(w, http.StatusOK, map[string]string{"status": "ready"})
 	})
 
 	return &Server{cfg: cfg, pool: pool, router: r, workerCtx: ctx}

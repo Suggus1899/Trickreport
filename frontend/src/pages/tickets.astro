@@ -42,7 +42,7 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
     <div class="flex items-center justify-between mb-8">
       <div>
         <h1 class="text-3xl font-bold">Tickets</h1>
-        <p class="text-[var(--text-muted)]">Manage support requests</p>
+        <p class="text-muted">Manage support requests</p>
       </div>
       <NeuButton href="/tickets/new" variant="accent" size="md">New Ticket</NeuButton>
     </div>
@@ -53,7 +53,7 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
 
     <NeuCard class="overflow-hidden p-0">
       <table class="w-full text-left">
-        <thead class="neu-sunken text-xs uppercase text-[var(--text-muted)]">
+        <thead class="neu-sunken text-xs uppercase text-muted">
           <tr>
             <th class="px-6 py-4 font-semibold">Title</th>
             <th class="px-6 py-4 font-semibold">Status</th>
@@ -61,14 +61,14 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
             <th class="px-6 py-4 font-semibold">Created</th>
           </tr>
         </thead>
-        <tbody class="divide-y divide-[var(--bg-dark)]/20">
+        <tbody class="divide-y">
           {tickets && tickets.length > 0 ? tickets.map((ticket) => (
             <tr class="hover:bg-white/30 transition-colors">
               <td class="px-6 py-4">
-                <a href={`/tickets/${ticket.id}`} class="font-semibold text-[var(--text-main)] hover:text-[var(--accent)]">
+                <a href={`/tickets/${ticket.id}`} class="font-semibold text-main hover:text-accent">
                   {ticket.title}
                 </a>
-                <p class="text-xs text-[var(--text-muted)]">{ticket.creator_name || ticket.created_by}</p>
+                <p class="text-xs text-muted">{ticket.creator_name || ticket.created_by}</p>
               </td>
               <td class="px-6 py-4">
                 <NeuBadge variant={statusVariant[ticket.status] || 'default'}>{ticket.status.replace('_', ' ')}</NeuBadge>
@@ -76,13 +76,13 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
               <td class="px-6 py-4">
                 <NeuBadge variant={priorityVariant[ticket.priority] || 'default'}>{ticket.priority}</NeuBadge>
               </td>
-              <td class="px-6 py-4 text-sm text-[var(--text-muted)]">
+              <td class="px-6 py-4 text-sm text-muted">
                 {new Date(ticket.created_at).toLocaleDateString()}
               </td>
             </tr>
           )) : (
             <tr>
-              <td colspan="4" class="px-6 py-12 text-center text-[var(--text-muted)]">
+              <td colspan="4" class="px-6 py-12 text-center text-muted">
                 No tickets yet. Create one to get started.
               </td>
             </tr>

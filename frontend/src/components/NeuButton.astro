@@ -13,14 +13,14 @@ const { type = 'button', variant = 'raised', size = 'md', href, class: className
 const base = 'neu-transition inline-flex items-center justify-center font-semibold select-none';
 const sizes = {
   sm: 'px-4 py-2 text-sm rounded-xl',
-  md: 'px-6 py-3 text-base rounded-2xl',
+  md: 'px-6 py-3 rounded-2xl',
   lg: 'px-8 py-4 text-lg rounded-2xl',
 };
 const variants = {
-  raised: 'neu-raised neu-convex text-[var(--text-main)] hover:brightness-105 active:neu-pressed',
-  sunken: 'neu-sunken text-[var(--text-main)]',
-  accent: 'neu-raised text-white bg-[var(--accent)] shadow-[9px_9px_16px_#4a3fd0,-9px_-9px_16px_#8e7dff] hover:brightness-105 active:shadow-[inset_6px_6px_10px_#4a3fd0,inset_-6px_-6px_10px_#8e7dff] active:translate-y-px',
-  danger: 'neu-raised text-white bg-[var(--danger)] shadow-[9px_9px_16px_#c43f3f,-9px_-9px_16px_#ff7575] hover:brightness-105 active:shadow-[inset_6px_6px_10px_#c43f3f,inset_-6px_-6px_10px_#ff7575] active:translate-y-px',
+  raised: 'neu-raised neu-convex text-main hover:brightness-105 active:neu-pressed',
+  sunken: 'neu-sunken text-main',
+  accent: 'neu-raised text-white bg-accent shadow-accent hover:brightness-105 active:shadow-accent-pressed active:translate-y-px',
+  danger: 'neu-raised text-white bg-[var(--danger)] shadow-danger hover:brightness-105 active:shadow-danger-pressed active:translate-y-px',
 };
 
 const classes = `${base} ${sizes[size]} ${variants[variant]} ${className}`;

@@ -5,7 +5,7 @@ import NeuInput from '../../components/NeuInput.astro';
 import NeuButton from '../../components/NeuButton.astro';
 import { getMe, createTicket } from '../../lib/api';
 
-const token = Astro.cookies.get('token')?.value;
+const token = Astro.cookies.get('trickreport_token')?.value;
 if (!token) {
   return Astro.redirect('/login');
 }
@@ -40,44 +40,40 @@ const priorities = [
 ];
 ---
 
-<Layout title="New Ticket - Trickreport">
-  <div class="max-w-4xl mx-auto px-6 py-8">
-    <h1 class="text-2xl font-bold text-[var(--text-main)] mb-6">New Ticket</h1>
+<Layout title="New Ticket - Trickreport" user={me ? { name: me.name, role: me.role } : undefined}>
+  <div class="max-w-4xl mx-auto py-8">
+    <h1 class="text-2xl font-bold text-main mb-6">New Ticket</h1>
     <NeuCard>
       <form method="POST" class="flex flex-col gap-5">
         {error && (
-          <div class="p-4 rounded-2xl bg-[var(--danger)]/10 text-[var(--danger)] border border-[var(--danger)]/20">
+          <div class="p-4 rounded-2xl neu-sunken text-rose-700 text-sm">
             {error}
           </div>
         )}
         <NeuInput label="Title" name="title" type="text" required minlength={3} />
         <div class="flex flex-col gap-2">
-          <label for="description" class="text-sm font-semibold text-[var(--text-main)] ml-1">Description <span class="text-[var(--danger)]">*</span></label>
+          <label for="description" class="text-sm font-semibold text-main ml-1">Description <span class="text-rose-700">*</span></label>
           <textarea
             id="description"
             name="description"
             required
             minlength={10}
             rows={5}
-            class="neu-inset rounded-2xl px-4 py-3 bg-[var(--bg-main)] text-[var(--text-main)] placeholder:text-[var(--text-muted)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)] resize-y"
+            class="resize-y"
           ></textarea>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div class="flex flex-col gap-2">
-            <label for="priority" class="text-sm font-semibold text-[var(--text-main)] ml-1">Priority</label>
-            <select
-              id="priority"
-              name="priority"
-              class="neu-inset rounded-2xl px-4 py-3 bg-[var(--bg-main)] text-[var(--text-main)] focus:outline-none focus:ring-2 focus:ring-[var(--accent)]"
-            >
+            <label for="priority" class="text-sm font-semibold text-main ml-1">Priority</label>
+            <select id="priority" name="priority">
               {priorities.map((p) => <option value={p.value}>{p.label}</option>)}
             </select>
           </div>
           <NeuInput label="Category" name="category" type="text" value="general" />
         </div>
         <div class="flex items-center justify-end gap-3 pt-2">
-          <a href="/tickets" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-[var(--text-muted)] hover:text-[var(--text-main)]">Cancel</a>
-          <NeuButton type="submit" variant="primary">Create Ticket</NeuButton>
+          <a href="/tickets" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-muted hover:text-main">Cancel</a>
+          <NeuButton type="submit" variant="accent">Create Ticket</NeuButton>
         </div>
       </form>
     </NeuCard>

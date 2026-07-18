@@ -1,0 +1,31 @@
+# Build artifacts
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+trickreport
+
+# Test / coverage
+*.test
+*.out
+coverage.txt
+
+# Local environment files
+.env
+.env.local
+.env.*.local
+
+# Editor / OS
+.idea/
+.vscode/
+.DS_Store
+*.swp
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Git
+.git
+.gitignore

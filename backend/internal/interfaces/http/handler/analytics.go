@@ -3,8 +3,6 @@ package handler
 import (
 	"net/http"
 
-	"github.com/rs/zerolog/log"
-
 	appAnalytics "github.com/trickreport/backend/internal/application/analytics"
 	"github.com/trickreport/backend/internal/interfaces/http/middleware"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
@@ -23,7 +21,7 @@ func (h *AnalyticsHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 
 	summary, err := h.svc.GetSummary(r.Context(), tenantID)
 	if err != nil {
-		log.Error().Err(err).Str("tenant_id", tenantID.String()).Msg("analytics summary failed")
+		middleware.LoggerFromContext(r.Context()).Error().Err(err).Str("tenant_id", tenantID.String()).Msg("analytics summary failed")
 		response.Error(w, http.StatusInternalServerError, "failed to get metrics")
 		return
 	}
