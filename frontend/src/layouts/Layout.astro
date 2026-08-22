@@ -1,27 +1,18 @@
 ---
-import '../styles/global.css';
+import '../styles/tailwind.css';
 import { ON_PREMISE } from '../lib/config';
-import OnlineStatus from '../components/OnlineStatus.astro';
-import ThemeToggle from '../components/ThemeToggle.astro';
-import GlobalSearch from '../components/GlobalSearch.astro';
-import NotificationBell from '../components/NotificationBell.astro';
-import KeyboardHelp from '../components/KeyboardHelp.astro';
+import { Sidebar } from '../components/chrome/Sidebar';
+import { GlobalSearch } from '../components/chrome/GlobalSearch';
+import { NotificationBell } from '../components/chrome/NotificationBell';
+import { KeyboardHelp } from '../components/chrome/KeyboardHelp';
+import type { User } from '../lib/api';
 
 export interface Props {
   title?: string;
-  user?: { name: string; role: string };
+  user?: Pick<User, 'name' | 'role'>;
 }
 
 const { title = 'Trickreport', user } = Astro.props;
-
-const nav = [
-  { label: 'Dashboard', href: '/dashboard', roles: ['admin', 'agent', 'end_user'] },
-  { label: 'Tickets', href: '/tickets', roles: ['admin', 'agent', 'end_user'] },
-  { label: 'Knowledge Base', href: '/articles', roles: ['admin', 'agent', 'end_user'] },
-  { label: 'Admin', href: '/admin', roles: ['admin'] },
-];
-
-const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) : [];
 ---
 
 <!DOCTYPE html>
@@ -42,7 +33,9 @@ const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) :
         <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
       </>
     )}
-    <script type="module" src="../scripts/register-sw.ts"></script>
+    <script>
+      import '../scripts/register-sw.ts';
+    </script>
     {/* Apply persisted theme before paint to avoid flash */}
     <script is:inline>
       (function () {
@@ -55,165 +48,29 @@ const visibleNav = user ? nav.filter((item) => item.roles.includes(user.role)) :
       })();
     </script>
   </head>
-  <body class="min-h-screen">
-    <a href="#main-content" class="skip-link">Skip to content</a>
+  <body class="min-h-screen bg-background text-foreground">
+    <a
+      href="#main-content"
+      class="absolute -left-full top-0 z-[200] focus:left-4 focus:top-4 rounded-lg border bg-card px-4 py-3 font-semibold shadow-md"
+    >
+      Skip to content
+    </a>
     {user ? (
       <div class="flex min-h-screen">
-        <button
-          id="sidebar-toggle"
-          class="sidebar-toggle"
-          aria-label="Toggle navigation"
-          aria-expanded="false"
-          aria-controls="app-sidebar"
-          type="button"
-        >
-          ☰
-        </button>
-        <div id="sidebar-backdrop" class="sidebar-backdrop"></div>
-        <aside id="app-sidebar" class="app-sidebar w-64 p-6 flex flex-col gap-6 neu-raised m-4 rounded-[2rem]">
-          <div class="flex items-center justify-between px-2">
-            <h1 class="text-2xl font-bold tracking-tight text-main">Trickreport</h1>
-            <OnlineStatus />
-          </div>
-          <nav class="flex flex-col gap-3" aria-label="Main navigation">
-            {visibleNav.map((item) => {
-              const isActive = Astro.url.pathname === item.href || Astro.url.pathname.startsWith(item.href + '/');
-              return (
-                <a
-                  href={item.href}
-                  class={`px-4 py-3 rounded-2xl font-medium transition-all focus-visible ${isActive ? 'neu-concave text-accent' : 'hover:neu-convex'}`}
-                  aria-current={isActive ? 'page' : undefined}
-                >
-                  {item.label}
-                </a>
-              );
-            })}
-          </nav>
-          <div class="mt-auto flex flex-col gap-3">
-            <div class="flex items-center justify-between px-2">
-              <a href="/logout" class="px-4 py-3 rounded-2xl font-semibold text-sm text-muted hover:text-main neu-transition text-center">Logout</a>
-              <ThemeToggle />
+        <Sidebar client:load user={user} pathname={Astro.url.pathname} />
+        <main id="main-content" class="flex-1 p-6 overflow-auto">
+          <div class="flex items-center gap-3 mb-6 flex-wrap">
+            <GlobalSearch client:load />
+            <div class="flex items-center gap-2 ml-auto">
+              <NotificationBell client:load />
             </div>
-            <a href={user.role === 'admin' ? '/admin/profile' : '/profile'} class="neu-sunken rounded-2xl p-4 transition-all hover:neu-convex cursor-pointer no-underline">
-              <p class="font-semibold text-sm text-main">{user.name}</p>
-              <p class="text-xs text-muted capitalize">{user.role.replace('_', ' ')}</p>
-            </a>
           </div>
-        </aside>
-        <main id="main-content" class="app-main flex-1 p-6 overflow-auto">
-          {user && (
-            <div class="app-header flex items-center gap-3 mb-6 flex-wrap">
-              <GlobalSearch />
-              <div class="flex items-center gap-2 ml-auto">
-                <NotificationBell />
-              </div>
-            </div>
-          )}
           <slot />
         </main>
+        <KeyboardHelp client:load />
       </div>
     ) : (
       <slot />
-    )}
-
-    {user && <KeyboardHelp />}
-
-    <script is:inline>
-      (function () {
-        var toggle = document.getElementById('sidebar-toggle');
-        var sidebar = document.getElementById('app-sidebar');
-        var backdrop = document.getElementById('sidebar-backdrop');
-        if (!toggle || !sidebar || !backdrop) return;
-
-        function openSidebar() {
-          sidebar.classList.add('open');
-          backdrop.classList.add('open');
-          toggle.setAttribute('aria-expanded', 'true');
-        }
-        function closeSidebar() {
-          sidebar.classList.remove('open');
-          backdrop.classList.remove('open');
-          toggle.setAttribute('aria-expanded', 'false');
-        }
-
-        toggle.addEventListener('click', function () {
-          if (sidebar.classList.contains('open')) closeSidebar();
-          else openSidebar();
-        });
-        backdrop.addEventListener('click', closeSidebar);
-        // Close on Escape when open.
-        document.addEventListener('keydown', function (e) {
-          if (e.key === 'Escape' && sidebar.classList.contains('open')) closeSidebar();
-        });
-      })();
-    </script>
-
-    {/* Keyboard shortcuts: g d / g t / g a / n / ? — only for logged-in users */}
-    {user && (
-      <script is:inline>
-        (function () {
-          var buffer = [];
-          var timer = null;
-          var helpOpen = false;
-
-          function isTyping(el) {
-            if (!(el instanceof HTMLElement)) return false;
-            var tag = el.tagName.toLowerCase();
-            return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
-          }
-
-          function go(path) { window.location.href = path; }
-
-          var shortcuts = [
-            { keys: ['g', 'd'], action: function () { go('/dashboard'); } },
-            { keys: ['g', 't'], action: function () { go('/tickets'); } },
-            { keys: ['g', 'a'], action: function () { go('/articles'); } },
-            { keys: ['g', 'u'], action: function () { go('/admin/users'); } },
-            { keys: ['n'], action: function () { go('/tickets/new'); } },
-          ];
-
-          function matches(keys, buf) {
-            if (buf.length > keys.length) return false;
-            for (var i = 0; i < buf.length; i++) { if (buf[i] !== keys[i]) return false; }
-            return true;
-          }
-
-          document.addEventListener('keydown', function (e) {
-            if (e.key === 'Escape') {
-              buffer = [];
-              if (window.__closeKeyboardHelp) window.__closeKeyboardHelp();
-              return;
-            }
-            if (isTyping(e.target) || e.metaKey || e.ctrlKey || e.altKey) return;
-            var key = e.key.toLowerCase();
-
-            // "?" toggles the help modal.
-            if (key === '?' || (e.shiftKey && e.key === '/')) {
-              e.preventDefault();
-              if (window.__toggleKeyboardHelp) window.__toggleKeyboardHelp();
-              buffer = [];
-              return;
-            }
-
-            buffer.push(key);
-            if (buffer.length > 2) buffer = buffer.slice(-2);
-            if (timer) clearTimeout(timer);
-            timer = setTimeout(function () { buffer = []; }, 800);
-
-            for (var i = 0; i < shortcuts.length; i++) {
-              if (matches(shortcuts[i].keys, buffer)) {
-                if (buffer.length === shortcuts[i].keys.length) {
-                  e.preventDefault();
-                  shortcuts[i].action();
-                  buffer = [];
-                }
-                return;
-              }
-            }
-            buffer = [];
-          });
-        })();
-      </script>
     )}
   </body>
 </html>

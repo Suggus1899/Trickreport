@@ -38,11 +38,12 @@ type loginReq struct {
 }
 
 type userInfo struct {
-	ID       uuid.UUID `json:"id"`
-	Name     string    `json:"name"`
-	Email    string    `json:"email"`
-	Role     string    `json:"role"`
-	TenantID uuid.UUID `json:"tenant_id"`
+	ID         uuid.UUID `json:"id"`
+	Name       string    `json:"name"`
+	Email      string    `json:"email"`
+	Role       string    `json:"role"`
+	TenantID   uuid.UUID `json:"tenant_id"`
+	MFAEnabled bool      `json:"mfa_enabled"`
 }
 
 type loginResp struct {
@@ -124,11 +125,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		Token:        result.Token,
 		RefreshToken: result.RefreshToken,
 		User: userInfo{
-			ID:       result.User.ID,
-			Name:     result.User.Name,
-			Email:    result.User.Email,
-			Role:     string(result.User.Role),
-			TenantID: result.User.TenantID,
+			ID:         result.User.ID,
+			Name:       result.User.Name,
+			Email:      result.User.Email,
+			Role:       string(result.User.Role),
+			TenantID:   result.User.TenantID,
+			MFAEnabled: result.User.MFAEnabled,
 		},
 	})
 }
@@ -209,11 +211,12 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, http.StatusOK, userInfo{
-		ID:       u.ID,
-		Name:     u.Name,
-		Email:    u.Email,
-		Role:     string(u.Role),
-		TenantID: u.TenantID,
+		ID:         u.ID,
+		Name:       u.Name,
+		Email:      u.Email,
+		Role:       string(u.Role),
+		TenantID:   u.TenantID,
+		MFAEnabled: u.MFAEnabled,
 	})
 }
 
@@ -536,11 +539,12 @@ func (h *AuthHandler) MFALogin(w http.ResponseWriter, r *http.Request) {
 		Token:        result.Token,
 		RefreshToken: result.RefreshToken,
 		User: userInfo{
-			ID:       result.User.ID,
-			Name:     result.User.Name,
-			Email:    result.User.Email,
-			Role:     string(result.User.Role),
-			TenantID: result.User.TenantID,
+			ID:         result.User.ID,
+			Name:       result.User.Name,
+			Email:      result.User.Email,
+			Role:       string(result.User.Role),
+			TenantID:   result.User.TenantID,
+			MFAEnabled: result.User.MFAEnabled,
 		},
 	})
 }
@@ -621,11 +625,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		Token:        result.Token,
 		RefreshToken: result.RefreshToken,
 		User: userInfo{
-			ID:       result.User.ID,
-			Name:     result.User.Name,
-			Email:    result.User.Email,
-			Role:     string(result.User.Role),
-			TenantID: result.User.TenantID,
+			ID:         result.User.ID,
+			Name:       result.User.Name,
+			Email:      result.User.Email,
+			Role:       string(result.User.Role),
+			TenantID:   result.User.TenantID,
+			MFAEnabled: result.User.MFAEnabled,
 		},
 	})
 }

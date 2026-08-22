@@ -1,9 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import NeuCard from '../../components/NeuCard.astro';
-import NeuInput from '../../components/NeuInput.astro';
-import NeuButton from '../../components/NeuButton.astro';
-import NeuBadge from '../../components/NeuBadge.astro';
+import { buttonVariants } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
 import { getMe, getSLAPolicies, upsertSLAPolicy } from '../../lib/api';
 import type { SLAPolicy } from '../../lib/api';
 
@@ -18,7 +16,7 @@ let error = '';
 
 try {
   user = await getMe(token);
-} catch (err) {
+} catch {
   return Astro.redirect('/login');
 }
 
@@ -33,11 +31,11 @@ if (Astro.request.method === 'POST') {
   const resolution_time_minutes = Number(form.get('resolution_time_minutes') || 0);
   const escalation_minutes = Number(form.get('escalation_minutes') || 0);
   try {
-    await upsertSLAPolicy(token, priority, {
+    await upsertSLAPolicy(priority, {
       response_time_minutes,
       resolution_time_minutes,
       escalation_minutes,
-    });
+    }, token);
     return Astro.redirect('/admin/sla');
   } catch (e: any) {
     error = e?.message || 'Failed to update SLA policy';
@@ -50,12 +48,14 @@ try {
   error = err instanceof Error ? err.message : 'Failed to load SLA policies';
 }
 
-const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
-  low: 'default',
-  medium: 'info',
-  high: 'warning',
-  critical: 'danger',
+const priorityVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  low: 'outline',
+  medium: 'secondary',
+  high: 'secondary',
+  critical: 'destructive',
 };
+
+const inputClass = 'h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
 ---
 
 <Layout title="SLA Policies — Admin" user={user ? { name: user.name, role: user.role } : undefined}>
@@ -63,36 +63,45 @@ const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'dange
     <div class="flex items-center justify-between mb-8">
       <div>
         <h1 class="text-3xl font-bold">SLA Policies</h1>
-        <p class="text-muted">Response and resolution targets per priority</p>
+        <p class="text-muted-foreground">Response and resolution targets per priority</p>
       </div>
-      <NeuButton href="/admin" variant="raised" size="sm">Back to Admin</NeuButton>
+      <a href="/admin" class={buttonVariants({ variant: 'outline', size: 'sm' })}>Back to Admin</a>
     </div>
 
     {error && (
-      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+      <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive mb-6">{error}</div>
     )}
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       {policies.length > 0 ? policies.map((policy) => (
-        <NeuCard>
+        <div class="rounded-xl border bg-card p-5">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-semibold capitalize">{policy.priority}</h2>
-            <NeuBadge variant={priorityVariant[policy.priority] || 'default'}>{policy.priority}</NeuBadge>
+            <Badge variant={priorityVariant[policy.priority] || 'default'}>{policy.priority}</Badge>
           </div>
           <form method="POST" class="flex flex-col gap-4">
             <input type="hidden" name="priority" value={policy.priority} />
-            <NeuInput label="Response time (minutes)" name="response_time_minutes" type="text" value={String(policy.response_time_minutes)} required />
-            <NeuInput label="Resolution time (minutes)" name="resolution_time_minutes" type="text" value={String(policy.resolution_time_minutes)} required />
-            <NeuInput label="Escalation (minutes)" name="escalation_minutes" type="text" value={String(policy.escalation_minutes)} required />
+            <div class="flex flex-col gap-2">
+              <label class="text-sm font-semibold ml-1">Response time (minutes)</label>
+              <input name="response_time_minutes" type="number" min="0" value={policy.response_time_minutes} required class={inputClass} />
+            </div>
+            <div class="flex flex-col gap-2">
+              <label class="text-sm font-semibold ml-1">Resolution time (minutes)</label>
+              <input name="resolution_time_minutes" type="number" min="0" value={policy.resolution_time_minutes} required class={inputClass} />
+            </div>
+            <div class="flex flex-col gap-2">
+              <label class="text-sm font-semibold ml-1">Escalation (minutes)</label>
+              <input name="escalation_minutes" type="number" min="0" value={policy.escalation_minutes} required class={inputClass} />
+            </div>
             <div class="flex justify-end pt-2">
-              <NeuButton type="submit" variant="accent" size="md">Save</NeuButton>
+              <button type="submit" class={buttonVariants({})}>Save</button>
             </div>
           </form>
-        </NeuCard>
+        </div>
       )) : (
-        <NeuCard class="md:col-span-2 text-center text-muted">
+        <div class="md:col-span-2 rounded-xl border bg-card p-8 text-center text-muted-foreground">
           No SLA policies configured yet.
-        </NeuCard>
+        </div>
       )}
     </div>
   </div>

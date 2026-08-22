@@ -1,8 +1,7 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import NeuCard from '../components/NeuCard.astro';
-import NeuBadge from '../components/NeuBadge.astro';
-import NeuButton from '../components/NeuButton.astro';
+import { Badge } from '../components/ui/badge';
+import { Button, buttonVariants } from '../components/ui/button';
 import { getMe, getTickets } from '../lib/api';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
@@ -26,19 +25,19 @@ try {
   error = err instanceof Error ? err.message : 'Failed to load tickets';
 }
 
-const statusVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
+const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
   open: 'default',
-  in_progress: 'warning',
-  waiting_client: 'info',
-  resolved: 'success',
-  closed: 'default',
+  in_progress: 'secondary',
+  waiting_client: 'outline',
+  resolved: 'secondary',
+  closed: 'outline',
 };
 
-const priorityVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
-  low: 'default',
-  medium: 'info',
-  high: 'warning',
-  critical: 'danger',
+const priorityVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
+  low: 'outline',
+  medium: 'secondary',
+  high: 'secondary',
+  critical: 'destructive',
 };
 
 // Apply filters client-side (API may not support query params yet).
@@ -57,7 +56,6 @@ if (search) {
 }
 
 const hasFilters = statusFilter || priorityFilter || search;
-
 const ticketsJson = JSON.stringify(filteredTickets || []);
 ---
 
@@ -66,27 +64,27 @@ const ticketsJson = JSON.stringify(filteredTickets || []);
     <div class="flex items-center justify-between mb-8 flex-wrap gap-3">
       <div>
         <h1 class="text-3xl font-bold">Tickets</h1>
-        <p class="text-muted">Manage support requests</p>
+        <p class="text-muted-foreground">Manage support requests</p>
       </div>
       <div class="flex items-center gap-3">
-        <NeuButton id="export-csv" variant="raised" size="md">Export CSV</NeuButton>
-        <NeuButton href="/tickets/new" variant="accent" size="md">New Ticket</NeuButton>
+        <Button id="export-csv" variant="outline">Export CSV</Button>
+        <a href="/tickets/new" class={buttonVariants({ size: 'default' })}>New Ticket</a>
       </div>
     </div>
 
     {error && (
-      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+      <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive mb-6">{error}</div>
     )}
 
-    <NeuCard class="mb-6">
-      <form method="GET" class="flex flex-col gap-3 sm:flex-row sm:items-end gap-5">
+    <div class="rounded-xl border bg-card p-5 mb-6">
+      <form method="GET" class="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div class="flex flex-col gap-2 flex-1">
-          <label for="q" class="text-sm font-semibold text-main ml-1">Search</label>
-          <input id="q" name="q" type="text" placeholder="Search title or description..." value={search} />
+          <label for="q" class="text-sm font-semibold ml-1">Search</label>
+          <input id="q" name="q" type="text" placeholder="Search title or description..." value={search} class="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
         </div>
         <div class="flex flex-col gap-2">
-          <label for="status" class="text-sm font-semibold text-main ml-1">Status</label>
-          <select id="status" name="status">
+          <label for="status" class="text-sm font-semibold ml-1">Status</label>
+          <select id="status" name="status" class="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <option value="">All</option>
             <option value="open" selected={statusFilter === 'open'}>Open</option>
             <option value="in_progress" selected={statusFilter === 'in_progress'}>In Progress</option>
@@ -96,8 +94,8 @@ const ticketsJson = JSON.stringify(filteredTickets || []);
           </select>
         </div>
         <div class="flex flex-col gap-2">
-          <label for="priority" class="text-sm font-semibold text-main ml-1">Priority</label>
-          <select id="priority" name="priority">
+          <label for="priority" class="text-sm font-semibold ml-1">Priority</label>
+          <select id="priority" name="priority" class="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <option value="">All</option>
             <option value="low" selected={priorityFilter === 'low'}>Low</option>
             <option value="medium" selected={priorityFilter === 'medium'}>Medium</option>
@@ -105,52 +103,52 @@ const ticketsJson = JSON.stringify(filteredTickets || []);
             <option value="critical" selected={priorityFilter === 'critical'}>Critical</option>
           </select>
         </div>
-        <NeuButton type="submit" variant="accent" size="md">Filter</NeuButton>
+        <Button type="submit">Filter</Button>
         {hasFilters && (
-          <a href="/tickets" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-muted hover:text-main">Clear</a>
+          <a href="/tickets" class="text-sm font-semibold text-muted-foreground hover:text-foreground px-2 py-2">Clear</a>
         )}
       </form>
-    </NeuCard>
+    </div>
 
-    <NeuCard class="overflow-hidden p-0">
+    <div class="rounded-xl border bg-card overflow-hidden">
       <table class="w-full text-left">
-        <thead class="neu-sunken text-xs uppercase text-muted">
+        <thead class="bg-muted/50 text-xs uppercase text-muted-foreground">
           <tr>
-            <th class="px-6 py-4 font-semibold">Title</th>
-            <th class="px-6 py-4 font-semibold">Status</th>
-            <th class="px-6 py-4 font-semibold">Priority</th>
-            <th class="px-6 py-4 font-semibold">Created</th>
+            <th class="px-6 py-3 font-semibold">Title</th>
+            <th class="px-6 py-3 font-semibold">Status</th>
+            <th class="px-6 py-3 font-semibold">Priority</th>
+            <th class="px-6 py-3 font-semibold">Created</th>
           </tr>
         </thead>
         <tbody class="divide-y">
           {filteredTickets.length > 0 ? filteredTickets.map((ticket) => (
-            <tr class="hover:bg-white/30 transition-colors">
+            <tr class="hover:bg-muted/30 transition-colors">
               <td class="px-6 py-4">
-                <a href={`/tickets/${ticket.id}`} class="font-semibold text-main hover:text-accent">
+                <a href={`/tickets/${ticket.id}`} class="font-semibold hover:text-primary">
                   {ticket.title}
                 </a>
-                <p class="text-xs text-muted">{ticket.creator_name || ticket.created_by}</p>
+                <p class="text-xs text-muted-foreground">{ticket.creator_name || ticket.created_by}</p>
               </td>
               <td class="px-6 py-4">
-                <NeuBadge variant={statusVariant[ticket.status] || 'default'}>{ticket.status.replace('_', ' ')}</NeuBadge>
+                <Badge variant={statusVariant[ticket.status] || 'default'}>{ticket.status.replace('_', ' ')}</Badge>
               </td>
               <td class="px-6 py-4">
-                <NeuBadge variant={priorityVariant[ticket.priority] || 'default'}>{ticket.priority}</NeuBadge>
+                <Badge variant={priorityVariant[ticket.priority] || 'default'}>{ticket.priority}</Badge>
               </td>
-              <td class="px-6 py-4 text-sm text-muted">
+              <td class="px-6 py-4 text-sm text-muted-foreground">
                 {new Date(ticket.created_at).toLocaleDateString()}
               </td>
             </tr>
           )) : (
             <tr>
-              <td colspan="4" class="px-6 py-12 text-center text-muted">
+              <td colspan="4" class="px-6 py-12 text-center text-muted-foreground">
                 {hasFilters ? 'No tickets match your filters.' : 'No tickets yet. Create one to get started.'}
               </td>
             </tr>
           )}
         </tbody>
       </table>
-    </NeuCard>
+    </div>
   </div>
 
   <script is:inline define:vars={{ ticketsJson }}>

@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import NeuCard from '../../components/NeuCard.astro';
-import NeuButton from '../../components/NeuButton.astro';
+import { buttonVariants } from '../../components/ui/button';
+import { Badge } from '../../components/ui/badge';
 import Pagination from '../../components/Pagination.astro';
 import { getMe, getArticles } from '../../lib/api';
 
@@ -21,7 +21,7 @@ const perPage = 10;
 
 try {
   user = await getMe(token);
-  articles = await getArticles(token, query);
+  articles = await getArticles(query, token);
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load articles';
 }
@@ -36,65 +36,65 @@ const pagedArticles = (articles || []).slice((currentPage - 1) * perPage, curren
     <div class="flex items-center justify-between mb-8">
       <div>
         <h1 class="text-3xl font-bold">Knowledge Base</h1>
-        <p class="text-muted">Browse help articles and guides</p>
+        <p class="text-muted-foreground">Browse help articles and guides</p>
       </div>
     </div>
 
     {error && (
-      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+      <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive mb-6">{error}</div>
     )}
 
-    <NeuCard class="mb-6">
-      <form method="GET" class="flex flex-col gap-3 sm:flex-row sm:items-end gap-5">
+    <div class="rounded-xl border bg-card p-5 mb-6">
+      <form method="GET" class="flex flex-col gap-3 sm:flex-row sm:items-end">
         <div class="flex flex-col gap-2 flex-1">
-          <label for="q" class="text-sm font-semibold text-main ml-1">Search</label>
-          <input id="q" name="q" type="text" placeholder="Search articles by title or content..." value={query} />
+          <label for="q" class="text-sm font-semibold ml-1">Search</label>
+          <input id="q" name="q" type="text" placeholder="Search articles by title or content..." value={query} class="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
         </div>
-        <NeuButton type="submit" variant="accent" size="md">Search</NeuButton>
+        <button type="submit" class={buttonVariants({})}>Search</button>
         {query && (
-          <a href="/articles" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-muted hover:text-main">Clear</a>
+          <a href="/articles" class="text-sm font-semibold text-muted-foreground hover:text-foreground px-2 py-2">Clear</a>
         )}
       </form>
-    </NeuCard>
+    </div>
 
-    <NeuCard class="overflow-hidden p-0">
+    <div class="rounded-xl border bg-card overflow-hidden">
       <table class="w-full text-left">
-        <thead class="neu-sunken text-xs uppercase text-muted">
+        <thead class="bg-muted/50 text-xs uppercase text-muted-foreground">
           <tr>
-            <th class="px-6 py-4 font-semibold">Title</th>
-            <th class="px-6 py-4 font-semibold">Category</th>
-            <th class="px-6 py-4 font-semibold">Author</th>
-            <th class="px-6 py-4 font-semibold">Updated</th>
+            <th class="px-6 py-3 font-semibold">Title</th>
+            <th class="px-6 py-3 font-semibold">Category</th>
+            <th class="px-6 py-3 font-semibold">Author</th>
+            <th class="px-6 py-3 font-semibold">Updated</th>
           </tr>
         </thead>
         <tbody class="divide-y">
           {pagedArticles.length > 0 ? pagedArticles.map((article) => (
-            <tr class="hover:bg-white/30 transition-colors">
+            <tr class="hover:bg-muted/30 transition-colors">
               <td class="px-6 py-4">
-                <a href={`/articles/${article.id}`} class="font-semibold text-main hover:text-accent">
+                <a href={`/articles/${article.id}`} class="font-semibold hover:text-primary">
                   {article.title}
                 </a>
               </td>
               <td class="px-6 py-4">
-                <span class="px-3 py-1 rounded-full text-xs font-bold uppercase neu-convex text-main">{article.category}</span>
+                <Badge variant="outline">{article.category}</Badge>
               </td>
-              <td class="px-6 py-4 text-sm text-muted">
+              <td class="px-6 py-4 text-sm text-muted-foreground">
                 {article.author_name || article.created_by}
               </td>
-              <td class="px-6 py-4 text-sm text-muted">
+              <td class="px-6 py-4 text-sm text-muted-foreground">
                 {new Date(article.updated_at || article.created_at).toLocaleDateString()}
               </td>
             </tr>
           )) : (
             <tr>
-              <td colspan="4" class="px-6 py-12 text-center text-muted">
+              <td colspan="4" class="px-6 py-12 text-center text-muted-foreground">
                 No articles found{query ? ' for your search.' : ' yet.'}
               </td>
             </tr>
           )}
         </tbody>
       </table>
-    </NeuCard>
+    </div>
 
     {totalPages > 1 && (
       <Pagination currentPage={currentPage} totalPages={totalPages} href={query ? `/articles?q=${encodeURIComponent(query)}` : '/articles'} />

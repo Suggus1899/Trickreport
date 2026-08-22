@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -317,6 +318,86 @@ func TestServer_Router_ReadyCheck_NilPool(t *testing.T) {
 	// Pool is nil, so Ping panics; chi's Recoverer catches it and returns 500.
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want %d", rec.Code, http.StatusInternalServerError)
+	}
+}
+
+func TestServer_Router_CSRF_MissingToken_Rejected(t *testing.T) {
+	cfg := &config.Config{
+		Port:        "0",
+		Env:         "development",
+		JWTSecret:   "test-secret",
+		JWTExpHours: 8,
+		CORSOrigins: "http://localhost:3000",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := New(ctx, cfg, nil)
+
+	// A mutating request on a protected (non-auth) API route without a CSRF
+	// cookie/header must be rejected before it ever reaches the auth middleware.
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tickets", nil)
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want %d", rec.Code, http.StatusForbidden)
+	}
+}
+
+func TestServer_Router_CSRF_SafeMethod_IssuesCookie(t *testing.T) {
+	cfg := &config.Config{
+		Port:        "0",
+		Env:         "development",
+		JWTSecret:   "test-secret",
+		JWTExpHours: 8,
+		CORSOrigins: "http://localhost:3000",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := New(ctx, cfg, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/tickets", nil)
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+
+	found := false
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "trickreport_csrf" && c.Value != "" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected trickreport_csrf cookie to be set on a safe-method API request")
+	}
+}
+
+func TestServer_Router_CSRF_AuthLoginExempt(t *testing.T) {
+	cfg := &config.Config{
+		Port:        "0",
+		Env:         "development",
+		JWTSecret:   "test-secret",
+		JWTExpHours: 8,
+		CORSOrigins: "http://localhost:3000",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := New(ctx, cfg, nil)
+
+	// POST /auth/login has no CSRF cookie/header attached; it must not be
+	// rejected with 403 by the CSRF middleware (isAuthPath exemption).
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/auth/login", strings.NewReader(`{}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusForbidden {
+		t.Errorf("login should be exempt from CSRF, got status %d", rec.Code)
 	}
 }
 

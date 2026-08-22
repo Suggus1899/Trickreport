@@ -1,7 +1,12 @@
 /// <reference types="astro/client" />
 
-declare namespace App {
-  interface Locals {
-    token?: string;
+import type { User } from './lib/api';
+
+declare global {
+  namespace App {
+    interface Locals {
+      token?: string;
+      user: User | null;
+    }
   }
 }
