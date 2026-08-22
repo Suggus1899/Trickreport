@@ -6,11 +6,11 @@ vi.mock('./config', () => ({
   ON_PREMISE: false,
 }));
 
-// fetch is a global; cast to allow vi.fn assignment.
-const fetchMock = vi.fn() as unknown as typeof fetch;
+// fetch is a global; vi.fn() is untyped so it can stand in for any call shape.
+const fetchMock = vi.fn();
 (globalThis as any).fetch = fetchMock;
 
-import { api, login } from './api';
+import { api, login, updateTicketStatus, assignTicket } from './api';
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -103,6 +103,53 @@ describe('api client - error handling', () => {
   it('throws on 401 unauthorized', async () => {
     fetchMock.mockResolvedValue(jsonResponse(401, { error: 'invalid token' }));
     await expect(api('/tickets', { token: 'bad' })).rejects.toThrow('invalid token');
+  });
+});
+
+describe('api client - ticket routes', () => {
+  it('updateTicketStatus PATCHes /tickets/{id}/status', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { id: '1', status: 'resolved' }));
+    await updateTicketStatus('1', 'resolved', 't');
+    const [url, init] = (fetchMock as any).mock.calls[0];
+    expect(url).toBe('http://localhost:8080/api/v1/tickets/1/status');
+    expect(init.method).toBe('PATCH');
+  });
+
+  it('assignTicket POSTs /tickets/{id}/assign', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { id: '1', assigned_to: 'u1' }));
+    await assignTicket('1', 'u1', 't');
+    const [url, init] = (fetchMock as any).mock.calls[0];
+    expect(url).toBe('http://localhost:8080/api/v1/tickets/1/assign');
+    expect(init.method).toBe('POST');
+  });
+});
+
+describe('api client - CSRF header', () => {
+  afterEach(() => {
+    (globalThis as any).document = undefined;
+  });
+
+  it('attaches X-CSRF-Token on mutating requests when the cookie is present', async () => {
+    (globalThis as any).document = { cookie: 'trickreport_csrf=abc123; other=1' };
+    fetchMock.mockResolvedValue(jsonResponse(201, { id: '1' }));
+    await api('/tickets', { token: 't', method: 'POST', body: JSON.stringify({ title: 'x' }) });
+    const [, init] = (fetchMock as any).mock.calls[0];
+    expect(init.headers['X-CSRF-Token']).toBe('abc123');
+  });
+
+  it('does not attach X-CSRF-Token on GET requests', async () => {
+    (globalThis as any).document = { cookie: 'trickreport_csrf=abc123' };
+    fetchMock.mockResolvedValue(jsonResponse(200, []));
+    await api('/tickets', { token: 't' });
+    const [, init] = (fetchMock as any).mock.calls[0];
+    expect(init.headers['X-CSRF-Token']).toBeUndefined();
+  });
+
+  it('omits X-CSRF-Token when there is no cookie to read (SSR context)', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { id: '1' }));
+    await api('/tickets', { token: 't', method: 'POST', body: JSON.stringify({ title: 'x' }) });
+    const [, init] = (fetchMock as any).mock.calls[0];
+    expect(init.headers['X-CSRF-Token']).toBeUndefined();
   });
 });
 

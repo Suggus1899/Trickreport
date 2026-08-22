@@ -1,10 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import NeuCard from '../components/NeuCard.astro';
-import NeuInput from '../components/NeuInput.astro';
-import NeuButton from '../components/NeuButton.astro';
-import NeuBadge from '../components/NeuBadge.astro';
-import { getMe, API_URL } from '../lib/api';
+import { buttonVariants } from '../components/ui/button';
+import { Badge } from '../components/ui/badge';
+import { MfaSettings } from '../components/auth/MfaSettings';
+import { getMe } from '../lib/api';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
 if (!token) {
@@ -19,194 +18,42 @@ try {
 }
 ---
 
-<Layout title="Profile — Trickreport" user={me ? { name: me.name, role: me.role } : undefined}>
+<Layout title="Profile — Trickreport" user={{ name: me.name, role: me.role }}>
   <div class="max-w-4xl mx-auto py-8">
     <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
       <div>
-        <h1 class="text-2xl font-bold text-main">Profile</h1>
-        <p class="text-muted text-sm">Manage your account, password and sessions</p>
+        <h1 class="text-2xl font-bold">Profile</h1>
+        <p class="text-sm text-muted-foreground">Your account and security settings</p>
       </div>
-      <NeuButton href="/dashboard" variant="raised" size="sm">Back to Dashboard</NeuButton>
+      <a href="/dashboard" class={buttonVariants({ variant: 'outline', size: 'sm' })}>Back to Dashboard</a>
     </div>
-
-    <div id="profile-msg" class="mb-6 p-4 rounded-2xl neu-sunken text-sm" style="display:none;"></div>
 
     <div class="flex flex-col gap-6">
-      <!-- Edit profile -->
-      <NeuCard>
+      <div class="rounded-xl border bg-card p-5">
         <h2 class="text-lg font-semibold mb-4">Account details</h2>
-        <form id="profile-form" class="flex flex-col gap-4">
-          <NeuInput label="Name" name="name" type="text" required value={me.name} />
-          <NeuInput label="Email" name="email" type="email" required value={me.email} />
-          <div class="flex items-center gap-3">
-            <span class="text-sm font-semibold text-main">Role</span>
-            <NeuBadge variant="info">{me.role.replace('_', ' ')}</NeuBadge>
-          </div>
-          <div class="flex justify-end pt-2">
-            <NeuButton type="submit" variant="accent" size="md">Save changes</NeuButton>
-          </div>
-        </form>
-      </NeuCard>
-
-      <!-- Change password -->
-      <NeuCard>
-        <h2 class="text-lg font-semibold mb-4">Change password</h2>
-        <form id="password-form" class="flex flex-col gap-4">
-          <NeuInput label="Current password" name="current_password" type="password" required />
-          <NeuInput label="New password" name="new_password" type="password" required minlength={8} />
-          <NeuInput label="Confirm new password" name="confirm_password" type="password" required minlength={8} />
-          <div class="flex justify-end pt-2">
-            <NeuButton type="submit" variant="accent" size="md">Update password</NeuButton>
-          </div>
-        </form>
-      </NeuCard>
-
-      <!-- MFA setup -->
-      <NeuCard>
-        <div class="flex items-center justify-between flex-wrap gap-3">
+        <div class="flex flex-col gap-3 text-sm">
           <div>
-            <h2 class="text-lg font-semibold mb-1">Multi-factor authentication</h2>
-            <p class="text-sm text-muted">Add an extra layer of security to your account.</p>
+            <span class="text-muted-foreground">Name</span>
+            <p class="font-semibold">{me.name}</p>
           </div>
-          <a href="/profile/mfa-setup" class="neu-transition px-6 py-3 rounded-2xl font-semibold neu-convex text-accent">Set up MFA</a>
+          <div>
+            <span class="text-muted-foreground">Email</span>
+            <p class="font-semibold">{me.email}</p>
+          </div>
+          <div>
+            <span class="text-muted-foreground">Role</span>
+            <div class="mt-1">
+              <Badge variant="secondary">{me.role.replace('_', ' ')}</Badge>
+            </div>
+          </div>
         </div>
-        <div id="mfa-status" class="mt-4 text-sm text-muted"></div>
-      </NeuCard>
+      </div>
 
-      <!-- Active sessions -->
-      <NeuCard>
-        <h2 class="text-lg font-semibold mb-4">Active sessions</h2>
-        <div id="sessions-list" class="flex flex-col gap-3">
-          <p class="text-muted text-sm">Loading sessions…</p>
-        </div>
-      </NeuCard>
+      <div class="rounded-xl border bg-card p-5">
+        <h2 class="text-lg font-semibold mb-1">Multi-factor authentication</h2>
+        <p class="text-sm text-muted-foreground">Add an extra layer of security to your account.</p>
+        <MfaSettings client:load initialEnabled={!!me.mfa_enabled} />
+      </div>
     </div>
   </div>
-
-  <script is:inline define:vars={{ token, API_URL }}>
-    (function () {
-      const msg = document.getElementById('profile-msg');
-      const profileForm = document.getElementById('profile-form');
-      const passwordForm = document.getElementById('password-form');
-      const sessionsList = document.getElementById('sessions-list');
-      const mfaStatus = document.getElementById('mfa-status');
-
-      function headers() {
-        const h = { 'Content-Type': 'application/json', 'X-Tenant-ID': 'default' };
-        if (token) h['Authorization'] = 'Bearer ' + token;
-        return h;
-      }
-
-      function showMsg(text, isError) {
-        msg.style.display = 'block';
-        msg.textContent = text;
-        msg.className = 'mb-6 p-4 rounded-2xl neu-sunken text-sm ' + (isError ? 'text-rose-700' : 'text-emerald-700');
-      }
-
-      function escapeHtml(s) {
-        return String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-      }
-
-      // ─── Save profile ────────────────────────────────────────────────
-      profileForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const data = {
-          name: profileForm.querySelector('[name="name"]').value,
-          email: profileForm.querySelector('[name="email"]').value,
-        };
-        try {
-          const res = await fetch(`${API_URL}/api/v1/users/me`, {
-            method: 'PUT', headers: headers(), credentials: 'include', body: JSON.stringify(data),
-          });
-          if (!res.ok) {
-            const b = await res.json().catch(() => ({}));
-            throw new Error(b.error || `Request failed (${res.status})`);
-          }
-          showMsg('Profile updated successfully.', false);
-        } catch (err) { showMsg(err.message, true); }
-      });
-
-      // ─── Change password ─────────────────────────────────────────────
-      passwordForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const newPw = passwordForm.querySelector('[name="new_password"]').value;
-        const confirmPw = passwordForm.querySelector('[name="confirm_password"]').value;
-        if (newPw !== confirmPw) { showMsg('New passwords do not match.', true); return; }
-        const data = {
-          current_password: passwordForm.querySelector('[name="current_password"]').value,
-          new_password: newPw,
-        };
-        try {
-          const res = await fetch(`${API_URL}/api/v1/auth/change-password`, {
-            method: 'POST', headers: headers(), credentials: 'include', body: JSON.stringify(data),
-          });
-          if (!res.ok) {
-            const b = await res.json().catch(() => ({}));
-            throw new Error(b.error || `Request failed (${res.status})`);
-          }
-          showMsg('Password updated successfully.', false);
-          passwordForm.reset();
-        } catch (err) { showMsg(err.message, true); }
-      });
-
-      // ─── Sessions ────────────────────────────────────────────────────
-      async function loadSessions() {
-        try {
-          const res = await fetch(`${API_URL}/api/v1/auth/sessions`, { headers: headers(), credentials: 'include' });
-          if (!res.ok) {
-            sessionsList.innerHTML = '<p class="text-muted text-sm">Unable to load sessions.</p>';
-            return;
-          }
-          const sessions = await res.json();
-          if (!sessions.length) {
-            sessionsList.innerHTML = '<p class="text-muted text-sm">No active sessions.</p>';
-            return;
-          }
-          sessionsList.innerHTML = sessions.map((s) =>
-            `<div class="session-row p-4 rounded-2xl neu-sunken flex items-center justify-between gap-3 flex-wrap" data-id="${s.id}">
-              <div>
-                <p class="font-semibold text-sm text-main">${escapeHtml(s.ip || 'Unknown IP')} ${s.current ? '<span class="text-xs text-emerald-700">(this device)</span>' : ''}</p>
-                <p class="text-xs text-muted">${escapeHtml(s.user_agent || '')}</p>
-                <p class="text-xs text-muted">Last active: ${s.last_active ? new Date(s.last_active).toLocaleString() : '—'}</p>
-              </div>
-              ${s.current ? '' : `<button class="revoke-btn neu-transition px-4 py-2 rounded-xl font-semibold neu-convex text-rose-700 text-xs" data-id="${s.id}">Revoke</button>`}
-            </div>`
-          ).join('');
-          sessionsList.querySelectorAll('.revoke-btn').forEach((btn) => {
-            btn.addEventListener('click', async () => {
-              const id = btn.getAttribute('data-id');
-              if (!confirm('Revoke this session? You will be logged out on that device.')) return;
-              try {
-                const res = await fetch(`${API_URL}/api/v1/auth/sessions/${id}`, {
-                  method: 'DELETE', headers: headers(), credentials: 'include',
-                });
-                if (!res.ok) {
-                  const b = await res.json().catch(() => ({}));
-                  throw new Error(b.error || `Request failed (${res.status})`);
-                }
-                loadSessions();
-              } catch (err) { showMsg(err.message, true); }
-            });
-          });
-        } catch (err) {
-          sessionsList.innerHTML = '<p class="text-muted text-sm">Unable to load sessions.</p>';
-        }
-      }
-      loadSessions();
-
-      // ─── MFA status (best-effort) ────────────────────────────────────
-      async function loadMfa() {
-        try {
-          const res = await fetch(`${API_URL}/api/v1/auth/mfa`, { headers: headers(), credentials: 'include' });
-          if (res.ok) {
-            const data = await res.json();
-            mfaStatus.textContent = data.enabled ? 'MFA is currently enabled.' : 'MFA is not enabled yet.';
-          } else {
-            mfaStatus.textContent = 'MFA status unavailable.';
-          }
-        } catch { mfaStatus.textContent = 'MFA status unavailable.'; }
-      }
-      loadMfa();
-    })();
-  </script>
 </Layout>

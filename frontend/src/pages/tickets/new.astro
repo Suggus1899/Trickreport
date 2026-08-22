@@ -1,8 +1,6 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import NeuCard from '../../components/NeuCard.astro';
-import NeuInput from '../../components/NeuInput.astro';
-import NeuButton from '../../components/NeuButton.astro';
+import { buttonVariants } from '../../components/ui/button';
 import { getMe, createTicket } from '../../lib/api';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
@@ -25,7 +23,7 @@ if (Astro.request.method === 'POST') {
   const priority = form.get('priority')?.toString() || 'medium';
   const category = form.get('category')?.toString() || 'general';
   try {
-    await createTicket(token, { title, description, priority, category });
+    await createTicket({ title, description, priority, category }, token);
     return Astro.redirect('/tickets');
   } catch (e: any) {
     error = e?.message || 'Failed to create ticket';
@@ -38,44 +36,50 @@ const priorities = [
   { value: 'high', label: 'High' },
   { value: 'critical', label: 'Critical' },
 ];
+
+const inputClass = 'h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
 ---
 
 <Layout title="New Ticket - Trickreport" user={me ? { name: me.name, role: me.role } : undefined}>
   <div class="max-w-4xl mx-auto py-8">
-    <h1 class="text-2xl font-bold text-main mb-6">New Ticket</h1>
-    <NeuCard>
+    <h1 class="text-2xl font-bold mb-6">New Ticket</h1>
+    <div class="rounded-xl border bg-card p-6">
       <form method="POST" class="flex flex-col gap-5">
         {error && (
-          <div class="p-4 rounded-2xl neu-sunken text-rose-700 text-sm">
-            {error}
-          </div>
+          <div class="rounded-lg bg-destructive/10 p-4 text-sm text-destructive">{error}</div>
         )}
-        <NeuInput label="Title" name="title" type="text" required minlength={3} />
         <div class="flex flex-col gap-2">
-          <label for="description" class="text-sm font-semibold text-main ml-1">Description <span class="text-rose-700">*</span></label>
+          <label for="title" class="text-sm font-semibold ml-1">Title <span class="text-destructive">*</span></label>
+          <input id="title" name="title" type="text" required minlength={3} class={inputClass} />
+        </div>
+        <div class="flex flex-col gap-2">
+          <label for="description" class="text-sm font-semibold ml-1">Description <span class="text-destructive">*</span></label>
           <textarea
             id="description"
             name="description"
             required
             minlength={10}
             rows={5}
-            class="resize-y"
+            class="resize-y rounded-md border bg-background px-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring"
           ></textarea>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div class="flex flex-col gap-2">
-            <label for="priority" class="text-sm font-semibold text-main ml-1">Priority</label>
-            <select id="priority" name="priority">
+            <label for="priority" class="text-sm font-semibold ml-1">Priority</label>
+            <select id="priority" name="priority" class={inputClass}>
               {priorities.map((p) => <option value={p.value}>{p.label}</option>)}
             </select>
           </div>
-          <NeuInput label="Category" name="category" type="text" value="general" />
+          <div class="flex flex-col gap-2">
+            <label for="category" class="text-sm font-semibold ml-1">Category</label>
+            <input id="category" name="category" type="text" value="general" class={inputClass} />
+          </div>
         </div>
         <div class="flex items-center justify-end gap-3 pt-2">
-          <a href="/tickets" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-muted hover:text-main">Cancel</a>
-          <NeuButton type="submit" variant="accent">Create Ticket</NeuButton>
+          <a href="/tickets" class="text-sm font-semibold text-muted-foreground hover:text-foreground px-4 py-2">Cancel</a>
+          <button type="submit" class={buttonVariants({ variant: 'default' })}>Create Ticket</button>
         </div>
       </form>
-    </NeuCard>
+    </div>
   </div>
 </Layout>

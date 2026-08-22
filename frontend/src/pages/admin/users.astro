@@ -1,10 +1,8 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import NeuCard from '../../components/NeuCard.astro';
-import NeuInput from '../../components/NeuInput.astro';
-import NeuButton from '../../components/NeuButton.astro';
-import NeuBadge from '../../components/NeuBadge.astro';
-import { getMe, getUsers, createUser, API_URL } from '../../lib/api';
+import { buttonVariants } from '../../components/ui/button';
+import { UsersManager } from '../../components/admin/UsersManager';
+import { getMe, getUsers } from '../../lib/api';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
 if (!token) {
@@ -17,7 +15,7 @@ let error = '';
 
 try {
   user = await getMe(token);
-} catch (err) {
+} catch {
   return Astro.redirect('/login');
 }
 
@@ -25,295 +23,27 @@ if (user.role !== 'admin') {
   return Astro.redirect('/dashboard');
 }
 
-if (Astro.request.method === 'POST') {
-  const form = await Astro.request.formData();
-  const name = form.get('name')?.toString() || '';
-  const email = form.get('email')?.toString() || '';
-  const role = form.get('role')?.toString() || 'end_user';
-  const password = form.get('password')?.toString() || '';
-  try {
-    await createUser(token, { name, email, role, password });
-    return Astro.redirect('/admin/users');
-  } catch (e: any) {
-    error = e?.message || 'Failed to create user';
-  }
-}
-
 try {
   users = await getUsers(token);
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load users';
 }
-
-const roleVariant: Record<string, 'default' | 'success' | 'warning' | 'danger' | 'info'> = {
-  admin: 'danger',
-  agent: 'info',
-  end_user: 'default',
-};
-
-const roles = [
-  { value: 'end_user', label: 'End User' },
-  { value: 'agent', label: 'Agent' },
-  { value: 'admin', label: 'Admin' },
-];
-
-const usersJson = JSON.stringify(users || []);
 ---
 
-<Layout title="Users — Admin" user={user ? { name: user.name, role: user.role } : undefined}>
+<Layout title="Users — Admin" user={{ name: user.name, role: user.role }}>
   <div class="max-w-6xl mx-auto">
     <div class="flex items-center justify-between mb-8">
       <div>
         <h1 class="text-3xl font-bold">Users</h1>
-        <p class="text-muted">Manage workspace members</p>
+        <p class="text-muted-foreground">Manage workspace members</p>
       </div>
-      <NeuButton href="/admin" variant="raised" size="sm">Back to Admin</NeuButton>
+      <a href="/admin" class={buttonVariants({ variant: 'outline', size: 'sm' })}>Back to Admin</a>
     </div>
 
     {error && (
-      <NeuCard variant="sunken" class="mb-6 text-rose-700">{error}</NeuCard>
+      <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive mb-6">{error}</div>
     )}
 
-    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
-      <NeuCard class="lg:col-span-1">
-        <h2 class="text-lg font-semibold mb-4">Create user</h2>
-        <form method="POST" class="flex flex-col gap-4">
-          <NeuInput label="Name" name="name" type="text" required />
-          <NeuInput label="Email" name="email" type="email" required />
-          <div class="flex flex-col gap-2">
-            <label for="role" class="text-sm font-semibold text-main ml-1">Role</label>
-            <select id="role" name="role">
-              {roles.map((r) => <option value={r.value}>{r.label}</option>)}
-            </select>
-          </div>
-          <NeuInput label="Password" name="password" type="password" required />
-          <div class="flex justify-end pt-2">
-            <NeuButton type="submit" variant="accent" size="md">Create User</NeuButton>
-          </div>
-        </form>
-      </NeuCard>
-
-      <NeuCard class="lg:col-span-2 overflow-hidden p-0">
-        <div class="p-6 pb-4 flex items-center gap-3 flex-wrap">
-          <div class="flex flex-col gap-1 flex-1 min-w-[12rem]">
-            <label for="filter-search" class="text-xs font-semibold text-muted ml-1">Search</label>
-            <input id="filter-search" type="text" placeholder="Name or email…" class="users-filter" />
-          </div>
-          <div class="flex flex-col gap-1">
-            <label for="filter-role" class="text-xs font-semibold text-muted ml-1">Role</label>
-            <select id="filter-role" class="users-filter">
-              <option value="">All roles</option>
-              {roles.map((r) => <option value={r.value}>{r.label}</option>)}
-            </select>
-          </div>
-          <div class="flex flex-col gap-1">
-            <label for="filter-status" class="text-xs font-semibold text-muted ml-1">Status</label>
-            <select id="filter-status" class="users-filter">
-              <option value="">All</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-            </select>
-          </div>
-        </div>
-
-        <table class="w-full text-left">
-          <thead class="neu-sunken text-xs uppercase text-muted">
-            <tr>
-              <th class="px-6 py-4 font-semibold">Name</th>
-              <th class="px-6 py-4 font-semibold">Email</th>
-              <th class="px-6 py-4 font-semibold">Role</th>
-              <th class="px-6 py-4 font-semibold">Status</th>
-              <th class="px-6 py-4 font-semibold">Last login</th>
-              <th class="px-6 py-4 font-semibold">Actions</th>
-            </tr>
-          </thead>
-          <tbody class="divide-y" id="users-body">
-            {users && users.length > 0 ? users.map((u) => (
-              <tr class="hover:bg-white/30 transition-colors user-row" data-name={u.name.toLowerCase()} data-email={u.email.toLowerCase()} data-role={u.role} data-active={u.active ? 'active' : 'inactive'}>
-                <td class="px-6 py-4 font-semibold text-main" data-field="name">{u.name}</td>
-                <td class="px-6 py-4 text-sm text-muted" data-field="email">{u.email}</td>
-                <td class="px-6 py-4" data-field="role">
-                  <NeuBadge variant={roleVariant[u.role] || 'default'}>{u.role.replace('_', ' ')}</NeuBadge>
-                </td>
-                <td class="px-6 py-4" data-field="status">
-                  {u.active ? (
-                    <NeuBadge variant="success">active</NeuBadge>
-                  ) : (
-                    <NeuBadge variant="default">inactive</NeuBadge>
-                  )}
-                </td>
-                <td class="px-6 py-4 text-sm text-muted" data-field="last_login">
-                  {(u as any).last_login ? new Date((u as any).last_login).toLocaleString() : '—'}
-                </td>
-                <td class="px-6 py-4">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <button class="user-act neu-transition px-3 py-1 rounded-xl font-semibold neu-convex text-accent text-xs" data-act="edit" data-id={u.id}>Edit</button>
-                    <button class="user-act neu-transition px-3 py-1 rounded-xl font-semibold neu-convex text-main text-xs" data-act="toggle" data-id={u.id} data-active={u.active ? 'true' : 'false'}>
-                      {u.active ? 'Deactivate' : 'Reactivate'}
-                    </button>
-                    <select class="user-role-select user-act text-xs" data-act="role" data-id={u.id}>
-                      {roles.map((r) => <option value={r.value} selected={r.value === u.role}>{r.label}</option>)}
-                    </select>
-                    <button class="user-act neu-transition px-3 py-1 rounded-xl font-semibold neu-convex text-amber-700 text-xs" data-act="reset" data-id={u.id}>Reset Password</button>
-                  </div>
-                </td>
-              </tr>
-            )) : (
-              <tr>
-                <td colspan="6" class="px-6 py-12 text-center text-muted">
-                  No users found.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </NeuCard>
-    </div>
+    <UsersManager client:load initialUsers={users || []} />
   </div>
-
-  <!-- Edit user modal -->
-  <div id="edit-modal" class="modal-overlay" style="display:none;">
-    <div class="modal-card neu-raised rounded-3xl p-6 w-full max-w-md">
-      <h2 class="text-lg font-semibold mb-4">Edit user</h2>
-      <form id="edit-form" class="flex flex-col gap-4">
-        <input type="hidden" id="edit-id" name="id" />
-        <NeuInput label="Name" name="name" type="text" required />
-        <NeuInput label="Email" name="email" type="email" required />
-        <div class="flex flex-col gap-2">
-          <label for="edit-role" class="text-sm font-semibold text-main ml-1">Role</label>
-          <select id="edit-role" name="role">
-            {roles.map((r) => <option value={r.value}>{r.label}</option>)}
-          </select>
-        </div>
-        <div class="flex justify-end gap-3 pt-2">
-          <button type="button" id="edit-cancel" class="neu-transition px-6 py-3 rounded-2xl font-semibold text-muted hover:text-main">Cancel</button>
-          <NeuButton type="submit" variant="accent" size="md">Save</NeuButton>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <script is:inline define:vars={{ token, API_URL, usersJson }}>
-    (function () {
-      const users = JSON.parse(usersJson);
-      const tbody = document.getElementById('users-body');
-      const search = document.getElementById('filter-search');
-      const roleFilter = document.getElementById('filter-role');
-      const statusFilter = document.getElementById('filter-status');
-      const modal = document.getElementById('edit-modal');
-      const editForm = document.getElementById('edit-form');
-      const editId = document.getElementById('edit-id');
-      const editCancel = document.getElementById('edit-cancel');
-
-      function applyFilters() {
-        const q = search.value.trim().toLowerCase();
-        const r = roleFilter.value;
-        const s = statusFilter.value;
-        tbody.querySelectorAll('.user-row').forEach((row) => {
-          const name = row.getAttribute('data-name') || '';
-          const email = row.getAttribute('data-email') || '';
-          const role = row.getAttribute('data-role') || '';
-          const active = row.getAttribute('data-active') || '';
-          const matchQ = !q || name.includes(q) || email.includes(q);
-          const matchR = !r || role === r;
-          const matchS = !s || active === s;
-          row.style.display = (matchQ && matchR && matchS) ? '' : 'none';
-        });
-      }
-      [search, roleFilter, statusFilter].forEach((el) => el.addEventListener('input', applyFilters));
-      applyFilters();
-
-      async function patchUser(id, body) {
-        const res = await fetch(`${API_URL}/api/v1/admin/users/${id}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': 'default', Authorization: `Bearer ${token}` },
-          credentials: 'include',
-          body: JSON.stringify(body),
-        });
-        if (!res.ok) {
-          const b = await res.json().catch(() => ({}));
-          throw new Error(b.error || `Request failed (${res.status})`);
-        }
-        return res.json();
-      }
-
-      async function resetPassword(id) {
-        const res = await fetch(`${API_URL}/api/v1/admin/users/${id}/reset-password`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'X-Tenant-ID': 'default', Authorization: `Bearer ${token}` },
-          credentials: 'include',
-        });
-        if (!res.ok) {
-          const b = await res.json().catch(() => ({}));
-          throw new Error(b.error || `Request failed (${res.status})`);
-        }
-      }
-
-      tbody.addEventListener('click', async (e) => {
-        const btn = e.target.closest('.user-act[data-act]');
-        if (!btn) return;
-        const act = btn.getAttribute('data-act');
-        const id = btn.getAttribute('data-id');
-        const u = users.find((x) => x.id === id);
-        if (!u) return;
-
-        if (act === 'edit') {
-          editId.value = u.id;
-          editForm.querySelector('[name="name"]').value = u.name;
-          editForm.querySelector('[name="email"]').value = u.email;
-          editForm.querySelector('[name="role"]').value = u.role;
-          modal.style.display = 'flex';
-          return;
-        }
-
-        if (act === 'toggle') {
-          const active = btn.getAttribute('data-active') === 'true';
-          if (!confirm(`${active ? 'Deactivate' : 'Reactivate'} user "${u.name}"?`)) return;
-          try {
-            await patchUser(id, { active: !active });
-            window.location.reload();
-          } catch (err) { alert(err.message); }
-          return;
-        }
-
-        if (act === 'reset') {
-          if (!confirm(`Send a password reset email to "${u.email}"?`)) return;
-          try {
-            await resetPassword(id);
-            alert('Password reset email sent.');
-          } catch (err) { alert(err.message); }
-          return;
-        }
-      });
-
-      tbody.addEventListener('change', async (e) => {
-        const sel = e.target.closest('.user-role-select');
-        if (!sel) return;
-        const id = sel.getAttribute('data-id');
-        const u = users.find((x) => x.id === id);
-        if (!u) return;
-        const newRole = sel.value;
-        if (newRole === u.role) return;
-        if (!confirm(`Change "${u.name}" role to ${newRole.replace('_', ' ')}?`)) { sel.value = u.role; return; }
-        try {
-          await patchUser(id, { role: newRole });
-          window.location.reload();
-        } catch (err) { alert(err.message); sel.value = u.role; }
-      });
-
-      editCancel.addEventListener('click', () => { modal.style.display = 'none'; });
-      modal.addEventListener('click', (e) => { if (e.target === modal) modal.style.display = 'none'; });
-      editForm.addEventListener('submit', async (e) => {
-        e.preventDefault();
-        const id = editId.value;
-        const name = editForm.querySelector('[name="name"]').value;
-        const email = editForm.querySelector('[name="email"]').value;
-        const role = editForm.querySelector('[name="role"]').value;
-        try {
-          await patchUser(id, { name, email, role });
-          window.location.reload();
-        } catch (err) { alert(err.message); }
-      });
-    })();
-  </script>
 </Layout>

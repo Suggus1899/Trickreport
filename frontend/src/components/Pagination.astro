@@ -1,5 +1,4 @@
 ---
-// Page navigation with prev/next and numbered pages, neu styling.
 export interface Props {
   currentPage: number;
   totalPages: number;
@@ -7,15 +6,12 @@ export interface Props {
 }
 
 const { currentPage, totalPages, href } = Astro.props;
-
-const base = href.includes('?') ? href : href;
 const sep = href.includes('?') ? '&' : '?';
 
 function pageHref(page: number): string {
-  return `${base}${sep}page=${page}`;
+  return `${href}${sep}page=${page}`;
 }
 
-// Build a compact page list with ellipsis.
 function pageList(): (number | '...')[] {
   const pages: (number | '...')[] = [];
   if (totalPages <= 7) {
@@ -35,28 +31,29 @@ function pageList(): (number | '...')[] {
 const pages = pageList();
 const hasPrev = currentPage > 1;
 const hasNext = currentPage < totalPages;
+const itemClass = 'inline-flex items-center justify-center h-8 min-w-8 px-2 rounded-md text-sm';
 ---
 
-<nav class="neu-pagination mt-6" aria-label="Pagination">
+<nav class="flex items-center gap-1 mt-6" aria-label="Pagination">
   {hasPrev ? (
-    <a href={pageHref(currentPage - 1)} aria-label="Previous page" rel="prev">‹</a>
+    <a href={pageHref(currentPage - 1)} aria-label="Previous page" rel="prev" class={`${itemClass} border hover:bg-muted`}>‹</a>
   ) : (
-    <span class="disabled" aria-disabled="true">‹</span>
+    <span class={`${itemClass} text-muted-foreground`} aria-disabled="true">‹</span>
   )}
 
   {pages.map((p) => (
     p === '...' ? (
-      <span class="disabled">…</span>
+      <span class={`${itemClass} text-muted-foreground`}>…</span>
     ) : p === currentPage ? (
-      <span class="active" aria-current="page">{p}</span>
+      <span class={`${itemClass} bg-primary text-primary-foreground font-semibold`} aria-current="page">{p}</span>
     ) : (
-      <a href={pageHref(p)} aria-label={`Page ${p}`}>{p}</a>
+      <a href={pageHref(p)} aria-label={`Page ${p}`} class={`${itemClass} border hover:bg-muted`}>{p}</a>
     )
   ))}
 
   {hasNext ? (
-    <a href={pageHref(currentPage + 1)} aria-label="Next page" rel="next">›</a>
+    <a href={pageHref(currentPage + 1)} aria-label="Next page" rel="next" class={`${itemClass} border hover:bg-muted`}>›</a>
   ) : (
-    <span class="disabled" aria-disabled="true">›</span>
+    <span class={`${itemClass} text-muted-foreground`} aria-disabled="true">›</span>
   )}
 </nav>

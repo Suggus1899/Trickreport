@@ -144,7 +144,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 			if allowed && origin != "" {
 				w.Header().Set("Access-Control-Allow-Origin", origin)
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Tenant-ID")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Tenant-ID, X-CSRF-Token")
 				w.Header().Set("Access-Control-Allow-Credentials", "true")
 				w.Header().Set("Vary", "Origin")
 			}
@@ -172,6 +172,8 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 
 	// ── API routes (JSON) ─────────────────────────────────────────────
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(httpMiddleware.CSRF)
+
 		// Public: auth (no tenant required)
 		r.Route("/auth", func(r chi.Router) {
 			// Login rate limiting (per email+IP)

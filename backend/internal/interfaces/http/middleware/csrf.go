@@ -9,8 +9,6 @@ import (
 	"github.com/trickreport/backend/internal/interfaces/http/response"
 )
 
-// TODO: Wire in server.go after the auth middleware
-
 const (
 	// csrfCookieName is the name of the CSRF cookie.
 	csrfCookieName = "trickreport_csrf"

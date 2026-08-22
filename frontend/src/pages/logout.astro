@@ -1,15 +1,31 @@
 ---
+import { API_URL } from '../lib/api';
+
+// Direct navigation to /logout (e.g. a bookmark) — the Sidebar's logout
+// button calls POST /auth/logout client-side instead, which is the normal
+// path. This SSR fallback best-effort revokes the session too: the CSRF
+// middleware applies to /auth/logout, so the CSRF cookie has to be forwarded
+// manually since this is a server-to-server call, not a browser fetch.
 const token = Astro.cookies.get('trickreport_token')?.value;
+const csrfToken = Astro.cookies.get('trickreport_csrf')?.value;
+
 if (token) {
-  Astro.cookies.delete('trickreport_token', { path: '/' });
+  try {
+    await fetch(`${API_URL}/api/v1/auth/logout`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(csrfToken
+          ? { 'X-CSRF-Token': csrfToken, Cookie: `trickreport_csrf=${csrfToken}` }
+          : {}),
+      },
+    });
+  } catch {
+    // Best-effort — cookies are cleared below regardless of the outcome.
+  }
 }
-// Also explicitly overwrite in case delete doesn't clear immediately
-Astro.cookies.set('trickreport_token', '', {
-  httpOnly: true,
-  path: '/',
-  maxAge: 0,
-  sameSite: 'strict',
-  secure: import.meta.env.PROD,
-});
+
+Astro.cookies.delete('trickreport_token', { path: '/' });
+Astro.cookies.delete('trickreport_refresh', { path: '/' });
 return Astro.redirect('/login');
 ---

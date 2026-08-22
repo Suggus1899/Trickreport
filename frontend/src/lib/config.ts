@@ -17,3 +17,11 @@ export const ON_PREMISE =
  * - Development/standalone: defaults to `http://localhost:8080`.
  */
 export const API_URL = import.meta.env.API_URL || (ON_PREMISE ? '' : 'http://localhost:8080');
+
+/**
+ * Client-safe copy of API_URL for React islands and other browser-side code.
+ * Astro only inlines `PUBLIC_`-prefixed env vars into the client bundle, so
+ * this must be set to the same value as API_URL in every environment.
+ */
+export const PUBLIC_API_URL =
+  import.meta.env.PUBLIC_API_URL || (ON_PREMISE ? '' : 'http://localhost:8080');

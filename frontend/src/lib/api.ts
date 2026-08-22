@@ -8,8 +8,16 @@ export interface LoginInput {
 }
 
 export interface LoginResult {
-  token: string;
-  user: User;
+  token?: string;
+  refresh_token?: string;
+  user?: User;
+  requires_mfa?: boolean;
+  mfa_token?: string;
+}
+
+export interface MFASetupResult {
+  secret: string;
+  qr_url: string;
 }
 
 export interface User {
@@ -20,6 +28,7 @@ export interface User {
   tenant_id: string;
   active: boolean;
   created_at: string;
+  mfa_enabled?: boolean;
 }
 
 export interface Summary {
@@ -124,6 +133,19 @@ export interface HistoryEntry {
   created_at: string;
 }
 
+export interface Notification {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  title: string;
+  body: string;
+  type: string;
+  ref_id?: string;
+  ref_type?: string;
+  read: boolean;
+  created_at: string;
+}
+
 export interface Attachment {
   id: string;
   ticket_id: string;
@@ -176,7 +198,18 @@ export function setRefreshTokenStrategy(fn: (() => Promise<string | null>) | nul
 const DEFAULT_TIMEOUT = 30000;
 const MAX_RETRIES = 3;
 
-function getHeaders(token?: string, skipJson = false): HeadersInit {
+const CSRF_COOKIE_NAME = 'trickreport_csrf';
+const CSRF_HEADER_NAME = 'X-CSRF-Token';
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/** Reads the double-submit CSRF cookie. Only present in a browser context. */
+function getCsrfToken(): string | undefined {
+  if (typeof document === 'undefined') return undefined;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${CSRF_COOKIE_NAME}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : undefined;
+}
+
+function getHeaders(token: string | undefined, skipJson: boolean, method: string): HeadersInit {
   const headers: HeadersInit = {
     'X-Tenant-ID': 'default',
   };
@@ -186,24 +219,17 @@ function getHeaders(token?: string, skipJson = false): HeadersInit {
   if (token) {
     headers['Authorization'] = `Bearer ${token}`;
   }
+  if (!SAFE_METHODS.has(method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      headers[CSRF_HEADER_NAME] = csrfToken;
+    }
+  }
   return headers;
 }
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-function isBodyJson(init: RequestInit): boolean {
-  const body = init.body;
-  if (typeof body === 'string') {
-    try {
-      JSON.parse(body);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-  return false;
 }
 
 async function doFetch<T>(
@@ -212,8 +238,9 @@ async function doFetch<T>(
   attempt = 0,
 ): Promise<T> {
   const { token, signal, ...rest } = init;
-  const skipJson = rest.body instanceof FormData || !isBodyJson(rest);
-  const headers = getHeaders(token, skipJson);
+  const method = (rest.method || 'GET').toUpperCase();
+  const skipJson = rest.body instanceof FormData;
+  const headers = getHeaders(token, skipJson, method);
 
   // Combine caller signal with a timeout signal.
   const controller = new AbortController();
@@ -304,55 +331,97 @@ export async function register(input: {
   });
 }
 
-export async function getMe(token: string): Promise<User> {
+export async function getMe(token?: string): Promise<User> {
   return api<User>('/auth/me', { token });
+}
+
+export async function logout(): Promise<void> {
+  return api<void>('/auth/logout', { method: 'POST' });
+}
+
+/* ─── MFA ───────────────────────────────────────────────────────────── */
+
+export async function mfaLogin(mfaToken: string, code: string): Promise<LoginResult> {
+  return api<LoginResult>('/auth/mfa/login', {
+    method: 'POST',
+    body: JSON.stringify({ mfa_token: mfaToken, code }),
+  });
+}
+
+// MFA setup/verify/enable/disable are only ever called from client-side
+// islands (profile settings) — cookie auth via credentials:'include' is
+// enough, no token param needed.
+
+export async function mfaSetup(): Promise<MFASetupResult> {
+  return api<MFASetupResult>('/auth/mfa/setup', { method: 'POST' });
+}
+
+export async function mfaVerify(code: string): Promise<{ valid: boolean }> {
+  return api<{ valid: boolean }>('/auth/mfa/verify', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
+export async function mfaEnable(secret: string, code: string): Promise<void> {
+  return api<void>('/auth/mfa/enable', {
+    method: 'POST',
+    body: JSON.stringify({ secret, code }),
+  });
+}
+
+export async function mfaDisable(code: string): Promise<void> {
+  return api<void>('/auth/mfa/disable', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
 }
 
 /* ─── Dashboard ─────────────────────────────────────────────────────── */
 
-export async function getSummary(token: string): Promise<Summary> {
+export async function getSummary(token?: string): Promise<Summary> {
   return api<Summary>('/dashboard/summary', { token });
 }
 
 /* ─── Tickets ───────────────────────────────────────────────────────── */
 
-export async function getTickets(token: string): Promise<Ticket[]> {
+export async function getTickets(token?: string): Promise<Ticket[]> {
   return api<Ticket[]>('/tickets', { token });
 }
 
-export async function getTicket(token: string, id: string): Promise<Ticket> {
+export async function getTicket(id: string, token?: string): Promise<Ticket> {
   return api<Ticket>(`/tickets/${id}`, { token });
 }
 
-export async function createTicket(token: string, data: { title: string; description: string; priority: string; category: string }): Promise<Ticket> {
+export async function createTicket(data: { title: string; description: string; priority: string; category: string }, token?: string): Promise<Ticket> {
   return api<Ticket>('/tickets', { token, method: 'POST', body: JSON.stringify(data) });
 }
 
-export async function updateTicketStatus(token: string, id: string, status: string): Promise<Ticket> {
-  return api<Ticket>(`/tickets/${id}`, { token, method: 'PATCH', body: JSON.stringify({ status }) });
+export async function updateTicketStatus(id: string, status: string, token?: string): Promise<{ status: string }> {
+  return api<{ status: string }>(`/tickets/${id}/status`, { token, method: 'PATCH', body: JSON.stringify({ status }) });
 }
 
-export async function assignTicket(token: string, id: string, assignedTo: string): Promise<Ticket> {
-  return api<Ticket>(`/tickets/${id}`, { token, method: 'PATCH', body: JSON.stringify({ assigned_to: assignedTo }) });
+export async function assignTicket(id: string, assignedTo: string, token?: string): Promise<{ assigned_to: string | null }> {
+  return api<{ assigned_to: string | null }>(`/tickets/${id}/assign`, { token, method: 'POST', body: JSON.stringify({ assigned_to: assignedTo }) });
 }
 
-export async function getTicketComments(token: string, id: string): Promise<Comment[]> {
+export async function getTicketComments(id: string, token?: string): Promise<Comment[]> {
   return api<Comment[]>(`/tickets/${id}/comments`, { token });
 }
 
-export async function addTicketComment(token: string, id: string, content: string, isInternal = false): Promise<Comment> {
+export async function addTicketComment(id: string, content: string, isInternal = false, token?: string): Promise<Comment> {
   return api<Comment>(`/tickets/${id}/comments`, { token, method: 'POST', body: JSON.stringify({ content, is_internal: isInternal }) });
 }
 
-export async function getTicketHistory(token: string, id: string): Promise<HistoryEntry[]> {
+export async function getTicketHistory(id: string, token?: string): Promise<HistoryEntry[]> {
   return api<HistoryEntry[]>(`/tickets/${id}/history`, { token });
 }
 
-export async function getTicketAttachments(token: string, id: string): Promise<Attachment[]> {
+export async function getTicketAttachments(id: string, token?: string): Promise<Attachment[]> {
   return api<Attachment[]>(`/tickets/${id}/attachments`, { token });
 }
 
-export async function uploadTicketAttachment(token: string, id: string, file: File): Promise<Attachment> {
+export async function uploadTicketAttachment(id: string, file: File, token?: string): Promise<Attachment> {
   const formData = new FormData();
   formData.append('file', file);
   return api<Attachment>(`/tickets/${id}/attachments`, { token, method: 'POST', body: formData });
@@ -360,52 +429,78 @@ export async function uploadTicketAttachment(token: string, id: string, file: Fi
 
 /* ─── Articles ──────────────────────────────────────────────────────── */
 
-export async function getArticles(token: string, query = ''): Promise<Article[]> {
+export async function getArticles(query = '', token?: string): Promise<Article[]> {
   return api<Article[]>(`/articles?q=${encodeURIComponent(query)}`, { token });
 }
 
-export async function getArticle(token: string, id: string): Promise<Article> {
+export async function getArticle(id: string, token?: string): Promise<Article> {
   return api<Article>(`/articles/${id}`, { token });
 }
 
-export async function createArticle(token: string, data: Partial<Article>): Promise<Article> {
+export async function createArticle(data: Partial<Article>, token?: string): Promise<Article> {
   return api<Article>('/articles', { token, method: 'POST', body: JSON.stringify(data) });
 }
 
 /* ─── Admin ─────────────────────────────────────────────────────────── */
 
-export async function getUsers(token: string): Promise<User[]> {
+export async function getUsers(token?: string): Promise<User[]> {
   return api<User[]>('/admin/users', { token });
 }
 
-export async function createUser(token: string, data: { name: string; email: string; role: string; password: string }): Promise<User> {
+export async function createUser(data: { name: string; email: string; role: string; password: string }, token?: string): Promise<User> {
   return api<User>('/admin/users', { token, method: 'POST', body: JSON.stringify(data) });
 }
 
-export async function getSLAPolicies(token: string): Promise<SLAPolicy[]> {
+export async function updateUser(id: string, data: Partial<Pick<User, 'name' | 'role' | 'active'>>, token?: string): Promise<User> {
+  return api<User>(`/admin/users/${id}`, { token, method: 'PUT', body: JSON.stringify(data) });
+}
+
+export async function getSLAPolicies(token?: string): Promise<SLAPolicy[]> {
   return api<SLAPolicy[]>('/admin/sla', { token });
 }
 
-export async function upsertSLAPolicy(token: string, priority: string, data: Omit<SLAPolicy, 'priority'>): Promise<SLAPolicy> {
+export async function upsertSLAPolicy(priority: string, data: Omit<SLAPolicy, 'priority'>, token?: string): Promise<SLAPolicy> {
   return api<SLAPolicy>(`/admin/sla/${priority}`, { token, method: 'PUT', body: JSON.stringify(data) });
 }
 
-export async function getAutomations(token: string): Promise<AutomationRule[]> {
+export async function getAutomations(token?: string): Promise<AutomationRule[]> {
   return api<AutomationRule[]>('/admin/automations', { token });
 }
 
-export async function createAutomation(token: string, data: AutomationRule): Promise<AutomationRule> {
+export async function createAutomation(data: AutomationRule, token?: string): Promise<AutomationRule> {
   return api<AutomationRule>('/admin/automations', { token, method: 'POST', body: JSON.stringify(data) });
 }
 
-export async function getAnalyticsVolume(token: string): Promise<VolumePoint[]> {
+export async function updateAutomation(id: string, data: AutomationRule, token?: string): Promise<AutomationRule> {
+  return api<AutomationRule>(`/admin/automations/${id}`, { token, method: 'PUT', body: JSON.stringify(data) });
+}
+
+export async function deleteAutomation(id: string, token?: string): Promise<void> {
+  return api<void>(`/admin/automations/${id}`, { token, method: 'DELETE' });
+}
+
+export async function getAnalyticsVolume(token?: string): Promise<VolumePoint[]> {
   return api<VolumePoint[]>('/admin/analytics/volume', { token });
 }
 
-export async function getAnalyticsStatus(token: string): Promise<StatusDistribution[]> {
+export async function getAnalyticsStatus(token?: string): Promise<StatusDistribution[]> {
   return api<StatusDistribution[]>('/admin/analytics/status-distribution', { token });
 }
 
-export async function getAnalyticsResolution(token: string): Promise<ResolutionMetrics[]> {
+export async function getAnalyticsResolution(token?: string): Promise<ResolutionMetrics[]> {
   return api<ResolutionMetrics[]>('/admin/analytics/resolution-time', { token });
+}
+
+/* ─── Notifications ─────────────────────────────────────────────────── */
+
+export async function getNotifications(token?: string): Promise<Notification[]> {
+  return api<Notification[]>('/notifications', { token });
+}
+
+export async function markNotificationRead(id: string, token?: string): Promise<void> {
+  return api<void>(`/notifications/${id}/read`, { token, method: 'POST' });
+}
+
+export async function markAllNotificationsRead(token?: string): Promise<void> {
+  return api<void>('/notifications/read-all', { token, method: 'POST' });
 }
