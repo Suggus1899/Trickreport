@@ -15,6 +15,23 @@ export default defineConfig({
   vite: {
     plugins: [tailwindcss()],
 
+    server: {
+      // In production the API is served from the same origin as the app (the
+      // Caddy reverse proxy in front of both). Proxying it here gives the dev
+      // server the same shape. Without this the browser talks to :8080
+      // cross-origin, which silently breaks anything relying on the auth
+      // cookie — client-side island fetches and the notification websocket
+      // both come back 401 — so bugs appear in dev that cannot happen in prod.
+      // Requires PUBLIC_API_URL to be empty so islands use relative paths.
+      proxy: {
+        '/api/v1': {
+          target: process.env.API_URL || 'http://localhost:8080',
+          changeOrigin: false,
+          ws: true,
+        },
+      },
+    },
+
     resolve: {
       // Dependencies that bundle their own React (recharts, @base-ui/react) can
       // otherwise end up with a second copy at runtime, which breaks hooks with
