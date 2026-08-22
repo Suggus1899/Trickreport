@@ -44,7 +44,10 @@ const { title = 'Trickreport', user } = Astro.props;
           if (stored === 'dark') document.documentElement.classList.add('dark');
           else if (stored === 'light') document.documentElement.classList.add('light');
           else if (window.matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');
-        } catch (e) {}
+        } catch {
+          // localStorage bloqueado (modo privado / cookies de terceros): sin
+          // preferencia guardada nos quedamos con el tema claro por defecto.
+        }
       })();
     </script>
   </head>

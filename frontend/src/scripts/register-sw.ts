@@ -6,6 +6,16 @@ export function registerServiceWorker(): void {
     return;
   }
 
+  // El SW cachea JS same-origin con estrategia cache-first, pensada para
+  // assets con hash estable. Contra el dev server sirve módulos de Vite viejos
+  // — se lo vio devolver HTML donde se esperaba un módulo ("Failed to load
+  // module script"), rompiendo la hidratación. Fuera de producción no
+  // registramos nada y desinstalamos el que haya quedado de una sesión previa.
+  if (!import.meta.env.PROD) {
+    void unregisterInDev();
+    return;
+  }
+
   window.addEventListener('load', () => {
     navigator.serviceWorker
       .register('/sw.js', { scope: '/' })
@@ -43,6 +53,15 @@ export function registerServiceWorker(): void {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     showUpdateBanner();
   });
+}
+
+async function unregisterInDev(): Promise<void> {
+  const registrations = await navigator.serviceWorker.getRegistrations();
+  await Promise.all(registrations.map((r) => r.unregister()));
+  if ('caches' in window) {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k.startsWith('trickreport-')).map((k) => caches.delete(k)));
+  }
 }
 
 function showUpdateBanner(): void {
