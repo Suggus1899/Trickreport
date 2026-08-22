@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
 	"github.com/trickreport/backend/internal/config"
 	"github.com/trickreport/backend/internal/email"
@@ -199,11 +200,11 @@ func TestServer_Router_CORS_RejectedOrigin(t *testing.T) {
 
 func TestServer_Router_ProductionSecurityHeaders(t *testing.T) {
 	cfg := &config.Config{
-		Port:        "0",
-		Env:         "production",
-		JWTSecret:   "prod-secret-not-change",
-		JWTExpHours: 8,
-		CORSOrigins: "http://localhost:3000",
+		Port:          "0",
+		Env:           "production",
+		JWTSecret:     "prod-secret-not-change",
+		JWTExpHours:   8,
+		CORSOrigins:   "http://localhost:3000",
 		AdminPassword: "prod-admin-pass",
 	}
 
@@ -432,5 +433,54 @@ func TestServer_Start_GracefulShutdown(t *testing.T) {
 		// success — Start returned after graceful shutdown
 	case <-time.After(5 * time.Second):
 		t.Fatal("Start did not return after context cancellation")
+	}
+}
+
+// TestServer_Router_NotificationsAreAuthenticated is a regression test: the
+// /notifications routes were registered as a sibling of the authenticated
+// group instead of inside it, so Authenticate/Tenant never ran and every
+// request was rejected with 401 no matter how valid the caller's token was —
+// the notification feature could not work at all.
+//
+// A request carrying a valid token must therefore get past the auth
+// middleware. Repos are nil here, so it then fails inside the handler and
+// Recoverer turns that into a 500; anything other than 401 proves the
+// middleware chain ran. Rejecting a tokenless request is checked too, so a
+// route that simply skips auth entirely cannot pass this test either.
+func TestServer_Router_NotificationsAreAuthenticated(t *testing.T) {
+	cfg := &config.Config{
+		Port:        "0",
+		Env:         "development",
+		JWTSecret:   "test-secret",
+		JWTExpHours: 8,
+		CORSOrigins: "http://localhost:3000",
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	srv := New(ctx, cfg, nil)
+
+	token, err := infraAuth.NewJWTGenerator(cfg.JWTSecret, cfg.JWTExpHours).
+		Generate(uuid.New(), uuid.New(), "agent")
+	if err != nil {
+		t.Fatalf("failed to mint test token: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	srv.router.ServeHTTP(rec, req)
+
+	if rec.Code == http.StatusUnauthorized {
+		t.Error("a valid token was rejected with 401 — /notifications is outside the authenticated group")
+	}
+
+	anon := httptest.NewRequest(http.MethodGet, "/api/v1/notifications/", nil)
+	anonRec := httptest.NewRecorder()
+	srv.router.ServeHTTP(anonRec, anon)
+
+	if anonRec.Code != http.StatusUnauthorized {
+		t.Errorf("tokenless request: status = %d, want %d", anonRec.Code, http.StatusUnauthorized)
 	}
 }
