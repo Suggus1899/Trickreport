@@ -115,8 +115,8 @@ export interface ApiError {
 export interface Comment {
   id: string;
   ticket_id: string;
-  author_id: string;
-  author_name?: string;
+  user_id: string;
+  user_name?: string;
   content: string;
   is_internal: boolean;
   created_at: string;
@@ -126,10 +126,10 @@ export interface HistoryEntry {
   id: string;
   ticket_id: string;
   field: string;
-  old_value: string;
-  new_value: string;
-  changed_by: string;
-  changed_by_name?: string;
+  old_value?: string;
+  new_value?: string;
+  user_id: string;
+  user_name?: string;
   created_at: string;
 }
 
@@ -150,10 +150,10 @@ export interface Attachment {
   id: string;
   ticket_id: string;
   filename: string;
-  size: number;
+  file_size: number;
   content_type: string;
-  uploaded_by: string;
-  uploaded_by_name?: string;
+  user_id: string;
+  user_name?: string;
   created_at: string;
 }
 
@@ -445,6 +445,17 @@ export async function createArticle(data: Partial<Article>, token?: string): Pro
 
 export async function getUsers(token?: string): Promise<User[]> {
   return api<User[]>('/admin/users', { token });
+}
+
+/**
+ * Users that a ticket can be assigned to. The backend gates the two list
+ * endpoints on an exact role match — /admin/users is admin-only and /users
+ * is agent-only — so the caller's role picks the path.
+ */
+export async function getAssignableUsers(role: User['role'], token?: string): Promise<User[]> {
+  if (role === 'admin') return getUsers(token);
+  if (role === 'agent') return api<User[]>('/users', { token });
+  return [];
 }
 
 export async function createUser(data: { name: string; email: string; role: string; password: string }, token?: string): Promise<User> {

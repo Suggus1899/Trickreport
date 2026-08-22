@@ -7,7 +7,7 @@ import {
   getTicketComments,
   getTicketHistory,
   getTicketAttachments,
-  getUsers,
+  getAssignableUsers,
 } from '../../lib/api';
 import type { Ticket, Comment, HistoryEntry, Attachment, User } from '../../lib/api';
 
@@ -33,9 +33,7 @@ try {
     getTicketHistory(id, token).catch(() => [] as HistoryEntry[]),
     getTicketAttachments(id, token).catch(() => [] as Attachment[]),
   ]);
-  if (user.role === 'admin' || user.role === 'agent') {
-    users = await getUsers(token).catch(() => [] as User[]);
-  }
+  users = await getAssignableUsers(user.role, token).catch(() => [] as User[]);
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load ticket';
 }
@@ -82,7 +80,7 @@ const canManage = user?.role === 'admin' || user?.role === 'agent';
                 <li class="flex gap-3 items-start">
                   <span class="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary/40"></span>
                   <div class="text-sm">
-                    <span class="font-semibold">{entry.changed_by_name || entry.changed_by}</span>
+                    <span class="font-semibold">{entry.user_name || entry.user_id}</span>
                     {' changed '}
                     <span class="font-semibold">{entry.field.replace('_', ' ')}</span>
                     {' from '}
