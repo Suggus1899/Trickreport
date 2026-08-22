@@ -56,7 +56,13 @@ self.addEventListener('activate', (event) => {
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 function isApiRequest(url) {
-  return url.pathname.startsWith('/api/v1') || url.pathname.includes('/api/v1');
+  // Only intercept same-origin API calls. In production (behind the Caddy
+  // reverse proxy) the API is always same-origin, so this is the real case
+  // this strategy is for. In local dev the API commonly lives on a
+  // different port (cross-origin) — re-issuing a cross-origin request from
+  // inside the service worker is unreliable, so let those pass straight
+  // through to the network uninterrupted rather than risk a false "Offline".
+  return url.origin === self.location.origin && url.pathname.startsWith('/api/v1');
 }
 
 function isStaticAsset(url) {

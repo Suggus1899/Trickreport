@@ -154,7 +154,9 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
             {statusError && <p className="text-sm text-destructive">{statusError}</p>}
             <Select value={statusValue} onValueChange={(value) => setStatusValue(value ?? ticket.status)}>
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {(value: string) => (value === ticket.status ? `${value.replace('_', ' ')} (current)` : value.replace('_', ' '))}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={ticket.status}>{ticket.status.replace('_', ' ')} (current)</SelectItem>
@@ -177,7 +179,11 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
             {assignError && <p className="text-sm text-destructive">{assignError}</p>}
             <Select value={assignValue} onValueChange={(value) => setAssignValue(value ?? 'unassigned')}>
               <SelectTrigger className="w-full">
-                <SelectValue />
+                <SelectValue>
+                  {(value: string) =>
+                    value === 'unassigned' ? 'Unassigned' : assignableUsers.find((u) => u.id === value)?.name ?? value
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unassigned">Unassigned</SelectItem>
@@ -208,7 +214,7 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
                 className={`rounded-lg bg-muted/50 p-4 ${comment.is_internal ? 'border-l-2 border-amber-500' : ''}`}
               >
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-semibold text-sm">{comment.author_name || comment.author_id}</span>
+                  <span className="font-semibold text-sm">{comment.user_name || comment.user_id}</span>
                   <span className="text-xs text-muted-foreground">{new Date(comment.created_at).toLocaleString()}</span>
                 </div>
                 <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
@@ -257,7 +263,7 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
                 <div className="min-w-0">
                   <p className="font-semibold text-sm truncate">{att.filename}</p>
                   <p className="text-xs text-muted-foreground">
-                    {formatBytes(att.size)} · {att.content_type} · {att.uploaded_by_name || att.uploaded_by} ·{' '}
+                    {formatBytes(att.file_size)} · {att.content_type} · {att.user_name || att.user_id} ·{' '}
                     {new Date(att.created_at).toLocaleString()}
                   </p>
                 </div>
