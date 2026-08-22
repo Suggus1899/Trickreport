@@ -277,14 +277,16 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", articleHandler.Update)
 				r.With(httpMiddleware.RequireRole("admin")).Delete("/{id}", articleHandler.Delete)
 			})
-		})
 
-		// Notifications (real-time + persistent)
-		r.Route("/notifications", func(r chi.Router) {
-			r.Get("/", notificationHandler.List)
-			r.Get("/unread-count", notificationHandler.UnreadCount)
-			r.Post("/{id}/read", notificationHandler.MarkRead)
-			r.Post("/read-all", notificationHandler.MarkAllRead)
+			// Notifications (real-time + persistent). Every handler here reads the
+			// caller from the request context, so this has to stay inside the
+			// authenticated group.
+			r.Route("/notifications", func(r chi.Router) {
+				r.Get("/", notificationHandler.List)
+				r.Get("/unread-count", notificationHandler.UnreadCount)
+				r.Post("/{id}/read", notificationHandler.MarkRead)
+				r.Post("/read-all", notificationHandler.MarkAllRead)
+			})
 		})
 	})
 
