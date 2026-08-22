@@ -25,6 +25,10 @@ interface Toast extends Notification {
   toastId: string;
 }
 
+// Cuando el handshake falla por auth (401) reintentar no lo va a arreglar:
+// cortamos en vez de reconectar para siempre. El polling de 30s sigue vivo.
+const MAX_RECONNECT_ATTEMPTS = 5;
+
 export function NotificationBell() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [open, setOpen] = useState(false);
@@ -32,6 +36,7 @@ export function NotificationBell() {
   const rootRef = useRef<HTMLDivElement>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const reconnectAttempts = useRef(0);
 
   const unread = notifications.filter((n) => !n.read).length;
 
@@ -121,13 +126,22 @@ export function NotificationBell() {
       if (!('WebSocket' in window)) return;
       // The httpOnly auth cookie rides along automatically — same-origin in
       // production behind Caddy. No token is ever exposed to this script.
+      // Cross-origin (the usual dev setup) the cookie is not sent and the
+      // handshake is rejected, so the retry below has to give up eventually.
       const ws = new WebSocket(wsUrl());
       wsRef.current = ws;
-      ws.addEventListener('open', load);
+      ws.addEventListener('open', () => {
+        reconnectAttempts.current = 0;
+        load();
+      });
       ws.addEventListener('message', (e) => handleRealtimeMessage(e.data));
       ws.addEventListener('close', () => {
         wsRef.current = null;
-        reconnectTimer.current = setTimeout(connect, 5000);
+        if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) return;
+        // Exponential backoff: 5s, 10s, 20s, 40s, 60s (capped).
+        const delay = Math.min(5000 * 2 ** reconnectAttempts.current, 60000);
+        reconnectAttempts.current += 1;
+        reconnectTimer.current = setTimeout(connect, delay);
       });
       ws.addEventListener('error', () => ws.close());
     }
