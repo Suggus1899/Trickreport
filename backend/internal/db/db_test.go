@@ -25,3 +25,10 @@ func TestRunMigrations_InvalidURL(t *testing.T) {
 		t.Error("expected error for invalid migration URL")
 	}
 }
+
+func TestRollbackLastMigration_InvalidURL(t *testing.T) {
+	err := RollbackLastMigration("not-a-valid-url")
+	if err == nil {
+		t.Error("expected error for invalid migration URL")
+	}
+}

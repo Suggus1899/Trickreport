@@ -3,7 +3,7 @@ BINARY     := trickreport-api
 BUILD_DIR  := ./dist
 CMD_PATH   := ./cmd/api
 
-.PHONY: all run build test migrate clean lint fmt coverage docker-build docker-run migrate-up migrate-down generate install-tools security
+.PHONY: all run build test migrate clean lint fmt coverage docker-build docker-run migrate-up migrate-down seed generate install-tools security
 
 ## all: build the binary
 all: build
@@ -58,6 +58,10 @@ migrate-up:
 ## migrate-down: roll back the last migration (via the API --migrate-down flag)
 migrate-down:
 	go run $(CMD_PATH) --migrate-down
+
+## seed: populate the database with demo data (users, tickets, articles, SLA policies, an automation rule)
+seed:
+	go run $(CMD_PATH) --seed
 
 ## generate: run go generate across the module
 generate:

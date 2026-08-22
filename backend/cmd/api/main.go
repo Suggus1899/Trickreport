@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"io"
 	"os"
 	"os/signal"
@@ -28,6 +29,12 @@ import (
 // @description Bearer JWT token (or trickreport_token cookie).
 
 func main() {
+	// ── Flags ─────────────────────────────────────────────────────────
+	migrateUp := flag.Bool("migrate-up", false, "Apply all pending database migrations, then exit")
+	migrateDown := flag.Bool("migrate-down", false, "Roll back the last database migration, then exit")
+	seed := flag.Bool("seed", false, "Seed the database with demo data, then exit (refuses to run in production)")
+	flag.Parse()
+
 	// ── Config ────────────────────────────────────────────────────────
 	cfg := config.Load()
 
@@ -54,6 +61,24 @@ func main() {
 		}
 	}
 
+	// ── One-off maintenance commands ─────────────────────────────────
+	// These apply/roll back migrations against the raw DSN and exit —
+	// no server, no connection pool needed.
+	if *migrateUp {
+		if err := db.RunMigrations(cfg.DatabaseURL); err != nil {
+			log.Fatal().Err(err).Msg("Failed to run database migrations")
+		}
+		log.Info().Msg("Database migrations applied")
+		return
+	}
+	if *migrateDown {
+		if err := db.RollbackLastMigration(cfg.DatabaseURL); err != nil {
+			log.Fatal().Err(err).Msg("Failed to roll back migration")
+		}
+		log.Info().Msg("Last migration rolled back")
+		return
+	}
+
 	// ── Context ───────────────────────────────────────────────────────
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -78,6 +103,14 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to run database migrations")
 	}
 	log.Info().Msg("Database migrations up to date")
+
+	if *seed {
+		if err := bootstrap.Seed(ctx, pool, cfg.IsProduction()); err != nil {
+			log.Fatal().Err(err).Msg("Seed failed")
+		}
+		log.Info().Msg("Seed complete")
+		return
+	}
 
 	// ── Bootstrap initial admin (from ADMIN_EMAIL / ADMIN_PASSWORD) ───
 	if err := bootstrap.EnsureAdmin(ctx, pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {

@@ -15,6 +15,7 @@ go test ./... -race               # tests
 golangci-lint run ./...           # lint
 go run cmd/api --migrate-up       # apply migrations
 go run cmd/api --migrate-down     # rollback last migration
+go run cmd/api --seed             # seed demo data (users/tickets/articles/SLA/automation rule); refuses to run when ENV=production
 
 # Frontend (from frontend/)
 npm run dev                       # astro dev
