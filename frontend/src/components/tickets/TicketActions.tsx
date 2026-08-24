@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Paperclip } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Badge, statusBadgeVariant, priorityBadgeVariant } from '@/components/ui/badge';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import {
@@ -14,6 +16,7 @@ import {
   type User,
 } from '@/lib/api';
 import { PUBLIC_API_URL } from '@/lib/config';
+import { toast } from '@/lib/toast';
 
 export const STATUS_TRANSITIONS: Record<string, string[]> = {
   open: ['in_progress', 'waiting_client', 'resolved', 'closed'],
@@ -21,14 +24,6 @@ export const STATUS_TRANSITIONS: Record<string, string[]> = {
   waiting_client: ['in_progress', 'resolved', 'closed'],
   resolved: ['closed', 'in_progress'],
   closed: ['in_progress'],
-};
-
-const STATUS_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  open: 'default',
-  in_progress: 'secondary',
-  waiting_client: 'outline',
-  resolved: 'secondary',
-  closed: 'outline',
 };
 
 function formatBytes(bytes: number): string {
@@ -77,6 +72,7 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
     try {
       await updateTicketStatus(ticketId, statusValue);
       setTicket((t) => ({ ...t, status: statusValue }));
+      toast(`Status updated to ${statusValue.replace('_', ' ')}`, 'success');
     } catch (err) {
       setStatusError(err instanceof Error ? err.message : 'Failed to update status');
     } finally {
@@ -93,6 +89,7 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
       await assignTicket(ticketId, newAssignee);
       const assignee = assignableUsers.find((u) => u.id === newAssignee);
       setTicket((t) => ({ ...t, assigned_to: newAssignee || undefined, assignee_name: assignee?.name }));
+      toast(assignee ? `Assigned to ${assignee.name}` : 'Ticket unassigned', 'success');
     } catch (err) {
       setAssignError(err instanceof Error ? err.message : 'Failed to update assignment');
     } finally {
@@ -109,6 +106,7 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
       setComments((prev) => [...prev, comment]);
       setCommentText('');
       setCommentInternal(false);
+      toast('Comment posted', 'success');
     } catch (err) {
       setCommentError(err instanceof Error ? err.message : 'Failed to add comment');
     } finally {
@@ -128,6 +126,7 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
       const attachment = await uploadTicketAttachment(ticketId, file);
       setAttachments((prev) => [...prev, attachment]);
       form.reset();
+      toast(`Uploaded ${attachment.filename}`, 'success');
     } catch (err) {
       setUploadError(err instanceof Error ? err.message : 'Failed to upload attachment');
     } finally {
@@ -139,9 +138,9 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
     <div className="flex flex-col gap-6">
       {/* Status/priority header — updates in place after status/assign changes */}
       <div className="flex flex-wrap items-center gap-3">
-        <Badge variant={STATUS_VARIANT[ticket.status] || 'default'}>{ticket.status.replace('_', ' ')}</Badge>
-        <Badge variant="outline">{ticket.priority}</Badge>
-        {ticket.sla_breached && <Badge variant="destructive">SLA Breached</Badge>}
+        <Badge variant={statusBadgeVariant(ticket.status)} dot>{ticket.status.replace('_', ' ')}</Badge>
+        <Badge variant={priorityBadgeVariant(ticket.priority)} dot>{ticket.priority}</Badge>
+        {ticket.sla_breached && <Badge variant="priority-critical" dot>SLA Breached</Badge>}
         <span className="text-sm text-muted-foreground ml-auto">
           {ticket.assignee_name ? `Assigned to ${ticket.assignee_name}` : 'Unassigned'}
         </span>
@@ -205,22 +204,27 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
 
       {/* Comments */}
       <div id="comments" className="rounded-xl border bg-card p-5">
-        <h2 className="text-lg font-semibold mb-4">Comments ({comments.length})</h2>
+        <h2 className="font-heading text-lg font-semibold mb-4">Comments ({comments.length})</h2>
         {comments.length > 0 ? (
           <div className="flex flex-col gap-4 mb-6">
-            {comments.map((comment) => (
-              <div
-                key={comment.id}
-                className={`rounded-lg bg-muted/50 p-4 ${comment.is_internal ? 'border-l-2 border-amber-500' : ''}`}
-              >
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="font-semibold text-sm">{comment.user_name || comment.user_id}</span>
-                  <span className="text-xs text-muted-foreground">{new Date(comment.created_at).toLocaleString()}</span>
-                </div>
-                <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
-                {comment.is_internal && <span className="text-xs font-semibold text-amber-600 mt-2 inline-block">Internal</span>}
-              </div>
-            ))}
+            <AnimatePresence initial={false}>
+              {comments.map((comment) => (
+                <motion.div
+                  key={comment.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.2, ease: 'easeOut' }}
+                  className={`rounded-lg bg-muted/50 p-4 ${comment.is_internal ? 'border-l-2 border-warning' : ''}`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="font-semibold text-sm">{comment.user_name || comment.user_id}</span>
+                    <span className="text-xs text-muted-foreground">{new Date(comment.created_at).toLocaleString()}</span>
+                  </div>
+                  <p className="text-sm whitespace-pre-wrap">{comment.content}</p>
+                  {comment.is_internal && <span className="text-xs font-semibold text-warning mt-2 inline-block">Internal</span>}
+                </motion.div>
+              ))}
+            </AnimatePresence>
           </div>
         ) : (
           <p className="text-sm text-muted-foreground mb-6">No comments yet.</p>
@@ -255,7 +259,10 @@ export function TicketActions({ ticketId, initialTicket, initialComments, initia
 
       {/* Attachments */}
       <div id="attachments" className="rounded-xl border bg-card p-5">
-        <h2 className="text-lg font-semibold mb-4">Attachments ({attachments.length})</h2>
+        <h2 className="font-heading text-lg font-semibold mb-4 flex items-center gap-2">
+          <Paperclip className="size-4 text-muted-foreground" aria-hidden="true" />
+          Attachments ({attachments.length})
+        </h2>
         {attachments.length > 0 ? (
           <ul className="flex flex-col gap-3 mb-6">
             {attachments.map((att) => (

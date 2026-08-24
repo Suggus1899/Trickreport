@@ -1,6 +1,6 @@
 ---
+import { ClientRouter } from 'astro:transitions';
 import '../styles/tailwind.css';
-import { ON_PREMISE } from '../lib/config';
 import { Sidebar } from '../components/chrome/Sidebar';
 import { GlobalSearch } from '../components/chrome/GlobalSearch';
 import { NotificationBell } from '../components/chrome/NotificationBell';
@@ -22,19 +22,27 @@ const { title = 'Trickreport', user } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="referrer" content="no-referrer" />
     <link rel="manifest" href="/manifest.json" />
-    <meta name="theme-color" content="#6d5dfc" />
+    <meta name="theme-color" content="#3b5773" />
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
     <title>{title} — Trickreport</title>
-    {/* External resources are only loaded in non-on-premise mode */}
-    {!ON_PREMISE && (
-      <>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
-      </>
-    )}
+    <ClientRouter />
     <script>
       import '../scripts/register-sw.ts';
+      // Exposed globally so plain `is:inline` page scripts (no module graph,
+      // can't `import`) can still show a toast — see tickets.astro's CSV export.
+      import { toast } from '../lib/toast';
+      (window as unknown as { __toast: typeof toast }).__toast = toast;
+
+      // The View Transition API rejects the in-flight transition's promise
+      // with InvalidStateError when a navigation interrupts a still-running
+      // one (fast repeat clicks, back-button mashing). The navigation itself
+      // completes correctly either way — only the animation is skipped — so
+      // this is not a real error, just noise this specific rejection produces.
+      window.addEventListener('unhandledrejection', (e) => {
+        if (e.reason?.name === 'InvalidStateError' && /transition/i.test(e.reason?.message ?? '')) {
+          e.preventDefault();
+        }
+      });
     </script>
     {/* Apply persisted theme before paint to avoid flash */}
     <script is:inline>
@@ -60,17 +68,19 @@ const { title = 'Trickreport', user } = Astro.props;
     </a>
     {user ? (
       <div class="flex min-h-screen">
-        <Sidebar client:load user={user} pathname={Astro.url.pathname} />
+        <Sidebar client:load user={user} pathname={Astro.url.pathname} transition:persist="app-sidebar" />
         <main id="main-content" class="flex-1 p-6 overflow-auto">
           <div class="flex items-center gap-3 mb-6 flex-wrap">
-            <GlobalSearch client:load />
+            <GlobalSearch client:load transition:persist="app-search" />
             <div class="flex items-center gap-2 ml-auto">
-              <NotificationBell client:load />
+              <NotificationBell client:load transition:persist="app-notifications" />
             </div>
           </div>
-          <slot />
+          <div transition:animate="slide">
+            <slot />
+          </div>
         </main>
-        <KeyboardHelp client:load />
+        <KeyboardHelp client:load transition:persist="app-keyboard-help" />
       </div>
     ) : (
       <slot />

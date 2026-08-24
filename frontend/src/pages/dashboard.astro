@@ -1,7 +1,9 @@
 ---
 import Layout from '../layouts/Layout.astro';
 import { buttonVariants } from '../components/ui/button';
-import { getMe, getSummary } from '../lib/api';
+import { DashboardCharts } from '../components/dashboard/DashboardCharts';
+import { getMe, getSummary, getTickets, ApiAuthError } from '../lib/api';
+import { dailyVolume, statusDistribution, myTickets as pickMyTickets } from '../lib/dashboard-metrics';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
 if (!token) {
@@ -10,52 +12,55 @@ if (!token) {
 
 let user;
 let summary;
+let tickets: Awaited<ReturnType<typeof getTickets>> = [];
 let error = '';
 
 try {
-  user = await getMe(token);
-  summary = await getSummary(token);
+  [user, summary, tickets] = await Promise.all([getMe(token), getSummary(token), getTickets(token)]);
 } catch (err) {
+  if (err instanceof ApiAuthError) {
+    return Astro.redirect('/login');
+  }
   error = err instanceof Error ? err.message : 'Failed to load dashboard';
 }
+
+const TREND_DAYS = 14;
+const totalVolume = dailyVolume(tickets, TREND_DAYS);
+const openVolume = dailyVolume(tickets.filter((t) => t.status !== 'resolved' && t.status !== 'closed'), TREND_DAYS);
+const resolvedVolume = dailyVolume(tickets.filter((t) => t.status === 'resolved'), TREND_DAYS);
+const slaVolume = dailyVolume(tickets.filter((t) => t.sla_breached), TREND_DAYS);
+const distribution = statusDistribution(tickets);
+const assignedToMe = user ? pickMyTickets(tickets, user.id) : [];
 ---
 
 <Layout title="Dashboard" user={user ? { name: user.name, role: user.role } : undefined}>
-  <div class="max-w-6xl mx-auto">
-    <header class="mb-8">
-      <h1 class="text-3xl font-bold">Dashboard</h1>
-      <p class="text-muted-foreground">Overview of your help desk</p>
-    </header>
-
-    {error && (
-      <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive mb-6">{error}</div>
-    )}
-
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-      <div class="rounded-xl border bg-card p-5 flex flex-col gap-2">
-        <span class="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Total</span>
-        <span class="text-4xl font-bold">{summary?.total_tickets ?? 0}</span>
+  <div class="max-w-6xl mx-auto flex flex-col gap-6">
+    <header class="flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h1 class="font-heading text-3xl font-bold">Dashboard</h1>
+        <p class="text-muted-foreground">Overview of your help desk</p>
       </div>
-      <div class="rounded-xl border bg-card p-5 flex flex-col gap-2">
-        <span class="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Open</span>
-        <span class="text-4xl font-bold text-primary">{summary?.open_tickets ?? 0}</span>
-      </div>
-      <div class="rounded-xl border bg-card p-5 flex flex-col gap-2">
-        <span class="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Resolved</span>
-        <span class="text-4xl font-bold text-emerald-600">{summary?.resolved_tickets ?? 0}</span>
-      </div>
-      <div class="rounded-xl border bg-card p-5 flex flex-col gap-2">
-        <span class="text-sm font-semibold text-muted-foreground uppercase tracking-wide">SLA Breached</span>
-        <span class="text-4xl font-bold text-destructive">{summary?.sla_breached ?? 0}</span>
-      </div>
-    </div>
-
-    <div class="rounded-xl border bg-card p-5">
-      <h2 class="text-xl font-semibold mb-4">Quick actions</h2>
-      <div class="flex flex-wrap gap-4">
+      <div class="flex gap-3">
         <a href="/tickets" class={buttonVariants({ variant: 'outline' })}>View Tickets</a>
         <a href="/tickets/new" class={buttonVariants({})}>Create Ticket</a>
       </div>
-    </div>
+    </header>
+
+    {error && (
+      <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive">{error}</div>
+    )}
+
+    {summary && (
+      <DashboardCharts
+        client:load
+        summary={summary}
+        totalVolume={totalVolume}
+        openVolume={openVolume}
+        resolvedVolume={resolvedVolume}
+        slaVolume={slaVolume}
+        distribution={distribution}
+        myTickets={assignedToMe}
+      />
+    )}
   </div>
 </Layout>

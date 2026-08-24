@@ -1,7 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { buttonVariants } from '../../components/ui/button';
-import { Badge } from '../../components/ui/badge';
+import { Badge, priorityBadgeVariant } from '../../components/ui/badge';
 import { getMe, getSLAPolicies, upsertSLAPolicy } from '../../lib/api';
 import type { SLAPolicy } from '../../lib/api';
 
@@ -36,7 +36,7 @@ if (Astro.request.method === 'POST') {
       resolution_time_minutes,
       escalation_minutes,
     }, token);
-    return Astro.redirect('/admin/sla');
+    return Astro.redirect(`/admin/sla?saved=${priority}`);
   } catch (e: any) {
     error = e?.message || 'Failed to update SLA policy';
   }
@@ -48,13 +48,7 @@ try {
   error = err instanceof Error ? err.message : 'Failed to load SLA policies';
 }
 
-const priorityVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  low: 'outline',
-  medium: 'secondary',
-  high: 'secondary',
-  critical: 'destructive',
-};
-
+const saved = Astro.url.searchParams.get('saved');
 const inputClass = 'h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring';
 ---
 
@@ -62,7 +56,7 @@ const inputClass = 'h-9 rounded-md border bg-background px-3 text-sm outline-non
   <div class="max-w-6xl mx-auto">
     <div class="flex items-center justify-between mb-8">
       <div>
-        <h1 class="text-3xl font-bold">SLA Policies</h1>
+        <h1 class="font-heading text-3xl font-bold">SLA Policies</h1>
         <p class="text-muted-foreground">Response and resolution targets per priority</p>
       </div>
       <a href="/admin" class={buttonVariants({ variant: 'outline', size: 'sm' })}>Back to Admin</a>
@@ -74,10 +68,10 @@ const inputClass = 'h-9 rounded-md border bg-background px-3 text-sm outline-non
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
       {policies.length > 0 ? policies.map((policy) => (
-        <div class="rounded-xl border bg-card p-5">
+        <div class={`rounded-xl border bg-card p-5 transition-colors ${saved === policy.priority ? 'border-success/40' : ''}`}>
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold capitalize">{policy.priority}</h2>
-            <Badge variant={priorityVariant[policy.priority] || 'default'}>{policy.priority}</Badge>
+            <h2 class="font-heading text-lg font-semibold capitalize">{policy.priority}</h2>
+            <Badge variant={priorityBadgeVariant(policy.priority)} dot>{policy.priority}</Badge>
           </div>
           <form method="POST" class="flex flex-col gap-4">
             <input type="hidden" name="priority" value={policy.priority} />
@@ -105,4 +99,15 @@ const inputClass = 'h-9 rounded-md border bg-background px-3 text-sm outline-non
       )}
     </div>
   </div>
+
+  {saved && (
+    <script is:inline define:vars={{ saved }}>
+      (function () {
+        if (window.__toast) window.__toast(saved + ' SLA policy saved', 'success');
+        const url = new URL(window.location.href);
+        url.searchParams.delete('saved');
+        window.history.replaceState({}, '', url);
+      })();
+    </script>
+  )}
 </Layout>

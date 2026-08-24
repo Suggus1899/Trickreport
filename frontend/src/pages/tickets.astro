@@ -1,8 +1,10 @@
 ---
 import Layout from '../layouts/Layout.astro';
-import { Badge } from '../components/ui/badge';
+import { Badge, statusBadgeVariant, priorityBadgeVariant } from '../components/ui/badge';
 import { Button, buttonVariants } from '../components/ui/button';
+import { TicketFilters } from '../components/tickets/TicketFilters';
 import { getMe, getTickets } from '../lib/api';
+import { TicketX } from 'lucide-react';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
 if (!token) {
@@ -24,21 +26,6 @@ try {
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load tickets';
 }
-
-const statusVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  open: 'default',
-  in_progress: 'secondary',
-  waiting_client: 'outline',
-  resolved: 'secondary',
-  closed: 'outline',
-};
-
-const priorityVariant: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  low: 'outline',
-  medium: 'secondary',
-  high: 'secondary',
-  critical: 'destructive',
-};
 
 // Apply filters client-side (API may not support query params yet).
 let filteredTickets = tickets || [];
@@ -63,7 +50,7 @@ const ticketsJson = JSON.stringify(filteredTickets || []);
   <div class="max-w-6xl mx-auto">
     <div class="flex items-center justify-between mb-8 flex-wrap gap-3">
       <div>
-        <h1 class="text-3xl font-bold">Tickets</h1>
+        <h1 class="font-heading text-3xl font-bold">Tickets</h1>
         <p class="text-muted-foreground">Manage support requests</p>
       </div>
       <div class="flex items-center gap-3">
@@ -77,37 +64,13 @@ const ticketsJson = JSON.stringify(filteredTickets || []);
     )}
 
     <div class="rounded-xl border bg-card p-5 mb-6">
-      <form method="GET" class="flex flex-col gap-3 sm:flex-row sm:items-end">
-        <div class="flex flex-col gap-2 flex-1">
-          <label for="q" class="text-sm font-semibold ml-1">Search</label>
-          <input id="q" name="q" type="text" placeholder="Search title or description..." value={search} class="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring" />
-        </div>
-        <div class="flex flex-col gap-2">
-          <label for="status" class="text-sm font-semibold ml-1">Status</label>
-          <select id="status" name="status" class="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <option value="">All</option>
-            <option value="open" selected={statusFilter === 'open'}>Open</option>
-            <option value="in_progress" selected={statusFilter === 'in_progress'}>In Progress</option>
-            <option value="waiting_client" selected={statusFilter === 'waiting_client'}>Waiting Client</option>
-            <option value="resolved" selected={statusFilter === 'resolved'}>Resolved</option>
-            <option value="closed" selected={statusFilter === 'closed'}>Closed</option>
-          </select>
-        </div>
-        <div class="flex flex-col gap-2">
-          <label for="priority" class="text-sm font-semibold ml-1">Priority</label>
-          <select id="priority" name="priority" class="h-9 rounded-md border bg-background px-3 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <option value="">All</option>
-            <option value="low" selected={priorityFilter === 'low'}>Low</option>
-            <option value="medium" selected={priorityFilter === 'medium'}>Medium</option>
-            <option value="high" selected={priorityFilter === 'high'}>High</option>
-            <option value="critical" selected={priorityFilter === 'critical'}>Critical</option>
-          </select>
-        </div>
-        <Button type="submit">Filter</Button>
-        {hasFilters && (
-          <a href="/tickets" class="text-sm font-semibold text-muted-foreground hover:text-foreground px-2 py-2">Clear</a>
-        )}
-      </form>
+      <TicketFilters
+        client:load
+        initialSearch={search}
+        initialStatus={statusFilter}
+        initialPriority={priorityFilter}
+        hasFilters={!!hasFilters}
+      />
     </div>
 
     <div class="rounded-xl border bg-card overflow-hidden">
@@ -121,28 +84,37 @@ const ticketsJson = JSON.stringify(filteredTickets || []);
           </tr>
         </thead>
         <tbody class="divide-y">
-          {filteredTickets.length > 0 ? filteredTickets.map((ticket) => (
-            <tr class="hover:bg-muted/30 transition-colors">
+          {filteredTickets.length > 0 ? filteredTickets.map((ticket, i) => (
+            <tr
+              class={`hover:bg-muted/30 transition-colors animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-backwards ${ticket.sla_breached ? 'border-l-2 border-destructive' : ''}`}
+              style={{ animationDelay: `${Math.min(i, 12) * 25}ms`, animationDuration: '200ms' }}
+            >
               <td class="px-6 py-4">
-                <a href={`/tickets/${ticket.id}`} class="font-semibold hover:text-primary">
+                <a href={`/tickets/${ticket.id}`} class="font-semibold hover:text-primary transition-colors">
                   {ticket.title}
                 </a>
                 <p class="text-xs text-muted-foreground">{ticket.creator_name || ticket.created_by}</p>
               </td>
               <td class="px-6 py-4">
-                <Badge variant={statusVariant[ticket.status] || 'default'}>{ticket.status.replace('_', ' ')}</Badge>
+                <Badge variant={statusBadgeVariant(ticket.status)} dot>{ticket.status.replace('_', ' ')}</Badge>
               </td>
               <td class="px-6 py-4">
-                <Badge variant={priorityVariant[ticket.priority] || 'default'}>{ticket.priority}</Badge>
+                <Badge variant={priorityBadgeVariant(ticket.priority)} dot>{ticket.priority}</Badge>
               </td>
-              <td class="px-6 py-4 text-sm text-muted-foreground">
+              <td class="px-6 py-4 text-sm text-muted-foreground font-mono">
                 {new Date(ticket.created_at).toLocaleDateString()}
               </td>
             </tr>
           )) : (
             <tr>
-              <td colspan="4" class="px-6 py-12 text-center text-muted-foreground">
-                {hasFilters ? 'No tickets match your filters.' : 'No tickets yet. Create one to get started.'}
+              <td colspan="4" class="px-6 py-16 text-center text-muted-foreground">
+                <TicketX className="size-8 mx-auto mb-3 opacity-40" />
+                <p>{hasFilters ? 'No tickets match your filters.' : 'No tickets yet.'}</p>
+                {!hasFilters && (
+                  <a href="/tickets/new" class="text-primary font-semibold hover:underline mt-1 inline-block">
+                    Create your first ticket
+                  </a>
+                )}
               </td>
             </tr>
           )}
@@ -157,7 +129,10 @@ const ticketsJson = JSON.stringify(filteredTickets || []);
       const btn = document.getElementById('export-csv');
       if (!btn) return;
       btn.addEventListener('click', () => {
-        if (!tickets.length) { alert('No tickets to export.'); return; }
+        if (!tickets.length) {
+          if (window.__toast) window.__toast('No tickets to export.', 'info');
+          return;
+        }
         const rows = tickets.map((t) => ({
           id: t.id,
           title: t.title,

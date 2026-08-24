@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { createAutomation, updateAutomation, deleteAutomation, type AutomationRule } from '@/lib/api';
+import { toast } from '@/lib/toast';
 
 // Matches the backend's validator.oneof list exactly (handler/automation.go).
 const TRIGGER_TYPES = [
@@ -11,6 +12,7 @@ const TRIGGER_TYPES = [
   { value: 'status_changed', label: 'Status Changed' },
   { value: 'sla_breach', label: 'SLA Breach' },
   { value: 'priority_changed', label: 'Priority Changed' },
+  { value: 'escalation', label: 'SLA Escalation' },
 ];
 
 const CONDITION_FIELDS = [
@@ -25,22 +27,22 @@ const CONDITION_OPERATORS = [
   { value: 'contains', label: 'contains' },
 ];
 
+// Matches the backend's action executor exactly (application/automation/engine.go).
+// "add_tag" is deliberately not offered here: the tickets table has no tags
+// column, so the backend's AddTag is a permanent no-op (automation_executor.go).
 const ACTION_TYPES = [
-  { value: 'change_status', label: 'Change Status' },
-  { value: 'assign', label: 'Assign' },
+  { value: 'set_status', label: 'Change Status' },
+  { value: 'assign_to', label: 'Assign' },
   { value: 'send_email', label: 'Send Email' },
-  { value: 'add_tag', label: 'Add Tag' },
 ];
 
 const ACTION_FIELDS: Record<string, { key: string; label: string; placeholder: string }[]> = {
-  change_status: [{ key: 'status', label: 'Status', placeholder: 'resolved' }],
-  assign: [{ key: 'assignee', label: 'Assignee (user id or email)', placeholder: 'agent@example.com' }],
+  set_status: [{ key: 'status', label: 'Status', placeholder: 'resolved' }],
+  assign_to: [{ key: 'user_id', label: 'Assignee (user ID)', placeholder: '00000000-0000-0000-0000-000000000000' }],
   send_email: [
-    { key: 'to', label: 'To', placeholder: 'user@example.com' },
-    { key: 'subject', label: 'Subject', placeholder: 'Subject' },
-    { key: 'template', label: 'Template', placeholder: 'ticket_updated' },
+    { key: 'to', label: 'To', placeholder: 'manager@example.com' },
+    { key: 'subject', label: 'Subject', placeholder: 'Ticket needs attention' },
   ],
-  add_tag: [{ key: 'tag', label: 'Tag', placeholder: 'urgent' }],
 };
 
 interface Clause {
@@ -55,7 +57,7 @@ interface ActionRow {
 }
 
 const EMPTY_CLAUSE: Clause = { field: 'status', op: 'equals', value: '' };
-const EMPTY_ACTION: ActionRow = { type: 'change_status', status: '' };
+const EMPTY_ACTION: ActionRow = { type: 'set_status', status: '' };
 
 function conditionsToClauses(conditions: Record<string, unknown>): Clause[] {
   if (Array.isArray((conditions as { conditions?: unknown }).conditions)) {
@@ -132,9 +134,11 @@ export function AutomationsManager({ initialAutomations }: { initialAutomations:
       if (editId) {
         const updated = await updateAutomation(editId, payload);
         setAutomations((prev) => prev.map((a) => (a.id === editId ? updated : a)));
+        toast(`Automation "${updated.name}" updated`, 'success');
       } else {
         const created = await createAutomation(payload);
         setAutomations((prev) => [...prev, created]);
+        toast(`Automation "${created.name}" created`, 'success');
       }
       resetBuilder();
     } catch (err) {
@@ -149,6 +153,7 @@ export function AutomationsManager({ initialAutomations }: { initialAutomations:
     try {
       await deleteAutomation(rule.id);
       setAutomations((prev) => prev.filter((a) => a.id !== rule.id));
+      toast(`Automation "${rule.name}" deleted`, 'success');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete automation');
     }
@@ -157,7 +162,7 @@ export function AutomationsManager({ initialAutomations }: { initialAutomations:
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-1 rounded-xl border bg-card p-5 h-fit">
-        <h2 className="text-lg font-semibold mb-1">{editId ? 'Edit automation' : 'Create automation'}</h2>
+        <h2 className="font-heading text-lg font-semibold mb-1">{editId ? 'Edit automation' : 'Create automation'}</h2>
         <p className="text-xs text-muted-foreground mb-4">
           {editId ? 'Changes will update the existing rule.' : 'Build conditions and actions visually.'}
         </p>
@@ -303,7 +308,7 @@ export function AutomationsManager({ initialAutomations }: { initialAutomations:
                   </td>
                   <td className="px-5 py-3 text-sm text-muted-foreground">{rule.trigger_type.replace('_', ' ')}</td>
                   <td className="px-5 py-3">
-                    <Badge variant={rule.is_active ? 'secondary' : 'outline'}>{rule.is_active ? 'active' : 'inactive'}</Badge>
+                    <Badge variant={rule.is_active ? 'status-resolved' : 'status-closed'} dot>{rule.is_active ? 'active' : 'inactive'}</Badge>
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2 flex-wrap">

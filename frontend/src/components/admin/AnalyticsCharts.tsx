@@ -12,17 +12,8 @@ import {
   Cell,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { Badge, priorityBadgeVariant, statusChartColor } from '@/components/ui/badge';
 import type { VolumePoint, StatusDistribution, ResolutionMetrics } from '@/lib/api';
-
-const CHART_COLORS = ['#6d5dfc', '#4cd964', '#ffcc00', '#ff5a5a', '#34a853', '#8b7dff'];
-
-const PRIORITY_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  low: 'outline',
-  medium: 'secondary',
-  high: 'secondary',
-  critical: 'destructive',
-};
 
 interface Props {
   volume: VolumePoint[];
@@ -80,7 +71,7 @@ export function AnalyticsCharts({ volume, status, resolution }: Props) {
                 contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }}
                 labelFormatter={(_, payload) => (payload?.[0]?.payload ? new Date(payload[0].payload.date).toLocaleDateString() : '')}
               />
-              <Line type="monotone" dataKey="count" stroke={CHART_COLORS[0]} strokeWidth={2.5} dot={{ r: 3 }} />
+              <Line type="monotone" dataKey="count" stroke="var(--primary)" strokeWidth={2.5} dot={{ r: 3 }} />
             </LineChart>
           </ResponsiveContainer>
         ) : (
@@ -96,17 +87,17 @@ export function AnalyticsCharts({ volume, status, resolution }: Props) {
               <ResponsiveContainer width={200} height={200}>
                 <PieChart>
                   <Pie data={status} dataKey="count" nameKey="status" innerRadius={48} outerRadius={80} paddingAngle={1}>
-                    {status.map((_, i) => (
-                      <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />
+                    {status.map((s) => (
+                      <Cell key={s.status} fill={statusChartColor(s.status)} />
                     ))}
                   </Pie>
                   <Tooltip contentStyle={{ background: 'var(--popover)', border: '1px solid var(--border)', borderRadius: 8, fontSize: 12 }} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex flex-col gap-2 flex-1">
-                {status.map((s, i) => (
+                {status.map((s) => (
                   <div key={s.status} className="flex items-center gap-2">
-                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                    <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: statusChartColor(s.status) }} />
                     <span className="text-sm font-semibold capitalize">{s.status.replace('_', ' ')}</span>
                     <span className="text-xs text-muted-foreground">
                       {s.count} · {total ? ((s.count / total) * 100).toFixed(1) : 0}%
@@ -136,7 +127,7 @@ export function AnalyticsCharts({ volume, status, resolution }: Props) {
                 resolution.map((r) => (
                   <tr key={r.priority} className="hover:bg-muted/30 transition-colors">
                     <td className="px-5 py-3">
-                      <Badge variant={PRIORITY_VARIANT[r.priority] || 'default'}>{r.priority}</Badge>
+                      <Badge variant={priorityBadgeVariant(r.priority)} dot>{r.priority}</Badge>
                     </td>
                     <td className="px-5 py-3 font-semibold">{r.avg_hours.toFixed(1)}h</td>
                   </tr>

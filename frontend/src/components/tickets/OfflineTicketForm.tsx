@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { createTicket } from '@/lib/api';
+import { createTicket, ApiNetworkError } from '@/lib/api';
 import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
 import { useOfflineTickets } from '@/lib/hooks/useOfflineTickets';
 
@@ -31,7 +31,11 @@ export function OfflineTicketForm() {
     setSyncMessage('Syncing...');
     try {
       const synced = await sync();
-      setSyncMessage(synced > 0 ? `Synced ${synced} ticket${synced > 1 ? 's' : ''} successfully.` : 'No pending tickets to sync.');
+      setSyncMessage(
+        synced > 0
+          ? `Synced ${synced} ticket${synced > 1 ? 's' : ''} successfully.`
+          : 'No pending tickets to sync.',
+      );
     } catch (err) {
       setSyncMessage(`Sync failed: ${err instanceof Error ? err.message : 'unknown error'}`);
     } finally {
@@ -68,8 +72,14 @@ export function OfflineTicketForm() {
           await createTicket(data);
           window.location.href = '/tickets';
           return;
-        } catch {
-          // Network hiccup — fall back to the offline queue below.
+        } catch (err) {
+          // Only a real network failure falls back to the offline queue — a
+          // validation error (4xx) would fail identically on every future
+          // sync attempt, so it must surface to the user now instead.
+          if (!(err instanceof ApiNetworkError)) {
+            setBanner(err instanceof Error ? err.message : 'Failed to create ticket.');
+            return;
+          }
         }
       }
       await save(data);
@@ -86,7 +96,11 @@ export function OfflineTicketForm() {
 
   return (
     <div className="rounded-xl border bg-card p-6">
-      {banner && <div className="rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 p-4 text-sm mb-5">{banner}</div>}
+      {banner && (
+        <div className="rounded-lg bg-amber-500/10 text-amber-700 dark:text-amber-400 p-4 text-sm mb-5">
+          {banner}
+        </div>
+      )}
       {syncMessage && <div className="rounded-lg bg-muted p-4 text-sm mb-5">{syncMessage}</div>}
       {pendingCount > 0 && (
         <div className="rounded-lg bg-muted p-4 text-sm text-muted-foreground mb-5">
@@ -106,7 +120,11 @@ export function OfflineTicketForm() {
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
           <div className="flex flex-col gap-2">
             <Label htmlFor="priority">Priority</Label>
-            <select id="priority" name="priority" className="h-9 rounded-md border bg-background px-3 text-sm">
+            <select
+              id="priority"
+              name="priority"
+              className="h-9 rounded-md border bg-background px-3 text-sm"
+            >
               {PRIORITIES.map((p) => (
                 <option key={p.value} value={p.value}>
                   {p.label}
@@ -120,7 +138,10 @@ export function OfflineTicketForm() {
           </div>
         </div>
         <div className="flex items-center justify-end gap-3 pt-2">
-          <a href="/tickets" className="text-sm font-semibold text-muted-foreground hover:text-foreground px-4 py-2">
+          <a
+            href="/tickets"
+            className="text-sm font-semibold text-muted-foreground hover:text-foreground px-4 py-2"
+          >
             Cancel
           </a>
           <Button type="submit" disabled={submitting}>
