@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { createUser, updateUser, type User } from '@/lib/api';
+import { toast } from '@/lib/toast';
 
 const ROLES = [
   { value: 'end_user', label: 'End User' },
@@ -11,8 +12,10 @@ const ROLES = [
   { value: 'admin', label: 'Admin' },
 ];
 
-const ROLE_VARIANT: Record<string, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  admin: 'destructive',
+// A role isn't an alarm, so it never gets the destructive/coral treatment —
+// that color is reserved for SLA breach and critical priority.
+const ROLE_VARIANT: Record<string, 'default' | 'secondary' | 'outline'> = {
+  admin: 'default',
   agent: 'secondary',
   end_user: 'outline',
 };
@@ -56,6 +59,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
       });
       setUsers((prev) => [...prev, created]);
       form.reset();
+      toast(`User ${created.name} created`, 'success');
     } catch (err) {
       setCreateError(err instanceof Error ? err.message : 'Failed to create user');
     } finally {
@@ -70,6 +74,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
     try {
       const updated = await updateUser(u.id, { active: !u.active });
       setUsers((prev) => prev.map((x) => (x.id === u.id ? updated : x)));
+      toast(`${u.name} ${updated.active ? 'reactivated' : 'deactivated'}`, 'success');
     } catch (err) {
       setRowError(err instanceof Error ? err.message : 'Failed to update user');
     } finally {
@@ -85,6 +90,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
     try {
       const updated = await updateUser(u.id, { role: role as User['role'] });
       setUsers((prev) => prev.map((x) => (x.id === u.id ? updated : x)));
+      toast(`${u.name} is now ${updated.role.replace('_', ' ')}`, 'success');
     } catch (err) {
       setRowError(err instanceof Error ? err.message : 'Failed to update role');
     } finally {
@@ -105,6 +111,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
       });
       setUsers((prev) => prev.map((x) => (x.id === editingUser.id ? updated : x)));
       setEditingId(null);
+      toast(`${updated.name} updated`, 'success');
     } catch (err) {
       setRowError(err instanceof Error ? err.message : 'Failed to update user');
     } finally {
@@ -115,7 +122,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
       <div className="lg:col-span-1 rounded-xl border bg-card p-5 h-fit">
-        <h2 className="text-lg font-semibold mb-4">Create user</h2>
+        <h2 className="font-heading text-lg font-semibold mb-4">Create user</h2>
         {createError && <p className="text-sm text-destructive mb-3">{createError}</p>}
         <form onSubmit={handleCreate} className="flex flex-col gap-4">
           <div className="flex flex-col gap-2">
@@ -195,7 +202,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
                     <Badge variant={ROLE_VARIANT[u.role] || 'default'}>{u.role.replace('_', ' ')}</Badge>
                   </td>
                   <td className="px-5 py-3">
-                    <Badge variant={u.active ? 'secondary' : 'outline'}>{u.active ? 'active' : 'inactive'}</Badge>
+                    <Badge variant={u.active ? 'status-resolved' : 'status-closed'} dot>{u.active ? 'active' : 'inactive'}</Badge>
                   </td>
                   <td className="px-5 py-3">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -233,7 +240,7 @@ export function UsersManager({ initialUsers }: { initialUsers: User[] }) {
       {editingUser && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 p-4" onClick={() => setEditingId(null)}>
           <div className="w-full max-w-md rounded-xl border bg-card p-6 shadow-lg" onClick={(e) => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold mb-4">Edit user</h2>
+            <h2 className="font-heading text-lg font-semibold mb-4">Edit user</h2>
             <form onSubmit={handleEditSubmit} className="flex flex-col gap-4">
               <div className="flex flex-col gap-2">
                 <Label htmlFor="edit-name">Name</Label>

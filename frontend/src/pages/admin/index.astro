@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { getMe } from '../../lib/api';
+import { Users, SlidersHorizontal, Zap, BarChart3, type LucideIcon } from 'lucide-react';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
 if (!token) {
@@ -20,18 +21,18 @@ if (user && user.role !== 'admin') {
   return Astro.redirect('/dashboard');
 }
 
-const sections = [
-  { label: 'Users', href: '/admin/users', description: 'Manage workspace members and roles' },
-  { label: 'SLA Policies', href: '/admin/sla', description: 'Configure response and resolution targets' },
-  { label: 'Automations', href: '/admin/automations', description: 'Create rules that trigger actions automatically' },
-  { label: 'Analytics', href: '/admin/analytics', description: 'Track volume, status and resolution metrics' },
+const sections: { label: string; href: string; description: string; icon: LucideIcon }[] = [
+  { label: 'Users', href: '/admin/users', description: 'Manage workspace members and roles', icon: Users },
+  { label: 'SLA Policies', href: '/admin/sla', description: 'Configure response and resolution targets', icon: SlidersHorizontal },
+  { label: 'Automations', href: '/admin/automations', description: 'Create rules that trigger actions automatically', icon: Zap },
+  { label: 'Analytics', href: '/admin/analytics', description: 'Track volume, status and resolution metrics', icon: BarChart3 },
 ];
 ---
 
 <Layout title="Admin" user={user ? { name: user.name, role: user.role } : undefined}>
   <div class="max-w-6xl mx-auto">
     <header class="mb-8">
-      <h1 class="text-3xl font-bold">Admin</h1>
+      <h1 class="font-heading text-3xl font-bold">Admin</h1>
       <p class="text-muted-foreground">Workspace configuration and insights</p>
     </header>
 
@@ -40,12 +41,21 @@ const sections = [
     )}
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-      {sections.map((section) => (
-        <a href={section.href} class="rounded-xl border bg-card p-6 hover:bg-muted/50 transition-colors">
-          <h2 class="text-xl font-semibold mb-2">{section.label}</h2>
-          <p class="text-sm text-muted-foreground">{section.description}</p>
-        </a>
-      ))}
+      {sections.map((section) => {
+        const Icon = section.icon;
+        return (
+          <a
+            href={section.href}
+            class="group rounded-xl border bg-card p-6 transition-all duration-150 hover:-translate-y-0.5 hover:shadow-md hover:border-primary/30"
+          >
+            <span class="inline-flex items-center justify-center size-9 rounded-md bg-primary/10 text-primary mb-3 transition-transform group-hover:scale-105">
+              <Icon className="size-4" aria-hidden="true" />
+            </span>
+            <h2 class="font-heading text-xl font-semibold mb-2">{section.label}</h2>
+            <p class="text-sm text-muted-foreground">{section.description}</p>
+          </a>
+        );
+      })}
     </div>
   </div>
 </Layout>

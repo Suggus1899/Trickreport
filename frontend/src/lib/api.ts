@@ -1,6 +1,11 @@
-import { API_URL } from './config';
+import { API_URL, PUBLIC_API_URL } from './config';
 
 export { API_URL };
+
+// Astro/Vite only inline PUBLIC_-prefixed env vars into the browser bundle —
+// API_URL resolves to undefined there, so requests made from the browser
+// must use PUBLIC_API_URL instead. SSR code (Astro pages) keeps using API_URL.
+const REQUEST_BASE_URL = typeof window === 'undefined' ? API_URL : PUBLIC_API_URL;
 
 export interface LoginInput {
   email: string;
@@ -185,15 +190,7 @@ export class ApiNetworkError extends Error {
   }
 }
 
-/* ─── Token refresh support ─────────────────────────────────────────── */
-
-let refreshTokenFn: (() => Promise<string | null>) | null = null;
-
-export function setRefreshTokenStrategy(fn: (() => Promise<string | null>) | null) {
-  refreshTokenFn = fn;
-}
-
-/* ─── Core request with timeout, retry, and token refresh ───────────── */
+/* ─── Core request with timeout and retry ────────────────────────────── */
 
 const DEFAULT_TIMEOUT = 30000;
 const MAX_RETRIES = 3;
@@ -252,7 +249,7 @@ async function doFetch<T>(
 
   let res: Response;
   try {
-    res = await fetch(`${API_URL}/api/v1${path}`, {
+    res = await fetch(`${REQUEST_BASE_URL}/api/v1${path}`, {
       ...rest,
       headers,
       credentials: 'include',
@@ -267,24 +264,18 @@ async function doFetch<T>(
   }
   clearTimeout(timeoutId);
 
-  // 401: attempt token refresh once, then retry.
-  if (res.status === 401 && token && refreshTokenFn && attempt === 0) {
-    const newToken = await refreshTokenFn();
-    if (newToken) {
-      return doFetch<T>(path, { ...init, token: newToken }, 1);
-    }
-    const body = await res.json().catch(() => ({})) as ApiError;
-    throw new ApiAuthError(body.error || 'Authentication required');
-  }
-
   if (res.status === 401) {
-    const body = await res.json().catch(() => ({})) as ApiError;
+    const body = (await res.json().catch(() => ({}))) as ApiError;
     throw new ApiAuthError(body.error || 'Authentication required');
   }
 
   if (res.status >= 400 && res.status < 500 && res.status !== 429) {
-    const body = await res.json().catch(() => ({})) as ApiError;
-    throw new ApiValidationError(body.error || `Request failed with status ${res.status}`, res.status, body);
+    const body = (await res.json().catch(() => ({}))) as ApiError;
+    throw new ApiValidationError(
+      body.error || `Request failed with status ${res.status}`,
+      res.status,
+      body,
+    );
   }
 
   if (res.status >= 500 && attempt < MAX_RETRIES) {
@@ -294,7 +285,7 @@ async function doFetch<T>(
   }
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as ApiError;
+    const body = (await res.json().catch(() => ({}))) as ApiError;
     throw new Error(body.error || `Request failed with status ${res.status}`);
   }
 
@@ -393,24 +384,52 @@ export async function getTicket(id: string, token?: string): Promise<Ticket> {
   return api<Ticket>(`/tickets/${id}`, { token });
 }
 
-export async function createTicket(data: { title: string; description: string; priority: string; category: string }, token?: string): Promise<Ticket> {
+export async function createTicket(
+  data: { title: string; description: string; priority: string; category: string },
+  token?: string,
+): Promise<Ticket> {
   return api<Ticket>('/tickets', { token, method: 'POST', body: JSON.stringify(data) });
 }
 
-export async function updateTicketStatus(id: string, status: string, token?: string): Promise<{ status: string }> {
-  return api<{ status: string }>(`/tickets/${id}/status`, { token, method: 'PATCH', body: JSON.stringify({ status }) });
+export async function updateTicketStatus(
+  id: string,
+  status: string,
+  token?: string,
+): Promise<{ status: string }> {
+  return api<{ status: string }>(`/tickets/${id}/status`, {
+    token,
+    method: 'PATCH',
+    body: JSON.stringify({ status }),
+  });
 }
 
-export async function assignTicket(id: string, assignedTo: string, token?: string): Promise<{ assigned_to: string | null }> {
-  return api<{ assigned_to: string | null }>(`/tickets/${id}/assign`, { token, method: 'POST', body: JSON.stringify({ assigned_to: assignedTo }) });
+export async function assignTicket(
+  id: string,
+  assignedTo: string,
+  token?: string,
+): Promise<{ assigned_to: string | null }> {
+  return api<{ assigned_to: string | null }>(`/tickets/${id}/assign`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ assigned_to: assignedTo }),
+  });
 }
 
 export async function getTicketComments(id: string, token?: string): Promise<Comment[]> {
   return api<Comment[]>(`/tickets/${id}/comments`, { token });
 }
 
-export async function addTicketComment(id: string, content: string, isInternal = false, token?: string): Promise<Comment> {
-  return api<Comment>(`/tickets/${id}/comments`, { token, method: 'POST', body: JSON.stringify({ content, is_internal: isInternal }) });
+export async function addTicketComment(
+  id: string,
+  content: string,
+  isInternal = false,
+  token?: string,
+): Promise<Comment> {
+  return api<Comment>(`/tickets/${id}/comments`, {
+    token,
+    method: 'POST',
+    body: JSON.stringify({ content, is_internal: isInternal }),
+  });
 }
 
 export async function getTicketHistory(id: string, token?: string): Promise<HistoryEntry[]> {
@@ -421,7 +440,11 @@ export async function getTicketAttachments(id: string, token?: string): Promise<
   return api<Attachment[]>(`/tickets/${id}/attachments`, { token });
 }
 
-export async function uploadTicketAttachment(id: string, file: File, token?: string): Promise<Attachment> {
+export async function uploadTicketAttachment(
+  id: string,
+  file: File,
+  token?: string,
+): Promise<Attachment> {
   const formData = new FormData();
   formData.append('file', file);
   return api<Attachment>(`/tickets/${id}/attachments`, { token, method: 'POST', body: formData });
@@ -458,11 +481,18 @@ export async function getAssignableUsers(role: User['role'], token?: string): Pr
   return [];
 }
 
-export async function createUser(data: { name: string; email: string; role: string; password: string }, token?: string): Promise<User> {
+export async function createUser(
+  data: { name: string; email: string; role: string; password: string },
+  token?: string,
+): Promise<User> {
   return api<User>('/admin/users', { token, method: 'POST', body: JSON.stringify(data) });
 }
 
-export async function updateUser(id: string, data: Partial<Pick<User, 'name' | 'role' | 'active'>>, token?: string): Promise<User> {
+export async function updateUser(
+  id: string,
+  data: Partial<Pick<User, 'name' | 'role' | 'active'>>,
+  token?: string,
+): Promise<User> {
   return api<User>(`/admin/users/${id}`, { token, method: 'PUT', body: JSON.stringify(data) });
 }
 
@@ -470,20 +500,43 @@ export async function getSLAPolicies(token?: string): Promise<SLAPolicy[]> {
   return api<SLAPolicy[]>('/admin/sla', { token });
 }
 
-export async function upsertSLAPolicy(priority: string, data: Omit<SLAPolicy, 'priority'>, token?: string): Promise<SLAPolicy> {
-  return api<SLAPolicy>(`/admin/sla/${priority}`, { token, method: 'PUT', body: JSON.stringify(data) });
+export async function upsertSLAPolicy(
+  priority: string,
+  data: Omit<SLAPolicy, 'priority'>,
+  token?: string,
+): Promise<SLAPolicy> {
+  return api<SLAPolicy>(`/admin/sla/${priority}`, {
+    token,
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getAutomations(token?: string): Promise<AutomationRule[]> {
   return api<AutomationRule[]>('/admin/automations', { token });
 }
 
-export async function createAutomation(data: AutomationRule, token?: string): Promise<AutomationRule> {
-  return api<AutomationRule>('/admin/automations', { token, method: 'POST', body: JSON.stringify(data) });
+export async function createAutomation(
+  data: AutomationRule,
+  token?: string,
+): Promise<AutomationRule> {
+  return api<AutomationRule>('/admin/automations', {
+    token,
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
 }
 
-export async function updateAutomation(id: string, data: AutomationRule, token?: string): Promise<AutomationRule> {
-  return api<AutomationRule>(`/admin/automations/${id}`, { token, method: 'PUT', body: JSON.stringify(data) });
+export async function updateAutomation(
+  id: string,
+  data: AutomationRule,
+  token?: string,
+): Promise<AutomationRule> {
+  return api<AutomationRule>(`/admin/automations/${id}`, {
+    token,
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
 }
 
 export async function deleteAutomation(id: string, token?: string): Promise<void> {

@@ -13,7 +13,15 @@ function isTyping(el: EventTarget | null): boolean {
   return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
 }
 
-function ResultRow({ item, active, onHover }: { item: ResultItem; active: boolean; onHover: () => void }) {
+function ResultRow({
+  item,
+  active,
+  onHover,
+}: {
+  item: ResultItem;
+  active: boolean;
+  onHover: () => void;
+}) {
   return (
     <a
       href={item.href}
@@ -37,6 +45,7 @@ export function GlobalSearch() {
   const inputRef = useRef<HTMLInputElement>(null);
   const rootRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const searchSeqRef = useRef(0);
 
   useEffect(() => {
     function onSlash(e: KeyboardEvent) {
@@ -69,18 +78,27 @@ export function GlobalSearch() {
   }
 
   async function runSearch(q: string) {
+    const seq = ++searchSeqRef.current;
     const ql = q.toLowerCase();
     const [t, a] = await Promise.all([
       getTickets().catch(() => [] as Ticket[]),
       getArticles(q).catch(() => [] as Article[]),
     ]);
+    // A newer search may have started (and possibly already resolved) while
+    // this one was in flight — drop this stale response instead of
+    // overwriting more recent results.
+    if (seq !== searchSeqRef.current) return;
     setTickets(t.filter((x) => x.title.toLowerCase().includes(ql)).slice(0, 6));
     setArticles(a.slice(0, 6));
     setOpen(true);
   }
 
   const items: ResultItem[] = [
-    ...tickets.map((t) => ({ href: `/tickets/${t.id}`, title: t.title, sub: `${t.status} · ${t.priority}` })),
+    ...tickets.map((t) => ({
+      href: `/tickets/${t.id}`,
+      title: t.title,
+      sub: `${t.status} · ${t.priority}`,
+    })),
     ...articles.map((a) => ({ href: `/articles/${a.id}`, title: a.title, sub: a.category })),
   ];
 
@@ -152,7 +170,12 @@ export function GlobalSearch() {
                 </div>
               )}
               {items.slice(0, tickets.length).map((item, i) => (
-                <ResultRow key={item.href} item={item} active={i === activeIndex} onHover={() => setActiveIndex(i)} />
+                <ResultRow
+                  key={item.href}
+                  item={item}
+                  active={i === activeIndex}
+                  onHover={() => setActiveIndex(i)}
+                />
               ))}
               {articles.length > 0 && (
                 <div className="px-2 pt-2 pb-1 text-[0.65rem] font-bold uppercase tracking-wide text-muted-foreground">
@@ -162,7 +185,12 @@ export function GlobalSearch() {
               {items.slice(tickets.length).map((item, i) => {
                 const idx = tickets.length + i;
                 return (
-                  <ResultRow key={item.href} item={item} active={idx === activeIndex} onHover={() => setActiveIndex(idx)} />
+                  <ResultRow
+                    key={item.href}
+                    item={item}
+                    active={idx === activeIndex}
+                    onHover={() => setActiveIndex(idx)}
+                  />
                 );
               })}
             </>

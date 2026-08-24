@@ -4,6 +4,7 @@ import { buttonVariants } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import Pagination from '../../components/Pagination.astro';
 import { getMe, getArticles } from '../../lib/api';
+import { BookX } from 'lucide-react';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
 if (!token) {
@@ -35,7 +36,7 @@ const pagedArticles = (articles || []).slice((currentPage - 1) * perPage, curren
   <div class="max-w-6xl mx-auto">
     <div class="flex items-center justify-between mb-8">
       <div>
-        <h1 class="text-3xl font-bold">Knowledge Base</h1>
+        <h1 class="font-heading text-3xl font-bold">Knowledge Base</h1>
         <p class="text-muted-foreground">Browse help articles and guides</p>
       </div>
     </div>
@@ -68,10 +69,13 @@ const pagedArticles = (articles || []).slice((currentPage - 1) * perPage, curren
           </tr>
         </thead>
         <tbody class="divide-y">
-          {pagedArticles.length > 0 ? pagedArticles.map((article) => (
-            <tr class="hover:bg-muted/30 transition-colors">
+          {pagedArticles.length > 0 ? pagedArticles.map((article, i) => (
+            <tr
+              class="hover:bg-muted/30 transition-colors animate-in fade-in-0 slide-in-from-bottom-1 fill-mode-backwards"
+              style={{ animationDelay: `${Math.min(i, 12) * 25}ms`, animationDuration: '200ms' }}
+            >
               <td class="px-6 py-4">
-                <a href={`/articles/${article.id}`} class="font-semibold hover:text-primary">
+                <a href={`/articles/${article.id}`} class="font-semibold hover:text-primary transition-colors">
                   {article.title}
                 </a>
               </td>
@@ -81,13 +85,14 @@ const pagedArticles = (articles || []).slice((currentPage - 1) * perPage, curren
               <td class="px-6 py-4 text-sm text-muted-foreground">
                 {article.author_name || article.created_by}
               </td>
-              <td class="px-6 py-4 text-sm text-muted-foreground">
+              <td class="px-6 py-4 text-sm text-muted-foreground font-mono">
                 {new Date(article.updated_at || article.created_at).toLocaleDateString()}
               </td>
             </tr>
           )) : (
             <tr>
-              <td colspan="4" class="px-6 py-12 text-center text-muted-foreground">
+              <td colspan="4" class="px-6 py-16 text-center text-muted-foreground">
+                <BookX className="size-8 mx-auto mb-3 opacity-40" />
                 No articles found{query ? ' for your search.' : ' yet.'}
               </td>
             </tr>

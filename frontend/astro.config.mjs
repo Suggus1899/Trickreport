@@ -59,6 +59,7 @@ export default defineConfig({
         'recharts',
         'qrcode',
         'lucide-react',
+        'motion/react',
         'class-variance-authority',
         'clsx',
         'tailwind-merge',

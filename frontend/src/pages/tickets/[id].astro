@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { TicketActions } from '../../components/tickets/TicketActions';
+import { ArrowLeft, RefreshCw, UserCheck, Flag, Pencil } from 'lucide-react';
 import {
   getMe,
   getTicket,
@@ -39,15 +40,20 @@ try {
 }
 
 const canManage = user?.role === 'admin' || user?.role === 'agent';
+
+const HISTORY_ICON: Record<string, typeof RefreshCw> = {
+  status: RefreshCw,
+  assigned_to: UserCheck,
+  priority: Flag,
+};
 ---
 
 <Layout title={ticket?.title || 'Ticket'} user={user ? { name: user.name, role: user.role } : undefined}>
   <div class="max-w-4xl mx-auto">
-    <div class="flex items-center justify-between mb-8">
-      <a href="/tickets" class="text-sm font-semibold text-muted-foreground hover:text-foreground">&larr; Back</a>
-      <h1 class="text-2xl font-bold">{ticket?.title || 'Ticket'}</h1>
-      <span></span>
-    </div>
+    <a href="/tickets" class="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground transition-colors mb-4">
+      <ArrowLeft className="size-4" aria-hidden="true" />
+      Back to tickets
+    </a>
 
     {error && (
       <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive mb-6">{error}</div>
@@ -55,6 +61,15 @@ const canManage = user?.role === 'admin' || user?.role === 'agent';
 
     {ticket && (
       <div class="flex flex-col gap-6">
+        <header>
+          <div class="flex items-baseline gap-2 flex-wrap">
+            <h1 class="font-heading text-2xl font-bold">{ticket.title}</h1>
+            <span class="text-xs font-mono text-muted-foreground" title="Ticket ID">
+              #{ticket.id.slice(0, 8)}
+            </span>
+          </div>
+        </header>
+
         <div class="rounded-xl border bg-card p-5">
           <p class="whitespace-pre-wrap">{ticket.description}</p>
           <div class="mt-6 text-sm text-muted-foreground">
@@ -73,24 +88,29 @@ const canManage = user?.role === 'admin' || user?.role === 'agent';
         />
 
         <div class="rounded-xl border bg-card p-5">
-          <h2 class="text-lg font-semibold mb-4">History</h2>
+          <h2 class="font-heading font-semibold mb-4">History</h2>
           {history.length > 0 ? (
-            <ol class="flex flex-col gap-3">
-              {history.map((entry) => (
-                <li class="flex gap-3 items-start">
-                  <span class="mt-2 h-2 w-2 shrink-0 rounded-full bg-primary/40"></span>
-                  <div class="text-sm">
-                    <span class="font-semibold">{entry.user_name || entry.user_id}</span>
-                    {' changed '}
-                    <span class="font-semibold">{entry.field.replace('_', ' ')}</span>
-                    {' from '}
-                    <span class="text-muted-foreground">{entry.old_value || '—'}</span>
-                    {' to '}
-                    <span class="text-primary">{entry.new_value || '—'}</span>
-                    <span class="text-xs text-muted-foreground block">{new Date(entry.created_at).toLocaleString()}</span>
-                  </div>
-                </li>
-              ))}
+            <ol class="relative flex flex-col gap-5 before:absolute before:left-[15px] before:top-2 before:bottom-2 before:w-px before:bg-border">
+              {history.map((entry) => {
+                const Icon = HISTORY_ICON[entry.field] ?? Pencil;
+                return (
+                  <li class="relative flex gap-3 items-start pl-0">
+                    <span class="relative z-10 flex items-center justify-center size-8 shrink-0 rounded-full bg-muted border">
+                      <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
+                    </span>
+                    <div class="text-sm pt-1">
+                      <span class="font-semibold">{entry.user_name || entry.user_id}</span>
+                      {' changed '}
+                      <span class="font-semibold">{entry.field.replace('_', ' ')}</span>
+                      {' from '}
+                      <span class="text-muted-foreground">{entry.old_value || '—'}</span>
+                      {' to '}
+                      <span class="text-primary font-medium">{entry.new_value || '—'}</span>
+                      <span class="text-xs text-muted-foreground block">{new Date(entry.created_at).toLocaleString()}</span>
+                    </div>
+                  </li>
+                );
+              })}
             </ol>
           ) : (
             <p class="text-sm text-muted-foreground">No history recorded.</p>
