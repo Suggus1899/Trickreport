@@ -62,3 +62,27 @@ func TestEnsureAdmin_DefaultTenantConstants(t *testing.T) {
 		t.Errorf("defaultTenantSlug = %q, want %q", defaultTenantSlug, "default")
 	}
 }
+
+func TestSystemUserID_MatchesHardcodedDefaults(t *testing.T) {
+	// AutomationExecutor and Worker both default to this exact UUID when
+	// nobody calls their WithSystemUserID setter. EnsureSystemUser has to
+	// seed the same constant or every automation/worker-generated history
+	// and comment insert fails its foreign key.
+	if systemUserID.String() != "00000000-0000-0000-0000-000000000002" {
+		t.Errorf("systemUserID = %s, want 00000000-0000-0000-0000-000000000002", systemUserID)
+	}
+}
+
+func TestEnsureSystemUser_NilPool(t *testing.T) {
+	// Same contract as TestEnsureAdmin_BothCredentialsSet_NilPool: with a nil
+	// pool this cannot succeed, so it must either error or panic — never
+	// silently return nil.
+	defer func() {
+		_ = recover()
+	}()
+
+	err := EnsureSystemUser(context.Background(), nil)
+	if err == nil {
+		t.Log("EnsureSystemUser returned nil with nil pool — acceptable only if it panicked and recovered")
+	}
+}

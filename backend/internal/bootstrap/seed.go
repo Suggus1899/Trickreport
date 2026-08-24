@@ -219,7 +219,7 @@ func seedAutomationRule(ctx context.Context, pool *pgxpool.Pool) error {
 		"Automatically flags newly created critical tickets for immediate attention.",
 		"ticket_created",
 		`{"priority": "critical"}`,
-		`[{"type": "change_status", "status": "in_progress"}]`,
+		`[{"type": "set_status", "status": "in_progress"}]`,
 	)
 	if err != nil {
 		return fmt.Errorf("insert automation rule: %w", err)

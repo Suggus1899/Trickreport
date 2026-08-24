@@ -16,7 +16,41 @@ import (
 var (
 	defaultTenantID   = uuid.MustParse("00000000-0000-0000-0000-000000000001")
 	defaultTenantSlug = "default"
+
+	// systemUserID is the fixed identity attributed to automation- and
+	// worker-generated ticket history/comments (SLA breach, escalation,
+	// automation rule actions). Both infrastructure/postgres.AutomationExecutor
+	// and worker.Worker default to this exact UUID; EnsureSystemUser makes
+	// sure a real row backs it so their INSERTs don't fail the
+	// ticket_history.user_id / ticket_comments.user_id foreign keys.
+	systemUserID = uuid.MustParse("00000000-0000-0000-0000-000000000002")
 )
+
+// EnsureSystemUser creates the fixed system user row that automation- and
+// worker-generated history/comments are attributed to, if it doesn't already
+// exist. Safe to call on every startup.
+func EnsureSystemUser(ctx context.Context, pool *pgxpool.Pool) error {
+	var exists bool
+	if err := pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM users WHERE id = $1)`, systemUserID).Scan(&exists); err != nil {
+		return fmt.Errorf("bootstrap: failed to check system user: %w", err)
+	}
+	if exists {
+		return nil
+	}
+
+	_, err := pool.Exec(ctx, `
+		INSERT INTO users (id, tenant_id, name, email, role, password, active)
+		VALUES ($1, $2, 'Trickreport Automation', 'automation@trickreport.internal', 'agent', NULL, FALSE)
+		ON CONFLICT (id) DO NOTHING`,
+		systemUserID, defaultTenantID,
+	)
+	if err != nil {
+		return fmt.Errorf("bootstrap: failed to create system user: %w", err)
+	}
+
+	log.Info().Str("id", systemUserID.String()).Msg("bootstrap: system user created")
+	return nil
+}
 
 // EnsureAdmin creates the initial admin user from the given credentials if
 // no users exist yet. It is safe to call on every startup — it is a no-op

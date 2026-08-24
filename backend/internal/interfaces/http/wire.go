@@ -16,6 +16,7 @@ import (
 	appUser "github.com/trickreport/backend/internal/application/user"
 	"github.com/trickreport/backend/internal/email"
 	infraAuth "github.com/trickreport/backend/internal/infrastructure/auth"
+	infraEmail "github.com/trickreport/backend/internal/infrastructure/email"
 	"github.com/trickreport/backend/internal/infrastructure/postgres"
 	infraRealtime "github.com/trickreport/backend/internal/infrastructure/realtime"
 	"github.com/trickreport/backend/internal/interfaces/http/handler"
@@ -74,6 +75,7 @@ type Services struct {
 	PasswordReset *appAuth.PasswordResetService
 	TokenStore    *infraAuth.MemoryTokenStore
 	Notification  *appTicket.NotificationService
+	EmailQueue    *infraEmail.EmailQueue
 }
 
 // NewServices creates all application services from repos and adapters.
@@ -86,15 +88,23 @@ func NewServices(
 	ldapAuth appAuth.LDAPAuthenticator,
 	authCfg appAuth.Config,
 ) *Services {
+	// Email queue: decouples sending from the request path, with retry and
+	// dead-letter logging. Process() must be started by the caller (see
+	// server.go) since it blocks until the given context is cancelled.
+	emailQueue := infraEmail.NewEmailQueue(200)
+
 	// Build the automation engine: executor uses direct SQL on the pool,
 	// engine uses the automation repo + executor.
 	executor := postgres.NewAutomationExecutor(repos.Automation.DB())
 	engine := appAuto.NewEngine(repos.Automation, executor, log.Logger)
+	engine.SetEmailSender(emailQueue)
 
-	ticketSvc := appTicket.NewService(repos.Ticket, repos.Comment, repos.History, hubAdapter, sender)
+	ticketSvc := appTicket.NewService(repos.Ticket, repos.Comment, repos.History, hubAdapter, emailQueue)
 	ticketSvc.SetEngine(engine)
 	ticketSvc.SetTxManager(repos.TxManager)
 	ticketSvc.SetSLAPolicyFetcher(repos.SLA)
+	ticketSvc.SetUserEmailFetcher(repos.User)
+	ticketSvc.SetEmailRenderer(infraEmail.TicketEmailRenderer{})
 
 	// Notification service — wired into the ticket service so events create
 	// persistent notifications and broadcast them in real-time via WebSocket.
@@ -142,6 +152,7 @@ func NewServices(
 		PasswordReset: resetSvc,
 		TokenStore:    tokenStore,
 		Notification:  notifSvc,
+		EmailQueue:    emailQueue,
 	}
 }
 

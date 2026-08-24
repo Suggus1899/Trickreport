@@ -16,14 +16,16 @@ import (
 
 // Metrics holds atomic counters for worker observability.
 type Metrics struct {
-	BreachesDetected int64
-	AutomationsRun   int64
-	Errors           int64
+	BreachesDetected    int64
+	EscalationsDetected int64
+	AutomationsRun      int64
+	Errors              int64
 }
 
 // Snapshot returns a copy of the current metric values.
-func (m *Metrics) Snapshot() (breaches, automations, errors int64) {
+func (m *Metrics) Snapshot() (breaches, escalations, automations, errors int64) {
 	return atomic.LoadInt64(&m.BreachesDetected),
+		atomic.LoadInt64(&m.EscalationsDetected),
 		atomic.LoadInt64(&m.AutomationsRun),
 		atomic.LoadInt64(&m.Errors)
 }
@@ -101,6 +103,7 @@ func (w *Worker) Start(ctx context.Context) {
 			func() {
 				defer w.wg.Done()
 				w.runWithRetry(ctx, w.checkSLABreachesErr)
+				w.runWithRetry(ctx, w.checkEscalationsErr)
 			}()
 		}
 	}
@@ -222,6 +225,99 @@ func (w *Worker) checkSLABreaches(ctx context.Context) error {
 	if breachCount > 0 {
 		atomic.AddInt64(&w.metrics.BreachesDetected, int64(breachCount))
 		log.Info().Int("breached_tickets", breachCount).Msg("SLA breaches detected and marked")
+	}
+	return nil
+}
+
+// checkEscalationsErr wraps checkEscalations to return an error for retry logic.
+func (w *Worker) checkEscalationsErr(ctx context.Context) error {
+	return w.checkEscalations(ctx)
+}
+
+// checkEscalations fires once per ticket when it has been open longer than
+// its priority's SLA escalation_minutes, guarded by escalated_at so it never
+// fires twice. Mirrors checkSLABreaches exactly; the two are independent
+// (escalation_minutes is meant to warn well before resolution_time_minutes
+// is actually breached).
+func (w *Worker) checkEscalations(ctx context.Context) error {
+	q := `
+		WITH escalated_tickets AS (
+			SELECT t.id, t.tenant_id
+			FROM tickets t
+			JOIN sla_policies s ON t.tenant_id = s.tenant_id AND t.priority = s.priority
+			WHERE t.status NOT IN ('resolved', 'closed')
+			  AND t.escalated_at IS NULL
+			  AND t.created_at + (s.escalation_minutes || ' minutes')::interval < NOW()
+		)
+		UPDATE tickets
+		SET escalated_at = NOW(), updated_at = NOW()
+		WHERE id IN (SELECT id FROM escalated_tickets)
+		RETURNING id, tenant_id;
+	`
+
+	rows, err := w.db.Query(ctx, q)
+	if err != nil {
+		log.Error().Err(err).Msg("Worker failed to check SLA escalations")
+		return err
+	}
+	defer rows.Close()
+
+	escalationCount := 0
+	for rows.Next() {
+		var id, tenantID pgtype.UUID
+		if err := rows.Scan(&id, &tenantID); err != nil {
+			atomic.AddInt64(&w.metrics.Errors, 1)
+			log.Error().Err(err).Msg("Worker failed to scan escalated ticket row")
+			continue
+		}
+		escalationCount++
+		ticketIDStr := ""
+		tenantIDStr := ""
+		if id.Valid {
+			ticketIDStr = uuid.UUID(id.Bytes).String()
+		}
+		if tenantID.Valid {
+			tenantIDStr = uuid.UUID(tenantID.Bytes).String()
+		}
+
+		if _, err := w.db.Exec(ctx, `
+			INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
+			VALUES ($1, $2, 'SYSTEM: SLA Escalation Threshold Reached', TRUE)
+		`, id, w.systemUserID); err != nil {
+			atomic.AddInt64(&w.metrics.Errors, 1)
+			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert escalation comment")
+		}
+
+		if _, err := w.db.Exec(ctx, `
+			INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value)
+			VALUES ($1, $2, 'escalated_at', '', 'escalated')
+		`, id, w.systemUserID); err != nil {
+			atomic.AddInt64(&w.metrics.Errors, 1)
+			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert escalation history")
+		}
+
+		// Fire automation rules for the escalation event.
+		if w.engine != nil && id.Valid && tenantID.Valid {
+			event := appAuto.Event{
+				Type:     "escalation",
+				TenantID: uuid.UUID(tenantID.Bytes),
+				TicketID: uuid.UUID(id.Bytes),
+				UserID:   w.systemUserID,
+				OldValue: "",
+				NewValue: "escalated",
+			}
+			if err := w.engine.Evaluate(ctx, uuid.UUID(tenantID.Bytes), event); err != nil {
+				atomic.AddInt64(&w.metrics.Errors, 1)
+				log.Error().Err(err).Str("ticket_id", ticketIDStr).Str("tenant_id", tenantIDStr).Msg("Worker failed to evaluate automations for escalation")
+			} else {
+				atomic.AddInt64(&w.metrics.AutomationsRun, 1)
+			}
+		}
+	}
+
+	if escalationCount > 0 {
+		atomic.AddInt64(&w.metrics.EscalationsDetected, int64(escalationCount))
+		log.Info().Int("escalated_tickets", escalationCount).Msg("SLA escalations detected and marked")
 	}
 	return nil
 }

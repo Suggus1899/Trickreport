@@ -216,9 +216,15 @@ func (r *TicketRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userI
 			return fmt.Errorf("failed to fetch ticket: %w", err)
 		}
 
-		_, err = conn.Exec(ctx, `UPDATE tickets SET assigned_to = $1, updated_at = NOW() WHERE id = $2`, assignedTo, id)
+		tag, err := conn.Exec(ctx, `
+			UPDATE tickets SET assigned_to = $1, updated_at = NOW()
+			WHERE id = $2 AND EXISTS (SELECT 1 FROM users WHERE id = $1 AND tenant_id = $3)`,
+			assignedTo, id, tenantID)
 		if err != nil {
 			return fmt.Errorf("failed to assign ticket: %w", err)
+		}
+		if tag.RowsAffected() == 0 {
+			return fmt.Errorf("%w: assignee does not belong to this tenant", domainTicket.ErrValidation)
 		}
 
 		oldVal := ""
