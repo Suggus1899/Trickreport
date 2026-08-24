@@ -92,7 +92,7 @@ func main() {
 	}()
 
 	// ── Database ──────────────────────────────────────────────────────
-	pool, err := db.New(ctx, cfg.DatabaseURL)
+	pool, err := db.NewPool(ctx, cfg.DatabaseURL, db.DefaultPoolConfig())
 	if err != nil {
 		log.Fatal().Err(err).Msg("Failed to connect to database")
 	}
@@ -115,6 +115,11 @@ func main() {
 	// ── Bootstrap initial admin (from ADMIN_EMAIL / ADMIN_PASSWORD) ───
 	if err := bootstrap.EnsureAdmin(ctx, pool, cfg.AdminEmail, cfg.AdminPassword); err != nil {
 		log.Error().Err(err).Msg("Admin bootstrap failed")
+	}
+
+	// ── Bootstrap the fixed system user (automation/worker attribution) ──
+	if err := bootstrap.EnsureSystemUser(ctx, pool); err != nil {
+		log.Error().Err(err).Msg("System user bootstrap failed")
 	}
 
 	// ── Server ────────────────────────────────────────────────────────

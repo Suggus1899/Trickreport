@@ -46,43 +46,47 @@ func isWebSocket(r *http.Request) bool {
 
 // CSRF returns middleware that generates a CSRF token on safe methods (GET,
 // HEAD, OPTIONS) and validates it on state-changing methods (POST, PUT, PATCH,
-// DELETE). Auth endpoints and WebSocket connections are exempt.
-func CSRF(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Skip CSRF for auth endpoints and WebSocket
-		if isAuthPath(r.URL.Path) || isWebSocket(r) {
-			next.ServeHTTP(w, r)
-			return
-		}
-
-		switch r.Method {
-		case http.MethodGet, http.MethodHead, http.MethodOptions:
-			// Generate or refresh the CSRF token cookie on safe methods
-			token := generateCSRFToken()
-			http.SetCookie(w, &http.Cookie{
-				Name:     csrfCookieName,
-				Value:    token,
-				Path:     "/",
-				HttpOnly: false, // Must be readable by JavaScript
-				SameSite: http.SameSiteStrictMode,
-			})
-			// Also expose in header for convenience
-			w.Header().Set("X-CSRF-Token", token)
-			next.ServeHTTP(w, r)
-
-		default:
-			// Validate the CSRF token on state-changing methods
-			cookie, err := r.Cookie(csrfCookieName)
-			if err != nil || cookie.Value == "" {
-				response.Error(w, http.StatusForbidden, "missing csrf token")
+// DELETE). Auth endpoints and WebSocket connections are exempt. secure should
+// mirror the auth cookie's COOKIE_SECURE setting (cfg.SecureCookie).
+func CSRF(secure bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip CSRF for auth endpoints and WebSocket
+			if isAuthPath(r.URL.Path) || isWebSocket(r) {
+				next.ServeHTTP(w, r)
 				return
 			}
-			headerToken := r.Header.Get(csrfHeaderName)
-			if headerToken == "" || headerToken != cookie.Value {
-				response.Error(w, http.StatusForbidden, "invalid csrf token")
-				return
+
+			switch r.Method {
+			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				// Generate or refresh the CSRF token cookie on safe methods
+				token := generateCSRFToken()
+				http.SetCookie(w, &http.Cookie{
+					Name:     csrfCookieName,
+					Value:    token,
+					Path:     "/",
+					HttpOnly: false, // Must be readable by JavaScript
+					Secure:   secure,
+					SameSite: http.SameSiteStrictMode,
+				})
+				// Also expose in header for convenience
+				w.Header().Set("X-CSRF-Token", token)
+				next.ServeHTTP(w, r)
+
+			default:
+				// Validate the CSRF token on state-changing methods
+				cookie, err := r.Cookie(csrfCookieName)
+				if err != nil || cookie.Value == "" {
+					response.Error(w, http.StatusForbidden, "missing csrf token")
+					return
+				}
+				headerToken := r.Header.Get(csrfHeaderName)
+				if headerToken == "" || headerToken != cookie.Value {
+					response.Error(w, http.StatusForbidden, "invalid csrf token")
+					return
+				}
+				next.ServeHTTP(w, r)
 			}
-			next.ServeHTTP(w, r)
-		}
-	})
+		})
+	}
 }

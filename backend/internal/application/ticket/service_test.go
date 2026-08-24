@@ -137,6 +137,28 @@ func (m *mockEmail) Send(to, subject, body string) error {
 	return m.err
 }
 
+type mockEmailFetcher struct {
+	email string
+	err   error
+}
+
+func (m *mockEmailFetcher) GetEmail(ctx context.Context, tenantID, userID uuid.UUID) (string, error) {
+	return m.email, m.err
+}
+
+type mockEmailRenderer struct {
+	err         error
+	gotTemplate string
+}
+
+func (m *mockEmailRenderer) RenderTicketEmail(templateName, ticketID, title, description, priority, status string) (string, error) {
+	m.gotTemplate = templateName
+	if m.err != nil {
+		return "", m.err
+	}
+	return "<html>" + title + "</html>", nil
+}
+
 // --- Helpers ---
 
 func newSvc(repo Repository, comments CommentRepository, history HistoryRepository, hub EventBroadcaster, email EmailNotifier) *UserService {
@@ -674,4 +696,135 @@ func TestService_EvaluateAutomation_NoEngine(t *testing.T) {
 		Category:    "general",
 		CreatedBy:   uuid.New(),
 	})
+}
+
+// --- Email notification tests ---
+
+func TestService_Create_SendsEmailToCreator(t *testing.T) {
+	repo := &mockRepo{}
+	mail := &mockEmail{}
+	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, mail)
+	svc.SetUserEmailFetcher(&mockEmailFetcher{email: "creator@example.com"})
+	svc.SetEmailRenderer(&mockEmailRenderer{})
+
+	creator := uuid.New()
+	if _, err := svc.Create(context.Background(), CreateInput{
+		TenantID:    uuid.New(),
+		Title:       "Printer down",
+		Description: "Won't turn on",
+		Priority:    "high",
+		Category:    "general",
+		CreatedBy:   creator,
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond) // wait for the async send
+	if mail.sent != 1 {
+		t.Fatalf("expected 1 email sent, got %d", mail.sent)
+	}
+	if mail.gotTo != "creator@example.com" {
+		t.Errorf("gotTo = %q", mail.gotTo)
+	}
+}
+
+func TestService_ChangeStatus_EmailsCreator_ButNotTheActor(t *testing.T) {
+	creator := uuid.New()
+	tk := ownedTicket(creator)
+	repo := &mockRepo{ticket: tk, creatorID: creator}
+	mail := &mockEmail{}
+	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, mail)
+	svc.SetUserEmailFetcher(&mockEmailFetcher{email: "creator@example.com"})
+	svc.SetEmailRenderer(&mockEmailRenderer{})
+
+	// A different agent changes the status — creator should be emailed.
+	if err := svc.ChangeStatus(context.Background(), tk.ID, tk.TenantID, uuid.New(), "agent", "in_progress"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond) // wait for the async send
+	if mail.sent != 1 {
+		t.Fatalf("expected 1 email sent, got %d", mail.sent)
+	}
+
+	// The creator changes their own ticket's status — should not self-email.
+	mail.sent = 0
+	tk.Status = domainTicket.StatusOpen
+	if err := svc.ChangeStatus(context.Background(), tk.ID, tk.TenantID, creator, "agent", "in_progress"); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond) // wait to make sure no async send happens
+	if mail.sent != 0 {
+		t.Errorf("expected no self-email, got %d sends", mail.sent)
+	}
+}
+
+func TestService_AddComment_SkipsEmailForInternalNote(t *testing.T) {
+	creator := uuid.New()
+	tk := ownedTicket(creator)
+	repo := &mockRepo{ticket: tk, creatorID: creator}
+	mail := &mockEmail{}
+	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, mail)
+	svc.SetUserEmailFetcher(&mockEmailFetcher{email: "creator@example.com"})
+	svc.SetEmailRenderer(&mockEmailRenderer{})
+
+	_, err := svc.AddComment(context.Background(), AddCommentInput{
+		TicketID:   tk.ID,
+		TenantID:   tk.TenantID,
+		UserID:     uuid.New(), // a different agent
+		Role:       "agent",
+		Content:    "internal note for the team",
+		IsInternal: true,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mail.sent != 0 {
+		t.Errorf("internal notes must never be emailed to the creator, got %d sends", mail.sent)
+	}
+}
+
+func TestService_AddComment_EmailsCreator_ForPublicComment(t *testing.T) {
+	creator := uuid.New()
+	tk := ownedTicket(creator)
+	repo := &mockRepo{ticket: tk, creatorID: creator}
+	mail := &mockEmail{}
+	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, mail)
+	svc.SetUserEmailFetcher(&mockEmailFetcher{email: "creator@example.com"})
+	svc.SetEmailRenderer(&mockEmailRenderer{})
+
+	_, err := svc.AddComment(context.Background(), AddCommentInput{
+		TicketID:   tk.ID,
+		TenantID:   tk.TenantID,
+		UserID:     uuid.New(),
+		Role:       "agent",
+		Content:    "we're looking into it",
+		IsInternal: false,
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	time.Sleep(50 * time.Millisecond) // wait for the async send
+	if mail.sent != 1 {
+		t.Errorf("expected 1 email sent for a public comment, got %d", mail.sent)
+	}
+}
+
+func TestService_NotifyByEmailSafe_MissingDependenciesNoop(t *testing.T) {
+	repo := &mockRepo{}
+	mail := &mockEmail{}
+	// email set, but fetcher/renderer are not — must not panic or send.
+	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, mail)
+
+	if _, err := svc.Create(context.Background(), CreateInput{
+		TenantID:    uuid.New(),
+		Title:       "Test",
+		Description: "Description",
+		Priority:    "medium",
+		Category:    "general",
+		CreatedBy:   uuid.New(),
+	}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if mail.sent != 0 {
+		t.Errorf("expected no email without fetcher/renderer configured, got %d", mail.sent)
+	}
 }

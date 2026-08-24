@@ -19,9 +19,6 @@ type queuedEmail struct {
 
 // EmailQueue is a channel-based email queue with retry and dead-letter
 // logging. It decouples email sending from the request path.
-//
-// TODO(wire): wire EmailQueue into wire.go's NewServices and start its
-// Process loop in the server bootstrap.
 type EmailQueue struct {
 	queue chan queuedEmail
 	wg    sync.WaitGroup
@@ -50,27 +47,44 @@ func (q *EmailQueue) Enqueue(to, subject, body string) {
 	}
 }
 
-// Process drains the queue and sends emails via the provided sender. It blocks
-// until ctx is cancelled. Failed sends are retried with exponential backoff
-// (1s, 2s, 4s) up to maxRetries times. Emails that still fail after all
-// retries are logged as dead letters.
+// Send enqueues the email and returns immediately. It lets EmailQueue satisfy
+// any port shaped like Send(to, subject, body string) error — e.g.
+// ticket.EmailNotifier and automation.EmailSender — without the caller
+// blocking on SMTP latency the way a direct Sender.Send would.
+func (q *EmailQueue) Send(to, subject, body string) error {
+	q.Enqueue(to, subject, body)
+	return nil
+}
+
+// processWorkers is the number of goroutines concurrently draining the
+// queue. A single worker would let one message's retry backoff (up to 7s)
+// block every other queued email behind it.
+const processWorkers = 5
+
+// Process drains the queue across a fixed pool of worker goroutines and sends
+// emails via the provided sender. It blocks until ctx is cancelled. Failed
+// sends are retried with exponential backoff (1s, 2s, 4s) up to maxRetries
+// times. Emails that still fail after all retries are logged as dead letters.
+// Message order is not preserved across workers.
 func (q *EmailQueue) Process(ctx context.Context, sender email.Sender) {
 	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
 	maxRetries := 3
 
-	for {
-		select {
-		case <-ctx.Done():
-			q.wg.Wait()
-			return
-		case msg := <-q.queue:
-			q.wg.Add(1)
-			func(msg queuedEmail) {
-				defer q.wg.Done()
-				q.sendWithRetry(ctx, sender, msg, backoffs, maxRetries)
-			}(msg)
-		}
+	for i := 0; i < processWorkers; i++ {
+		q.wg.Add(1)
+		go func() {
+			defer q.wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					return
+				case msg := <-q.queue:
+					q.sendWithRetry(ctx, sender, msg, backoffs, maxRetries)
+				}
+			}
+		}()
 	}
+	q.wg.Wait()
 }
 
 func (q *EmailQueue) sendWithRetry(ctx context.Context, sender email.Sender, msg queuedEmail, backoffs []time.Duration, maxRetries int) {

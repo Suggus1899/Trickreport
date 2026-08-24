@@ -271,7 +271,7 @@ func TestEngine_MatchConditions(t *testing.T) {
 func TestEngine_ExecuteActions_NonMapActionSkipped(t *testing.T) {
 	e := newEngine(&mockRepo{}, &mockExecutor{})
 	rule := domainautomation.Rule{ID: uuid.New(), Actions: []any{"not-a-map"}}
-	if err := e.executeActions(context.Background(), uuid.New(), rule, Event{}); err != nil {
+	if err := e.executeActions(context.Background(), uuid.New(), rule, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
@@ -280,7 +280,7 @@ func TestEngine_ExecuteActions_NoTypeSkipped(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	rule := domainautomation.Rule{ID: uuid.New(), Actions: []any{map[string]any{"foo": "bar"}}}
-	if err := e.executeActions(context.Background(), uuid.New(), rule, Event{}); err != nil {
+	if err := e.executeActions(context.Background(), uuid.New(), rule, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.calls != 0 {
@@ -294,7 +294,7 @@ func TestEngine_ExecuteAction_SetPriority(t *testing.T) {
 	ticketID := uuid.New()
 
 	if err := e.executeAction(context.Background(), uuid.New(), "set_priority",
-		map[string]any{"priority": "high"}, Event{TicketID: ticketID}); err != nil {
+		map[string]any{"priority": "high"}, Event{TicketID: ticketID}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotPriority != "high" {
@@ -306,7 +306,7 @@ func TestEngine_ExecuteAction_SetPriority_ValueFallback(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "set_priority",
-		map[string]any{"value": "critical"}, Event{}); err != nil {
+		map[string]any{"value": "critical"}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotPriority != "critical" {
@@ -316,7 +316,7 @@ func TestEngine_ExecuteAction_SetPriority_ValueFallback(t *testing.T) {
 
 func TestEngine_ExecuteAction_SetPriority_Missing(t *testing.T) {
 	e := newEngine(&mockRepo{}, &mockExecutor{})
-	err := e.executeAction(context.Background(), uuid.New(), "set_priority", map[string]any{}, Event{})
+	err := e.executeAction(context.Background(), uuid.New(), "set_priority", map[string]any{}, Event{}, nil)
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -326,7 +326,7 @@ func TestEngine_ExecuteAction_SetStatus(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "set_status",
-		map[string]any{"status": "in_progress"}, Event{}); err != nil {
+		map[string]any{"status": "in_progress"}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotStatus != "in_progress" {
@@ -338,7 +338,7 @@ func TestEngine_ExecuteAction_SetStatus_ValueFallback(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "set_status",
-		map[string]any{"value": "closed"}, Event{}); err != nil {
+		map[string]any{"value": "closed"}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotStatus != "closed" {
@@ -348,7 +348,7 @@ func TestEngine_ExecuteAction_SetStatus_ValueFallback(t *testing.T) {
 
 func TestEngine_ExecuteAction_SetStatus_Missing(t *testing.T) {
 	e := newEngine(&mockRepo{}, &mockExecutor{})
-	if err := e.executeAction(context.Background(), uuid.New(), "set_status", map[string]any{}, Event{}); err == nil {
+	if err := e.executeAction(context.Background(), uuid.New(), "set_status", map[string]any{}, Event{}, nil); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -358,7 +358,7 @@ func TestEngine_ExecuteAction_AssignTo(t *testing.T) {
 	e := newEngine(&mockRepo{}, exec)
 	uid := uuid.New()
 	if err := e.executeAction(context.Background(), uuid.New(), "assign_to",
-		map[string]any{"user_id": uid.String()}, Event{}); err != nil {
+		map[string]any{"user_id": uid.String()}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotAssignee != uid {
@@ -368,7 +368,7 @@ func TestEngine_ExecuteAction_AssignTo(t *testing.T) {
 
 func TestEngine_ExecuteAction_AssignTo_Missing(t *testing.T) {
 	e := newEngine(&mockRepo{}, &mockExecutor{})
-	if err := e.executeAction(context.Background(), uuid.New(), "assign_to", map[string]any{}, Event{}); err == nil {
+	if err := e.executeAction(context.Background(), uuid.New(), "assign_to", map[string]any{}, Event{}, nil); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -376,7 +376,7 @@ func TestEngine_ExecuteAction_AssignTo_Missing(t *testing.T) {
 func TestEngine_ExecuteAction_AssignTo_InvalidUUID(t *testing.T) {
 	e := newEngine(&mockRepo{}, &mockExecutor{})
 	if err := e.executeAction(context.Background(), uuid.New(), "assign_to",
-		map[string]any{"user_id": "not-a-uuid"}, Event{}); err == nil {
+		map[string]any{"user_id": "not-a-uuid"}, Event{}, nil); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -385,7 +385,7 @@ func TestEngine_ExecuteAction_AddComment(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "add_comment",
-		map[string]any{"content": "hello", "is_internal": false}, Event{}); err != nil {
+		map[string]any{"content": "hello", "is_internal": false}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotComment != "hello" || exec.gotInternal != false {
@@ -397,7 +397,7 @@ func TestEngine_ExecuteAction_AddComment_DefaultInternal(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "add_comment",
-		map[string]any{"content": "hi"}, Event{}); err != nil {
+		map[string]any{"content": "hi"}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if !exec.gotInternal {
@@ -409,7 +409,7 @@ func TestEngine_ExecuteAction_AddComment_ValueFallback(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "add_comment",
-		map[string]any{"value": "fallback"}, Event{}); err != nil {
+		map[string]any{"value": "fallback"}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotComment != "fallback" {
@@ -419,7 +419,7 @@ func TestEngine_ExecuteAction_AddComment_ValueFallback(t *testing.T) {
 
 func TestEngine_ExecuteAction_AddComment_Missing(t *testing.T) {
 	e := newEngine(&mockRepo{}, &mockExecutor{})
-	if err := e.executeAction(context.Background(), uuid.New(), "add_comment", map[string]any{}, Event{}); err == nil {
+	if err := e.executeAction(context.Background(), uuid.New(), "add_comment", map[string]any{}, Event{}, nil); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -428,7 +428,7 @@ func TestEngine_ExecuteAction_AddTag(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "add_tag",
-		map[string]any{"tag": "urgent"}, Event{}); err != nil {
+		map[string]any{"tag": "urgent"}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotTag != "urgent" {
@@ -440,7 +440,7 @@ func TestEngine_ExecuteAction_AddTag_ValueFallback(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "add_tag",
-		map[string]any{"value": "vip"}, Event{}); err != nil {
+		map[string]any{"value": "vip"}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.gotTag != "vip" {
@@ -450,15 +450,91 @@ func TestEngine_ExecuteAction_AddTag_ValueFallback(t *testing.T) {
 
 func TestEngine_ExecuteAction_AddTag_Missing(t *testing.T) {
 	e := newEngine(&mockRepo{}, &mockExecutor{})
-	if err := e.executeAction(context.Background(), uuid.New(), "add_tag", map[string]any{}, Event{}); err == nil {
+	if err := e.executeAction(context.Background(), uuid.New(), "add_tag", map[string]any{}, Event{}, nil); err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+// --- Mock EmailSender ---
+
+type mockEmailSender struct {
+	err        error
+	gotTo      string
+	gotSubject string
+	gotBody    string
+	calls      int
+}
+
+func (m *mockEmailSender) Send(to, subject, body string) error {
+	m.calls++
+	m.gotTo = to
+	m.gotSubject = subject
+	m.gotBody = body
+	return m.err
+}
+
+func TestEngine_ExecuteAction_SendEmail(t *testing.T) {
+	exec := &mockExecutor{snapshot: &TicketSnapshot{Title: "Printer on fire", Status: "open", Priority: "critical"}}
+	sender := &mockEmailSender{}
+	e := newEngine(&mockRepo{}, exec)
+	e.SetEmailSender(sender)
+
+	err := e.executeAction(context.Background(), uuid.New(), "send_email",
+		map[string]any{"to": "manager@example.com", "subject": "Escalated"}, Event{}, nil)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sender.calls != 1 {
+		t.Fatalf("expected 1 send, got %d", sender.calls)
+	}
+	if sender.gotTo != "manager@example.com" {
+		t.Errorf("to = %q", sender.gotTo)
+	}
+	if sender.gotSubject != "Escalated" {
+		t.Errorf("subject = %q", sender.gotSubject)
+	}
+	if sender.gotBody == "" {
+		t.Error("expected a non-empty body composed from the ticket snapshot")
+	}
+}
+
+func TestEngine_ExecuteAction_SendEmail_DefaultSubject(t *testing.T) {
+	exec := &mockExecutor{}
+	sender := &mockEmailSender{}
+	e := newEngine(&mockRepo{}, exec)
+	e.SetEmailSender(sender)
+
+	if err := e.executeAction(context.Background(), uuid.New(), "send_email",
+		map[string]any{"to": "a@b.com"}, Event{}, nil); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if sender.gotSubject == "" {
+		t.Error("expected a default subject when none is provided")
+	}
+}
+
+func TestEngine_ExecuteAction_SendEmail_Missing(t *testing.T) {
+	e := newEngine(&mockRepo{}, &mockExecutor{})
+	e.SetEmailSender(&mockEmailSender{})
+	if err := e.executeAction(context.Background(), uuid.New(), "send_email", map[string]any{}, Event{}, nil); err == nil {
+		t.Fatal("expected error for missing 'to' field")
+	}
+}
+
+func TestEngine_ExecuteAction_SendEmail_NoSenderConfigured(t *testing.T) {
+	e := newEngine(&mockRepo{}, &mockExecutor{})
+	// Deliberately not calling SetEmailSender — should degrade gracefully,
+	// same as an unknown action type, not fail the whole rule.
+	if err := e.executeAction(context.Background(), uuid.New(), "send_email",
+		map[string]any{"to": "a@b.com"}, Event{}, nil); err != nil {
+		t.Fatalf("expected graceful no-op, got error: %v", err)
 	}
 }
 
 func TestEngine_ExecuteAction_UnknownType(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
-	if err := e.executeAction(context.Background(), uuid.New(), "unknown_type", map[string]any{}, Event{}); err != nil {
+	if err := e.executeAction(context.Background(), uuid.New(), "unknown_type", map[string]any{}, Event{}, nil); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if exec.calls != 0 {

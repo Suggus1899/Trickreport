@@ -39,7 +39,7 @@ type RuleDTO struct {
 type createRuleReq struct {
 	Name        string         `json:"name" validate:"required,min=2,max=255"`
 	Description string         `json:"description" validate:"max=1000"`
-	TriggerType string         `json:"trigger_type" validate:"required,oneof=ticket_created status_changed sla_breach priority_changed"`
+	TriggerType string         `json:"trigger_type" validate:"required,oneof=ticket_created status_changed sla_breach priority_changed escalation"`
 	Conditions  map[string]any `json:"conditions"`
 	Actions     []any          `json:"actions"`
 	IsActive    bool           `json:"is_active"`
@@ -48,7 +48,7 @@ type createRuleReq struct {
 type updateRuleReq struct {
 	Name        string         `json:"name" validate:"required,min=2,max=255"`
 	Description string         `json:"description" validate:"max=1000"`
-	TriggerType string         `json:"trigger_type" validate:"required,oneof=ticket_created status_changed sla_breach priority_changed"`
+	TriggerType string         `json:"trigger_type" validate:"required,oneof=ticket_created status_changed sla_breach priority_changed escalation"`
 	Conditions  map[string]any `json:"conditions"`
 	Actions     []any          `json:"actions"`
 	IsActive    bool           `json:"is_active"`

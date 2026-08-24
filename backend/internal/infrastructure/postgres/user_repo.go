@@ -74,6 +74,17 @@ func (r *UserRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domain
 	return r.scanUser(ctx, q, id, tenantID)
 }
 
+// GetEmail implements ticket.UserEmailFetcher, letting the ticket service
+// look up a notification recipient's address without depending on the
+// broader user.Repository port.
+func (r *UserRepo) GetEmail(ctx context.Context, tenantID, userID uuid.UUID) (string, error) {
+	u, err := r.GetByID(ctx, userID, tenantID)
+	if err != nil {
+		return "", err
+	}
+	return u.Email, nil
+}
+
 // GetByIDNoTenant returns an active user by id without tenant scoping.
 func (r *UserRepo) GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*domainuser.User, error) {
 	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at, COALESCE(failed_login_attempts, 0), COALESCE(locked_until, timestamp 'epoch'), COALESCE(mfa_secret, ''), COALESCE(mfa_enabled, false) FROM users WHERE id = $1 AND active = TRUE`

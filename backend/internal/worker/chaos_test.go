@@ -31,7 +31,7 @@ func TestWorker_RetryLogic_SimulatesDBDisconnection(t *testing.T) {
 		t.Errorf("expected 3 attempts (1 + 2 retries), got %d", got)
 	}
 
-	breaches, automations, errs := w.metrics.Snapshot()
+	breaches, _, automations, errs := w.metrics.Snapshot()
 	if breaches != 0 {
 		t.Errorf("breaches = %d, want 0", breaches)
 	}
@@ -66,7 +66,7 @@ func TestWorker_RetryLogic_SucceedsOnRetry(t *testing.T) {
 		t.Errorf("expected 2 attempts, got %d", got)
 	}
 
-	_, _, errs := w.metrics.Snapshot()
+	_, _, _, errs := w.metrics.Snapshot()
 	if errs != 1 {
 		t.Errorf("errors = %d, want 1 (only the first failure)", errs)
 	}
@@ -100,18 +100,19 @@ func TestWorker_RetryLogic_ContextCancellationDuringBackoff(t *testing.T) {
 // current values of all counters.
 func TestWorker_Metrics_Snapshot(t *testing.T) {
 	var m Metrics
-	b, a, e := m.Snapshot()
-	if b != 0 || a != 0 || e != 0 {
-		t.Errorf("initial snapshot = (%d, %d, %d), want all 0", b, a, e)
+	b, esc, a, e := m.Snapshot()
+	if b != 0 || esc != 0 || a != 0 || e != 0 {
+		t.Errorf("initial snapshot = (%d, %d, %d, %d), want all 0", b, esc, a, e)
 	}
 
 	atomic.AddInt64(&m.BreachesDetected, 5)
+	atomic.AddInt64(&m.EscalationsDetected, 4)
 	atomic.AddInt64(&m.AutomationsRun, 3)
 	atomic.AddInt64(&m.Errors, 2)
 
-	b, a, e = m.Snapshot()
-	if b != 5 || a != 3 || e != 2 {
-		t.Errorf("snapshot = (%d, %d, %d), want (5, 3, 2)", b, a, e)
+	b, esc, a, e = m.Snapshot()
+	if b != 5 || esc != 4 || a != 3 || e != 2 {
+		t.Errorf("snapshot = (%d, %d, %d, %d), want (5, 4, 3, 2)", b, esc, a, e)
 	}
 }
 

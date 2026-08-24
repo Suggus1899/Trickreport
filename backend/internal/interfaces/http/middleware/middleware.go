@@ -90,9 +90,23 @@ func RequireRole(roles ...string) func(http.Handler) http.Handler {
 // Tenant resolves the current tenant from the X-Tenant-ID header or subdomain
 // and validates/translates it to the canonical tenant UUID.
 // Returns 400 if no tenant can be resolved — no silent fallback.
+//
+// When a JWT has already been validated (the only path in production, since
+// this middleware always runs after Authenticate — see server.go), the
+// token's own tenant claim is the sole source of truth. A client-controlled
+// X-Tenant-ID header must never be able to move an authenticated request into
+// another tenant, so the header/subdomain resolution below only runs when
+// there are no claims in context (e.g. tests that exercise this middleware
+// standalone).
 func Tenant(resolver TenantResolver) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if claims, ok := ClaimsFromContext(r.Context()); ok {
+				ctx := context.WithValue(r.Context(), tenantKey, claims.TenantID)
+				next.ServeHTTP(w, r.WithContext(ctx))
+				return
+			}
+
 			slugOrID := r.Header.Get("X-Tenant-ID")
 
 			if slugOrID == "" {

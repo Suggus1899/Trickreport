@@ -37,16 +37,21 @@ func RenderTemplate(name string, data TemplateData) (string, error) {
 	return buf.String(), nil
 }
 
-const emailBase = `<!DOCTYPE html>
-<html lang="en">
-<head><meta charset="UTF-8"><title>{{.Title}}</title></head>
-<body style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-<h2 style="color: #333;">{{.Title}}</h2>
-<div style="background: #f9f9f9; padding: 15px; border-radius: 5px;">%s</div>
-<hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-<p style="color: #999; font-size: 12px;">This is an automated message from Trickreport.</p>
-</body>
-</html>`
+// TicketEmailRenderer implements ticket.EmailRenderer (and any other port
+// shaped the same way) over RenderTemplate — satisfied structurally, so this
+// package never needs to import application/ticket.
+type TicketEmailRenderer struct{}
+
+// RenderTicketEmail renders one of the ticket_* templates from plain ticket fields.
+func (TicketEmailRenderer) RenderTicketEmail(templateName, ticketID, title, description, priority, status string) (string, error) {
+	return RenderTemplate(templateName, TemplateData{
+		TicketID:    ticketID,
+		Title:       title,
+		Description: description,
+		Priority:    priority,
+		Status:      status,
+	})
+}
 
 const ticketCreatedTmpl = `<!DOCTYPE html>
 <html lang="en">
@@ -74,6 +79,7 @@ const ticketUpdatedTmpl = `<!DOCTYPE html>
 <p><strong>Ticket ID:</strong> {{.TicketID}}</p>
 <p><strong>Title:</strong> {{.Title}}</p>
 <p><strong>New Status:</strong> {{.Status}}</p>
+{{if .Description}}<p>{{.Description}}</p>{{end}}
 </div>
 <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
 <p style="color: #999; font-size: 12px;">This is an automated message from Trickreport.</p>
@@ -112,6 +118,3 @@ const passwordResetTmpl = `<!DOCTYPE html>
 <p style="color: #999; font-size: 12px;">This is an automated message from Trickreport.</p>
 </body>
 </html>`
-
-// Ensure the base template constant is referenced to avoid unused warnings.
-var _ = emailBase

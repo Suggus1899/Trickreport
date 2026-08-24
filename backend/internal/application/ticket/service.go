@@ -75,17 +75,32 @@ type EmailNotifier interface {
 	Send(to, subject, body string) error
 }
 
+// UserEmailFetcher is the port for looking up a user's email address.
+type UserEmailFetcher interface {
+	GetEmail(ctx context.Context, tenantID, userID uuid.UUID) (string, error)
+}
+
+// EmailRenderer is the port for rendering an HTML email body from one of the
+// infrastructure layer's named templates ("ticket_created", "ticket_updated").
+// Kept narrow and application-owned so this package never imports the
+// infrastructure/email package directly (hexagonal layering).
+type EmailRenderer interface {
+	RenderTicketEmail(templateName, ticketID, title, description, priority, status string) (string, error)
+}
+
 // UserService is the application service for ticket operations.
 type UserService struct {
-	repo        Repository
-	comments    CommentRepository
-	history     HistoryRepository
-	hub         EventBroadcaster
-	email       EmailNotifier
-	engine      AutomationEvaluator
-	tx          TxManager
-	slaFetcher  SLAPolicyFetcher
-	notifSvc    *NotificationService
+	repo          Repository
+	comments      CommentRepository
+	history       HistoryRepository
+	hub           EventBroadcaster
+	email         EmailNotifier
+	emailFetcher  UserEmailFetcher
+	emailRenderer EmailRenderer
+	engine        AutomationEvaluator
+	tx            TxManager
+	slaFetcher    SLAPolicyFetcher
+	notifSvc      *NotificationService
 }
 
 // NewService creates a new ticket application service.
@@ -121,6 +136,18 @@ func (s *UserService) SetSLAPolicyFetcher(f SLAPolicyFetcher) {
 // events create persistent notifications for relevant users.
 func (s *UserService) SetNotificationService(n *NotificationService) {
 	s.notifSvc = n
+}
+
+// SetUserEmailFetcher wires the user email lookup. Required (alongside
+// SetEmailRenderer) for ticket events to also notify by email, not just
+// in-app.
+func (s *UserService) SetUserEmailFetcher(f UserEmailFetcher) {
+	s.emailFetcher = f
+}
+
+// SetEmailRenderer wires the HTML email template renderer.
+func (s *UserService) SetEmailRenderer(r EmailRenderer) {
+	s.emailRenderer = r
 }
 
 // evaluateAutomation fires an automation event asynchronously.
@@ -244,6 +271,7 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 		body := "Your ticket has been created successfully."
 		s.createNotificationSafe(context.Background(), input.TenantID, input.CreatedBy, title, body, "ticket_created", &t.ID, "ticket")
 	}
+	s.notifyByEmailSafe(context.Background(), input.TenantID, input.CreatedBy, "ticket_created", t.ID.String(), t.Title, t.Description, string(t.Priority), string(t.Status))
 
 	// Fire automation rules for ticket creation.
 	s.evaluateAutomation(input.TenantID, appAuto.Event{
@@ -304,12 +332,13 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uui
 	}
 
 	// Notify the ticket creator about the status change (if they're not the one changing it).
-	if s.notifSvc != nil {
-		if creatorID, err := s.repo.GetCreator(ctx, id, tenantID); err == nil && creatorID != userID {
+	if creatorID, err := s.repo.GetCreator(ctx, id, tenantID); err == nil && creatorID != userID {
+		if s.notifSvc != nil {
 			title := "Ticket updated: status changed to " + string(status)
 			body := "The status of your ticket has been updated."
 			s.createNotificationSafe(context.Background(), tenantID, creatorID, title, body, "ticket_updated", &id, "ticket")
 		}
+		s.notifyByEmailSafe(context.Background(), tenantID, creatorID, "ticket_updated", id.String(), t.Title, t.Description, string(t.Priority), string(t.Status))
 	}
 
 	// Fire automation rules for status changes.
@@ -390,11 +419,16 @@ func (s *UserService) AddComment(ctx context.Context, input AddCommentInput) (*d
 	}
 
 	// Notify the ticket creator about the new comment (if they're not the commenter).
-	if s.notifSvc != nil {
-		if creatorID, err := s.repo.GetCreator(ctx, input.TicketID, input.TenantID); err == nil && creatorID != input.UserID {
+	if creatorID, err := s.repo.GetCreator(ctx, input.TicketID, input.TenantID); err == nil && creatorID != input.UserID {
+		if s.notifSvc != nil {
 			title := "New comment on your ticket"
 			body := "Someone commented on your ticket."
 			s.createNotificationSafe(context.Background(), input.TenantID, creatorID, title, body, "new_comment", &input.TicketID, "ticket")
+		}
+		// Internal notes are agent/admin-only — never email them to the
+		// creator, who is typically the customer.
+		if !input.IsInternal {
+			s.notifyByEmailSafe(context.Background(), input.TenantID, creatorID, "ticket_updated", input.TicketID.String(), t.Title, input.Content, string(t.Priority), string(t.Status))
 		}
 	}
 
@@ -428,4 +462,24 @@ func (s *UserService) createNotificationSafe(ctx context.Context, tenantID, user
 	if s.hub != nil {
 		s.hub.BroadcastEvent(tenantID, "NOTIFICATION", n)
 	}
+}
+
+// notifyByEmailSafe renders and sends a ticket-event email. Best-effort, same
+// as createNotificationSafe: a missing dependency or a failed lookup/send
+// never fails the calling operation, it just means no email goes out.
+func (s *UserService) notifyByEmailSafe(ctx context.Context, tenantID, userID uuid.UUID, templateName, ticketID, title, description, priority, status string) {
+	if s.email == nil || s.emailFetcher == nil || s.emailRenderer == nil {
+		return
+	}
+	go func() {
+		to, err := s.emailFetcher.GetEmail(ctx, tenantID, userID)
+		if err != nil || to == "" {
+			return
+		}
+		body, err := s.emailRenderer.RenderTicketEmail(templateName, ticketID, title, description, priority, status)
+		if err != nil {
+			return
+		}
+		_ = s.email.Send(to, "Trickreport: "+title, body)
+	}()
 }

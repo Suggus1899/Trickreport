@@ -73,6 +73,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 		SecureCookie: cfg.SecureCookie,
 	}
 	services := NewServices(repos, hasher, tokenGen, hubAdapter, sender, ldapAuth, authCfg)
+	go services.EmailQueue.Process(ctx, sender)
 
 	// ── Worker ────────────────────────────────────────────────────────
 	wrk := worker.New(pool, worker.WithEngine(services.Engine))
@@ -172,7 +173,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 
 	// ── API routes (JSON) ─────────────────────────────────────────────
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Use(httpMiddleware.CSRF)
+		r.Use(httpMiddleware.CSRF(cfg.SecureCookie))
 
 		// Public: auth (no tenant required)
 		r.Route("/auth", func(r chi.Router) {

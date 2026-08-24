@@ -39,11 +39,17 @@ type TicketExecutor interface {
 	AddTag(ctx context.Context, tenantID, ticketID uuid.UUID, tag string) error
 }
 
+// EmailSender is the port for the "send_email" automation action.
+type EmailSender interface {
+	Send(to, subject, body string) error
+}
+
 // Engine evaluates and executes automation rules when triggers fire.
 type Engine struct {
-	repo    Repository
-	tickets TicketExecutor
-	logger  zerolog.Logger
+	repo        Repository
+	tickets     TicketExecutor
+	emailSender EmailSender
+	logger      zerolog.Logger
 }
 
 // NewEngine creates a new automation engine.
@@ -51,8 +57,15 @@ func NewEngine(repo Repository, tickets TicketExecutor, logger zerolog.Logger) *
 	return &Engine{repo: repo, tickets: tickets, logger: logger}
 }
 
+// SetEmailSender wires the email sender used by the "send_email" action.
+// Optional — when unset, matching actions are skipped with a warning log,
+// same as an unknown action type.
+func (e *Engine) SetEmailSender(sender EmailSender) {
+	e.emailSender = sender
+}
+
 // triggerFromEvent maps an engine event type to the stored rule trigger_type.
-// Stored trigger types: "ticket_created", "status_changed", "priority_changed", "sla_breach".
+// Stored trigger types: "ticket_created", "status_changed", "priority_changed", "sla_breach", "escalation".
 func triggerFromEvent(eventType string) string {
 	switch eventType {
 	case "ticket_created":
@@ -63,6 +76,8 @@ func triggerFromEvent(eventType string) string {
 		return "priority_changed"
 	case "sla_breach":
 		return "sla_breach"
+	case "escalation":
+		return "escalation"
 	default:
 		return eventType
 	}
@@ -101,7 +116,7 @@ func (e *Engine) Evaluate(ctx context.Context, tenantID uuid.UUID, event Event) 
 			continue
 		}
 
-		if err := e.executeActions(ctx, tenantID, rule, event); err != nil {
+		if err := e.executeActions(ctx, tenantID, rule, event, snapshot); err != nil {
 			e.logger.Error().Err(err).
 				Str("rule_id", rule.ID.String()).
 				Str("rule_name", rule.Name).
@@ -158,7 +173,7 @@ func (e *Engine) matchConditions(conditions map[string]any, snapshot *TicketSnap
 
 // executeActions runs all actions defined in a rule.
 // Each action is a map[string]any with an "type" key and action-specific fields.
-func (e *Engine) executeActions(ctx context.Context, tenantID uuid.UUID, rule domainautomation.Rule, event Event) error {
+func (e *Engine) executeActions(ctx context.Context, tenantID uuid.UUID, rule domainautomation.Rule, event Event, snapshot *TicketSnapshot) error {
 	for _, raw := range rule.Actions {
 		action, ok := raw.(map[string]any)
 		if !ok {
@@ -172,7 +187,7 @@ func (e *Engine) executeActions(ctx context.Context, tenantID uuid.UUID, rule do
 			continue
 		}
 
-		if err := e.executeAction(ctx, tenantID, actionType, action, event); err != nil {
+		if err := e.executeAction(ctx, tenantID, actionType, action, event, snapshot); err != nil {
 			e.logger.Error().Err(err).
 				Str("action", actionType).
 				Str("rule_id", rule.ID.String()).
@@ -183,7 +198,7 @@ func (e *Engine) executeActions(ctx context.Context, tenantID uuid.UUID, rule do
 	return nil
 }
 
-func (e *Engine) executeAction(ctx context.Context, tenantID uuid.UUID, actionType string, action map[string]any, event Event) error {
+func (e *Engine) executeAction(ctx context.Context, tenantID uuid.UUID, actionType string, action map[string]any, event Event, snapshot *TicketSnapshot) error {
 	switch actionType {
 	case "set_priority":
 		priority, _ := action["priority"].(string)
@@ -239,6 +254,25 @@ func (e *Engine) executeAction(ctx context.Context, tenantID uuid.UUID, actionTy
 			return fmt.Errorf("add_tag: missing 'tag' field")
 		}
 		return e.tickets.AddTag(ctx, tenantID, event.TicketID, tag)
+
+	case "send_email":
+		to, _ := action["to"].(string)
+		if to == "" {
+			return fmt.Errorf("send_email: missing 'to' field")
+		}
+		if e.emailSender == nil {
+			e.logger.Warn().Msg("automation engine: send_email skipped, no email sender configured")
+			return nil
+		}
+		subject, _ := action["subject"].(string)
+		if subject == "" {
+			subject = "Trickreport automation notification"
+		}
+		body := fmt.Sprintf("Ticket ID: %s", event.TicketID)
+		if snapshot != nil {
+			body = fmt.Sprintf("Ticket: %s\nStatus: %s\nPriority: %s", snapshot.Title, snapshot.Status, snapshot.Priority)
+		}
+		return e.emailSender.Send(to, subject, body)
 
 	default:
 		e.logger.Warn().Str("action", actionType).Msg("automation engine: unknown action type")
