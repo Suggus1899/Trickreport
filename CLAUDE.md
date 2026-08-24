@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Trickreport — multi-tenant help desk / ticketing platform. Go 1.25 backend (hexagonal/clean architecture) + Astro 5 SSR frontend (no UI framework, hand-rolled neumorphic CSS), PostgreSQL 16, orchestrated with Docker Compose. See [AGENTS.md](AGENTS.md) for the full command reference — the essentials are repeated below.
+Trickreport — multi-tenant help desk / ticketing platform. Go 1.25 backend (hexagonal/clean architecture) + Astro 5 SSR frontend with React islands (Tailwind + shadcn/ui), PostgreSQL 16, orchestrated with Docker Compose. See [AGENTS.md](AGENTS.md) for the full command reference — the essentials are repeated below.
 
 ## Commands
 
@@ -56,12 +56,12 @@ infrastructure/postgres, infrastructure/auth, infrastructure/email, infrastructu
 
 ## Frontend architecture
 
-Astro 5 in SSR mode (`@astrojs/node`, standalone adapter) — **no React/Vue/Svelte island framework**; interactivity is vanilla TypeScript in `<script>` blocks inside `.astro` files. There is no Tailwind despite what the README's tech-stack table implies — styling is a single hand-rolled neumorphic design system in [frontend/src/styles/global.css](frontend/src/styles/global.css) (~800 lines), applied through reusable `Neu*` components (`NeuButton`, `NeuCard`, `NeuModal`, etc. in `src/components/`).
+Astro 5 in SSR mode (`@astrojs/node`, standalone adapter) with **React islands** (`@astrojs/react`, hydrated via `client:*` directives) for interactive components — plain `.astro` files still handle SSR data-fetching and page shells. Styling is Tailwind + shadcn/ui primitives in [frontend/src/components/ui](frontend/src/components/ui) (the older hand-rolled neumorphic `global.css`/`Neu*` system was removed).
 
-- `src/pages/**/*.astro` are file-based routes (SSR pages call the backend directly server-side, then hydrate client state via inline scripts). `src/pages/admin/*` are admin-only views.
-- `src/lib/api.ts` is the single fetch client wrapper for the Go API — extend it rather than calling `fetch` ad hoc from pages.
-- `src/lib/offline.ts` + `src/scripts/register-sw.ts` + `pages/tickets/new-offline.astro` / `sync-status.astro` implement PWA offline ticket creation with background sync — read `offline.ts` before touching ticket creation flows, since online and offline paths must stay consistent.
-- `src/lib/keyboard.ts` drives the global keyboard-shortcut system (paired with `KeyboardHelp.astro`).
+- `src/pages/**/*.astro` are file-based routes (SSR pages call the backend directly server-side, then render React islands for interactive parts). `src/pages/admin/*` are admin-only views.
+- `src/lib/api.ts` is the single fetch client wrapper for the Go API — extend it rather than calling `fetch` ad hoc from pages. SSR code uses `API_URL`; browser-side code (React islands) must use `PUBLIC_API_URL` instead, since Astro/Vite only inline `PUBLIC_`-prefixed env vars into the client bundle.
+- `src/lib/offline/{db,sync}.ts` + `src/scripts/register-sw.ts` + `pages/tickets/new-offline.astro` / `sync-status.astro` implement PWA offline ticket creation with background sync — read `offline/` before touching ticket creation flows, since online and offline paths must stay consistent.
+- `src/components/chrome/KeyboardHelp.tsx` drives the global keyboard-shortcut system.
 
 ## Conventions (also in AGENTS.md)
 
