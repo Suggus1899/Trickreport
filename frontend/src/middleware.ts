@@ -4,7 +4,17 @@ import { requireAuth } from './lib/auth';
 // Routes reachable without a session. Everything else redirects to /login
 // when there's no valid token — new pages read the resolved session from
 // `Astro.locals.user` instead of repeating the cookie+getMe+redirect block.
-const PUBLIC_PATHS = new Set(['/', '/login', '/register', '/logout', '/offline', '/404']);
+const PUBLIC_PATHS = new Set([
+  '/',
+  '/login',
+  '/register',
+  '/logout',
+  '/offline',
+  '/404',
+  // Password reset is reached precisely when the user cannot sign in.
+  '/password-reset',
+  '/password-reset/confirm',
+]);
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_PATHS.has(pathname)) return true;

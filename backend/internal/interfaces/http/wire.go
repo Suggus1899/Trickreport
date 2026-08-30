@@ -134,7 +134,7 @@ func NewServices(
 		sender,
 		appAuth.PasswordResetConfig{
 			TokenExpiry: time.Hour,
-			ResetURL:    "/reset-password",
+			ResetURL:    "/password-reset/confirm",
 		},
 	)
 

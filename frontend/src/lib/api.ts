@@ -332,6 +332,25 @@ export async function logout(): Promise<void> {
   return api<void>('/auth/logout', { method: 'POST' });
 }
 
+/**
+ * Starts a password reset. Always resolves, even for an unknown address — the
+ * API deliberately does not reveal which emails are registered.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  return api<void>('/auth/password-reset', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+/** Completes a password reset with the token from the emailed link. */
+export async function confirmPasswordReset(token: string, newPassword: string): Promise<void> {
+  return api<void>('/auth/password-reset/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+}
+
 /* ─── MFA ───────────────────────────────────────────────────────────── */
 
 export async function mfaLogin(mfaToken: string, code: string): Promise<LoginResult> {
