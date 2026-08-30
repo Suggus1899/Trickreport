@@ -64,11 +64,13 @@ var ErrPasswordResetTokenInvalid = errors.New("password reset token is invalid o
 // ErrPasswordResetTokenUsed is returned when a reset token has already been used.
 var ErrPasswordResetTokenUsed = errors.New("password reset token has already been used")
 
-// RequestReset generates a reset token for the user with the given email and
-// sends a reset email. If no user exists with the email, the method returns
-// nil to avoid leaking which emails are registered.
-func (s *PasswordResetService) RequestReset(ctx context.Context, emailAddr string) error {
-	u, err := s.users.GetByEmail(ctx, emailAddr)
+// RequestReset generates a reset token for the user with the given email within
+// a tenant and sends a reset email. If no user exists with the email, the method
+// returns nil to avoid leaking which emails are registered. The lookup is
+// tenant-scoped so a reset never targets an identically-named account in
+// another organization.
+func (s *PasswordResetService) RequestReset(ctx context.Context, tenantID uuid.UUID, emailAddr string) error {
+	u, err := s.users.GetByEmail(ctx, tenantID, emailAddr)
 	if err != nil {
 		// Don't leak whether the email exists
 		return nil

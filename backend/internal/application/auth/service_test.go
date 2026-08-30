@@ -12,19 +12,31 @@ import (
 // --- Mocks ---
 
 type mockUserRepo struct {
-	userByEmail  *user.User
-	errByEmail   error
-	userByID     *user.User
-	errByID      error
-	gotEmail     string
-	gotID        uuid.UUID
-	byEmailCalls int
-	byIDCalls    int
+	userByEmail   *user.User
+	errByEmail    error
+	userByID      *user.User
+	errByID       error
+	gotEmail      string
+	gotID         uuid.UUID
+	gotTenantID   uuid.UUID
+	usersByTenant map[uuid.UUID]*user.User
+	byEmailCalls  int
+	byIDCalls     int
 }
 
-func (m *mockUserRepo) GetByEmail(ctx context.Context, email string) (*user.User, error) {
+func (m *mockUserRepo) GetByEmail(ctx context.Context, tenantID uuid.UUID, email string) (*user.User, error) {
+	m.gotTenantID = tenantID
 	m.gotEmail = email
 	m.byEmailCalls++
+	// usersByTenant lets a test model the same email living in several
+	// tenants; when it is nil the mock keeps its single-user behaviour.
+	if m.usersByTenant != nil {
+		u, ok := m.usersByTenant[tenantID]
+		if !ok {
+			return nil, m.errByEmail
+		}
+		return u, nil
+	}
 	return m.userByEmail, m.errByEmail
 }
 
@@ -273,5 +285,119 @@ func TestService_GetProfile_NotFound(t *testing.T) {
 	_, err := svc.GetProfile(context.Background(), uuid.New())
 	if err == nil {
 		t.Fatal("expected error, got nil")
+	}
+}
+
+// --- Cross-tenant isolation ---
+
+type mockUserCreator struct {
+	created *user.User
+	err     error
+}
+
+func (m *mockUserCreator) Create(ctx context.Context, u *user.User, passwordHash string) error {
+	m.created = u
+	return m.err
+}
+
+type mockFullHasher struct{ err error }
+
+func (m *mockFullHasher) Hash(password string) (string, error) { return "hashed-" + password, m.err }
+func (m *mockFullHasher) Compare(hash, password string) error  { return nil }
+
+// TestService_Login_IsTenantScoped is the regression guard for the login
+// ambiguity: the schema allows the same address in several tenants
+// (users_email_tenant_unique is on (tenant_id, email)), so a login must return
+// the account belonging to the tenant it was issued against — never whichever
+// row the database happened to return first.
+func TestService_Login_IsTenantScoped(t *testing.T) {
+	const sharedEmail = "gustavo@example.com"
+
+	tenantA, tenantB := uuid.New(), uuid.New()
+	userA := &user.User{ID: uuid.New(), TenantID: tenantA, Email: sharedEmail, Role: user.RoleAdmin, PasswordHash: "hash-a", Active: true}
+	userB := &user.User{ID: uuid.New(), TenantID: tenantB, Email: sharedEmail, Role: user.RoleEndUser, PasswordHash: "hash-b", Active: true}
+
+	tests := []struct {
+		name     string
+		tenantID uuid.UUID
+		want     *user.User
+	}{
+		{"tenant A gets its own account", tenantA, userA},
+		{"tenant B gets its own account", tenantB, userB},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			repo := &mockUserRepo{usersByTenant: map[uuid.UUID]*user.User{
+				tenantA: userA,
+				tenantB: userB,
+			}}
+			tok := &mockTokenGen{token: "jwt"}
+			svc := NewService(repo, &mockHasher{}, nil, tok, Config{JWTExpHours: 1})
+
+			res, err := svc.Login(context.Background(), LoginInput{
+				TenantID: tt.tenantID,
+				Email:    sharedEmail,
+				Password: "secret",
+			})
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if res.User.ID != tt.want.ID {
+				t.Errorf("logged in as user %v, want %v — cross-tenant leak", res.User.ID, tt.want.ID)
+			}
+			if repo.gotTenantID != tt.tenantID {
+				t.Errorf("repo queried tenant %v, want %v", repo.gotTenantID, tt.tenantID)
+			}
+			// The JWT must be minted for the tenant that was asked for.
+			if tok.gotTenant != tt.tenantID {
+				t.Errorf("token minted for tenant %v, want %v", tok.gotTenant, tt.tenantID)
+			}
+		})
+	}
+}
+
+// TestService_Login_UnknownTenant covers the account existing, but not in the
+// tenant being logged into.
+func TestService_Login_UnknownTenant(t *testing.T) {
+	known := uuid.New()
+	repo := &mockUserRepo{
+		usersByTenant: map[uuid.UUID]*user.User{
+			known: {ID: uuid.New(), TenantID: known, Email: "a@b.com", PasswordHash: "h", Active: true},
+		},
+		errByEmail: errors.New("not found"),
+	}
+	svc := NewService(repo, &mockHasher{}, nil, &mockTokenGen{}, Config{})
+
+	_, err := svc.Login(context.Background(), LoginInput{
+		TenantID: uuid.New(), // a different tenant
+		Email:    "a@b.com",
+		Password: "secret",
+	})
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("expected ErrInvalidCredentials, got %v", err)
+	}
+}
+
+// TestService_Register_RequiresTenant guards the registration path: without a
+// resolved tenant there is no organization to create the account in, and
+// silently falling back to a default one is how accounts end up in the wrong
+// place.
+func TestService_Register_RequiresTenant(t *testing.T) {
+	repo := &mockUserRepo{}
+	svc := NewService(repo, &mockHasher{}, nil, &mockTokenGen{}, Config{})
+	svc.SetUserCreator(&mockUserCreator{})
+	svc.SetPasswordHasherFull(&mockFullHasher{})
+
+	_, err := svc.Register(context.Background(), RegisterInput{
+		Name:     "Gustavo",
+		Email:    "gustavo@example.com",
+		Password: "secret123",
+	})
+	if !errors.Is(err, ErrInvalidCredentials) {
+		t.Errorf("expected ErrInvalidCredentials for a nil tenant, got %v", err)
+	}
+	if repo.byEmailCalls != 0 {
+		t.Error("must reject before touching the repository")
 	}
 }

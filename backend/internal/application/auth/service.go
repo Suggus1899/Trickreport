@@ -10,8 +10,10 @@ import (
 )
 
 // UserRepository is the port for user lookup during authentication.
+// GetByEmail is tenant-scoped: the same email may exist in several tenants, so
+// the caller must say which organization it is authenticating against.
 type UserRepository interface {
-	GetByEmail(ctx context.Context, email string) (*user.User, error)
+	GetByEmail(ctx context.Context, tenantID uuid.UUID, email string) (*user.User, error)
 	GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*user.User, error)
 }
 
@@ -160,6 +162,7 @@ func (s *Service) SetUserCreator(creator UserCreator) { s.creator = creator }
 
 // LoginInput holds the credentials for login.
 type LoginInput struct {
+	TenantID uuid.UUID
 	Email    string
 	Password string
 }
@@ -205,7 +208,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (*LoginResult, er
 		return nil, ErrInvalidCredentials
 	}
 
-	u, err := s.users.GetByEmail(ctx, input.Email)
+	u, err := s.users.GetByEmail(ctx, input.TenantID, input.Email)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -428,12 +431,13 @@ func (s *Service) GetProfile(ctx context.Context, userID uuid.UUID) (*user.User,
 
 // RegisterInput holds the data for self-registration.
 type RegisterInput struct {
+	TenantID uuid.UUID
 	Name     string
 	Email    string
 	Password string
 }
 
-// Register creates a new end_user account in the default tenant and returns login tokens.
+// Register creates a new end_user account in the given tenant and returns login tokens.
 func (s *Service) Register(ctx context.Context, input RegisterInput) (*LoginResult, error) {
 	if s.creator == nil || s.hasherFull == nil {
 		return nil, ErrRegistrationDisabled
@@ -445,8 +449,13 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*LoginResu
 		return nil, ErrInvalidCredentials
 	}
 
-	// Check if email is already in use.
-	existing, _ := s.users.GetByEmail(ctx, input.Email)
+	if input.TenantID == uuid.Nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	// Check if the email is already in use *within this tenant*. The same
+	// address may legitimately belong to a user of another organization.
+	existing, _ := s.users.GetByEmail(ctx, input.TenantID, input.Email)
 	if existing != nil {
 		return nil, ErrEmailAlreadyExists
 	}
@@ -456,11 +465,8 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*LoginResu
 		return nil, err
 	}
 
-	// Default tenant ID — matches the seed in migration 000001.
-	defaultTenantID := uuid.MustParse("00000000-0000-0000-0000-000000000001")
-
 	u := &user.User{
-		TenantID: defaultTenantID,
+		TenantID: input.TenantID,
 		Name:     input.Name,
 		Email:    input.Email,
 		Role:     user.RoleEndUser,

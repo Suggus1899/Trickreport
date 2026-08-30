@@ -3,7 +3,10 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('../config', () => ({
   API_URL: 'http://localhost:8080',
+  PUBLIC_API_URL: 'http://localhost:8080',
   ON_PREMISE: false,
+  DEFAULT_TENANT_SLUG: 'default',
+  resolveTenantSlug: () => 'default',
 }));
 
 const fetchMock = vi.fn();

@@ -25,3 +25,26 @@ export const API_URL = import.meta.env.API_URL || (ON_PREMISE ? '' : 'http://loc
  */
 export const PUBLIC_API_URL =
   import.meta.env.PUBLIC_API_URL || (ON_PREMISE ? '' : 'http://localhost:8080');
+
+/** Tenant used when the host carries no organization subdomain. */
+export const DEFAULT_TENANT_SLUG = 'default';
+
+/** Hostnames that never carry a tenant subdomain. */
+const NON_TENANT_HOSTS = new Set(['www', 'app', 'localhost']);
+
+/**
+ * Organization the browser is acting on behalf of, taken from the subdomain
+ * (`acme.trickreport.com` → `acme`).
+ *
+ * Only the public auth routes read this — once a JWT exists the backend takes
+ * the tenant from the token claim and ignores the header entirely, so a wrong
+ * value here can never move an authenticated request into another tenant.
+ */
+export function resolveTenantSlug(): string {
+  if (typeof window === 'undefined') return DEFAULT_TENANT_SLUG;
+
+  const [first, ...rest] = window.location.hostname.split('.');
+  // Needs at least two labels after the first, otherwise there is no subdomain.
+  if (rest.length < 2 || NON_TENANT_HOSTS.has(first)) return DEFAULT_TENANT_SLUG;
+  return first;
+}

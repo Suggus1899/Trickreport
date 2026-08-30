@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
 	"github.com/trickreport/backend/internal/domain/user"
+	"github.com/trickreport/backend/internal/interfaces/http/middleware"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
 	"github.com/trickreport/backend/internal/interfaces/http/validator"
 )
@@ -76,6 +77,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.svc.Login(r.Context(), appAuth.LoginInput{
+		TenantID: middleware.TenantFromContext(r.Context()),
 		Email:    req.Email,
 		Password: req.Password,
 	})
@@ -281,7 +283,7 @@ func (h *AuthHandler) PasswordReset(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Always return 202 to avoid leaking which emails are registered
-	_ = h.resetSvc.RequestReset(r.Context(), req.Email)
+	_ = h.resetSvc.RequestReset(r.Context(), middleware.TenantFromContext(r.Context()), req.Email)
 	response.JSON(w, http.StatusAccepted, map[string]string{"status": "if the email exists, a reset link has been sent"})
 }
 
@@ -582,6 +584,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result, err := h.svc.Register(r.Context(), appAuth.RegisterInput{
+		TenantID: middleware.TenantFromContext(r.Context()),
 		Name:     req.Name,
 		Email:    req.Email,
 		Password: req.Password,

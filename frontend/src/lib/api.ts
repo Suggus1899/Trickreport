@@ -1,4 +1,4 @@
-import { API_URL, PUBLIC_API_URL } from './config';
+import { API_URL, PUBLIC_API_URL, resolveTenantSlug } from './config';
 
 export { API_URL };
 
@@ -208,7 +208,9 @@ function getCsrfToken(): string | undefined {
 
 function getHeaders(token: string | undefined, skipJson: boolean, method: string): HeadersInit {
   const headers: HeadersInit = {
-    'X-Tenant-ID': 'default',
+    // Only the public auth routes (login, register, password reset) read this.
+    // Authenticated requests take the tenant from the JWT claim server-side.
+    'X-Tenant-ID': resolveTenantSlug(),
   };
   if (!skipJson) {
     headers['Content-Type'] = 'application/json';

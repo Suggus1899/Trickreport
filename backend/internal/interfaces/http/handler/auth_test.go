@@ -23,7 +23,7 @@ type authMockUserRepo struct {
 	gotID  uuid.UUID
 }
 
-func (m *authMockUserRepo) GetByEmail(ctx context.Context, email string) (*user.User, error) {
+func (m *authMockUserRepo) GetByEmail(ctx context.Context, tenantID uuid.UUID, email string) (*user.User, error) {
 	return m.u, m.err
 }
 

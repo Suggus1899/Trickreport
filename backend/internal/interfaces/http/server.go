@@ -181,13 +181,19 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 			loginLimiter := httpMiddleware.NewLoginRateLimiter(rate.Limit(5), 10, 15)
 			loginLimiter.Start()
 
-			r.With(loginLimiter.LoginLimit).Post("/login", authHandler.Login)
-			r.With(loginLimiter.LoginLimit).Post("/register", authHandler.Register)
+			// These run before any JWT exists, so the tenant can only come from
+			// the X-Tenant-ID header or the subdomain — hence the Tenant
+			// middleware here. Without it these lookups would be global, and an
+			// email that exists in two organizations would resolve arbitrarily.
+			tenant := httpMiddleware.Tenant(repos.TenantResolver)
+
+			r.With(loginLimiter.LoginLimit, tenant).Post("/login", authHandler.Login)
+			r.With(loginLimiter.LoginLimit, tenant).Post("/register", authHandler.Register)
 			r.Post("/logout", authHandler.Logout)
 			r.Post("/refresh", authHandler.Refresh)
-			r.Post("/password-reset", authHandler.PasswordReset)
+			r.With(tenant).Post("/password-reset", authHandler.PasswordReset)
 			r.Post("/password-reset/confirm", authHandler.PasswordResetConfirm)
-			r.Post("/mfa/login", authHandler.MFALogin)
+			r.With(tenant).Post("/mfa/login", authHandler.MFALogin)
 			r.With(httpMiddleware.Authenticate(tokenGen)).Get("/me", authHandler.Me)
 
 			// MFA management (requires auth)

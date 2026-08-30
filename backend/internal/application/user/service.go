@@ -11,7 +11,6 @@ import (
 type Repository interface {
 	List(ctx context.Context, tenantID uuid.UUID) ([]user.User, error)
 	GetByID(ctx context.Context, id, tenantID uuid.UUID) (*user.User, error)
-	GetByEmail(ctx context.Context, email string) (*user.User, error)
 	Create(ctx context.Context, u *user.User, passwordHash string) error
 	Update(ctx context.Context, id, tenantID uuid.UUID, fields UpdateFields) (*user.User, error)
 	Deactivate(ctx context.Context, id, tenantID uuid.UUID) error

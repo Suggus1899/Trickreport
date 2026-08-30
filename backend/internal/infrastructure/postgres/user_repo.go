@@ -92,11 +92,14 @@ func (r *UserRepo) GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*domainus
 	return r.scanUser(ctx, q, id)
 }
 
-// GetByEmail returns an active user by email.
-func (r *UserRepo) GetByEmail(ctx context.Context, email string) (*domainuser.User, error) {
-	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at, COALESCE(failed_login_attempts, 0), COALESCE(locked_until, timestamp 'epoch'), COALESCE(mfa_secret, ''), COALESCE(mfa_enabled, false) FROM users WHERE email = $1 AND active = TRUE LIMIT 1`
+// GetByEmail returns an active user by email within a tenant. The schema allows
+// the same email in different tenants (users_email_tenant_unique is on
+// (tenant_id, email)), so an unscoped lookup would return an arbitrary row and
+// authenticate the caller against whichever tenant Postgres happened to pick.
+func (r *UserRepo) GetByEmail(ctx context.Context, tenantID uuid.UUID, email string) (*domainuser.User, error) {
+	const q = `SELECT id, tenant_id, name, email, role, COALESCE(password, ''), COALESCE(ldap_dn, ''), avatar_url, active, created_at, updated_at, COALESCE(failed_login_attempts, 0), COALESCE(locked_until, timestamp 'epoch'), COALESCE(mfa_secret, ''), COALESCE(mfa_enabled, false) FROM users WHERE tenant_id = $1 AND email = $2 AND active = TRUE`
 
-	return r.scanUser(ctx, q, email)
+	return r.scanUser(ctx, q, tenantID, email)
 }
 
 // Create inserts a new user. If passwordHash is empty, nil is passed.
