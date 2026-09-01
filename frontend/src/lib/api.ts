@@ -113,6 +113,19 @@ export interface ResolutionMetrics {
   avg_hours: number;
 }
 
+export interface SLACompliance {
+  total: number;
+  breached: number;
+  compliant: number;
+}
+
+export interface ChartsData {
+  volume: VolumePoint[];
+  status_distribution: StatusDistribution[];
+  resolution_time: ResolutionMetrics[];
+  sla_compliance: SLACompliance;
+}
+
 export interface ApiError {
   error: string;
 }
@@ -485,6 +498,18 @@ export async function createArticle(data: Partial<Article>, token?: string): Pro
   return api<Article>('/articles', { token, method: 'POST', body: JSON.stringify(data) });
 }
 
+export async function updateArticle(
+  id: string,
+  data: Partial<Article>,
+  token?: string,
+): Promise<Article> {
+  return api<Article>(`/articles/${id}`, { token, method: 'PUT', body: JSON.stringify(data) });
+}
+
+export async function deleteArticle(id: string, token?: string): Promise<void> {
+  return api<void>(`/articles/${id}`, { token, method: 'DELETE' });
+}
+
 /* ─── Admin ─────────────────────────────────────────────────────────── */
 
 export async function getUsers(token?: string): Promise<User[]> {
@@ -562,6 +587,14 @@ export async function updateAutomation(
 
 export async function deleteAutomation(id: string, token?: string): Promise<void> {
   return api<void>(`/admin/automations/${id}`, { token, method: 'DELETE' });
+}
+
+/**
+ * Every analytics dataset in one request. Strictly supersedes the three
+ * single-purpose endpoints below, which remain for callers that need only one.
+ */
+export async function getAnalyticsCharts(token?: string): Promise<ChartsData> {
+  return api<ChartsData>('/admin/analytics/charts', { token });
 }
 
 export async function getAnalyticsVolume(token?: string): Promise<VolumePoint[]> {

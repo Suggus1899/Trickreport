@@ -1,6 +1,7 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { Badge } from '../../components/ui/badge';
+import { buttonVariants } from '../../components/ui/button';
 import { getMe, getArticle } from '../../lib/api';
 import type { Article } from '../../lib/api';
 import { ArrowLeft } from 'lucide-react';
@@ -21,6 +22,9 @@ try {
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load article';
 }
+
+// Matches the backend: PUT /articles/{id} is admin/agent only.
+const canWrite = user?.role === 'admin' || user?.role === 'agent';
 ---
 
 <Layout title={article?.title || 'Article'} user={user ? { name: user.name, role: user.role } : undefined}>
@@ -29,7 +33,17 @@ try {
       <ArrowLeft className="size-4" aria-hidden="true" />
       Back to Knowledge Base
     </a>
-    <h1 class="font-heading text-2xl font-bold mb-6">{article?.title || 'Article'}</h1>
+    <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
+      <h1 class="font-heading text-2xl font-bold">
+        {article?.title || 'Article'}
+        {article && !article.published && (
+          <Badge variant="secondary" className="ml-2 align-middle">Draft</Badge>
+        )}
+      </h1>
+      {article && canWrite && (
+        <a href={`/articles/${id}/edit`} class={buttonVariants({ variant: 'outline' })}>Edit</a>
+      )}
+    </div>
 
     {error && (
       <div class="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive mb-6">{error}</div>

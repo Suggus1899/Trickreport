@@ -1,0 +1,45 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import { ArticleEditor } from '../../../components/articles/ArticleEditor';
+import { getMe, getArticle, ApiAuthError } from '../../../lib/api';
+
+const token = Astro.cookies.get('trickreport_token')?.value;
+if (!token) {
+  return Astro.redirect('/login');
+}
+
+const { id } = Astro.params;
+
+let user;
+let article;
+try {
+  [user, article] = await Promise.all([getMe(token), getArticle(id!, token)]);
+} catch (err) {
+  if (err instanceof ApiAuthError) return Astro.redirect('/login');
+  // A missing or invisible article is indistinguishable from here.
+  return Astro.redirect('/articles');
+}
+
+// Matches the backend: PUT /articles/{id} is admin/agent only.
+if (user.role !== 'admin' && user.role !== 'agent') {
+  return Astro.redirect(`/articles/${id}`);
+}
+---
+
+<Layout title={`Edit — ${article.title}`} user={{ name: user.name, role: user.role }}>
+  <div class="max-w-3xl mx-auto">
+    <div class="mb-8">
+      <a href={`/articles/${id}`} class="text-sm text-muted-foreground hover:text-foreground"
+        >&larr; Back to article</a
+      >
+      <h1 class="font-heading text-3xl font-bold mt-2">Edit article</h1>
+      <p class="text-muted-foreground">
+        Last updated {new Date(article.updated_at || article.created_at).toLocaleString()}
+      </p>
+    </div>
+
+    <div class="rounded-xl border bg-card p-6">
+      <ArticleEditor article={article} client:load />
+    </div>
+  </div>
+</Layout>

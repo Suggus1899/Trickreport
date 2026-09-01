@@ -34,8 +34,8 @@ export function PasswordResetRequestForm() {
     return (
       <div className="flex flex-col gap-4" role="status">
         <p className="text-sm">
-          If an account exists for <span className="font-semibold">{email}</span>, a reset link is on
-          its way. The link expires shortly, so use it soon.
+          If an account exists for <span className="font-semibold">{email}</span>, a reset link is
+          on its way. The link expires shortly, so use it soon.
         </p>
         <p className="text-sm text-muted-foreground">
           Nothing arrived? Check your spam folder, or{' '}

@@ -16,7 +16,9 @@ export const ON_PREMISE =
  * - On-premise: empty string → requests go to the same origin (`/api/v1/...`).
  * - Development/standalone: defaults to `http://localhost:8080`.
  */
-export const API_URL = import.meta.env.API_URL || (ON_PREMISE ? '' : 'http://localhost:8080');
+// `??`, not `||`: an empty value is a deliberate choice meaning "same origin,
+// use relative paths", and `||` would discard it for the fallback.
+export const API_URL = import.meta.env.API_URL ?? (ON_PREMISE ? '' : 'http://localhost:8080');
 
 /**
  * Client-safe copy of API_URL for React islands and other browser-side code.
@@ -24,7 +26,7 @@ export const API_URL = import.meta.env.API_URL || (ON_PREMISE ? '' : 'http://loc
  * this must be set to the same value as API_URL in every environment.
  */
 export const PUBLIC_API_URL =
-  import.meta.env.PUBLIC_API_URL || (ON_PREMISE ? '' : 'http://localhost:8080');
+  import.meta.env.PUBLIC_API_URL ?? (ON_PREMISE ? '' : 'http://localhost:8080');
 
 /** Tenant used when the host carries no organization subdomain. */
 export const DEFAULT_TENANT_SLUG = 'default';

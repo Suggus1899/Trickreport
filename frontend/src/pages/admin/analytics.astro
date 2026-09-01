@@ -2,7 +2,7 @@
 import Layout from '../../layouts/Layout.astro';
 import { buttonVariants } from '../../components/ui/button';
 import { AnalyticsCharts } from '../../components/admin/AnalyticsCharts';
-import { getMe, getAnalyticsVolume, getAnalyticsStatus, getAnalyticsResolution } from '../../lib/api';
+import { getMe, getAnalyticsCharts } from '../../lib/api';
 import type { VolumePoint, StatusDistribution, ResolutionMetrics } from '../../lib/api';
 
 const token = Astro.cookies.get('trickreport_token')?.value;
@@ -27,11 +27,12 @@ if (user.role !== 'admin') {
 }
 
 try {
-  [volume, statusDist, resolution] = await Promise.all([
-    getAnalyticsVolume(token),
-    getAnalyticsStatus(token),
-    getAnalyticsResolution(token),
-  ]);
+  // One request instead of three — /admin/analytics/charts returns every
+  // dataset this page needs, plus SLA compliance.
+  const charts = await getAnalyticsCharts(token);
+  volume = charts.volume;
+  statusDist = charts.status_distribution;
+  resolution = charts.resolution_time;
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load analytics';
 }
