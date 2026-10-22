@@ -42,3 +42,8 @@ Thumbs.db
 *.swp
 .atl/
 .devin/
+
+# Local code intelligence and audit artifacts
+.gitnexus/
+graphify-out/
+.superpowers/

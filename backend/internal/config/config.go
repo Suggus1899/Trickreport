@@ -68,11 +68,23 @@ func (c *Config) AllowedOrigins() []string {
 }
 
 func Load() *Config {
+	viper := viper.New()
 	viper.SetConfigFile(".env")
 	viper.SetConfigType("env")
 
 	viper.AutomaticEnv()
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	// AutomaticEnv does not expose unset-file keys to Unmarshal.
+	for _, key := range []string{
+		"PORT", "ENV", "DATABASE_URL", "JWT_SECRET", "JWT_EXP_HOURS", "COOKIE_SECURE", "CORS_ORIGINS",
+		"ADMIN_EMAIL", "ADMIN_PASSWORD", "LDAP_ENABLED", "LDAP_HOST", "LDAP_PORT", "LDAP_USE_TLS",
+		"LDAP_BIND_DN", "LDAP_BIND_PW", "LDAP_BASE_DN", "LDAP_UID_ATTR", "SMTP_HOST", "SMTP_PORT",
+		"SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_USE_TLS",
+	} {
+		if err := viper.BindEnv(key); err != nil {
+			log.Fatal("Failed to register configuration environment key")
+		}
+	}
 
 	// Defaults
 	viper.SetDefault("PORT", "8080")
@@ -98,20 +110,22 @@ func Load() *Config {
 		log.Fatalf("Failed to unmarshal config: %v", err)
 	}
 
-	// Force COOKIE_SECURE=true in production unless explicitly disabled
-	if cfg.IsProduction() && !cfg.SecureCookie {
-		log.Println("WARNING: COOKIE_SECURE is false in production — forcing true")
+	deployed := cfg.IsProduction() || strings.EqualFold(cfg.Env, "staging")
+	if deployed && !cfg.SecureCookie {
 		cfg.SecureCookie = true
 	}
 
 	// Fail fast in production if JWT_SECRET is not set or is a placeholder
-	if cfg.IsProduction() {
-		if cfg.JWTSecret == "" || strings.Contains(strings.ToLower(cfg.JWTSecret), "change") {
-			log.Fatal("JWT_SECRET must be set to a strong random value in production")
+	if deployed {
+		if len(cfg.JWTSecret) < 32 || strings.Contains(strings.ToLower(cfg.JWTSecret), "change") {
+			log.Fatal("JWT_SECRET must contain at least 32 random bytes in deployed environments")
 		}
 		if cfg.AdminPassword == "" || strings.EqualFold(cfg.AdminPassword, "change_me") {
 			log.Fatal("ADMIN_PASSWORD must be set in production")
 		}
+	}
+	if cfg.JWTExpHours <= 0 || cfg.JWTExpHours > 24 {
+		log.Fatal("JWT_EXP_HOURS must be between 1 and 24")
 	}
 
 	return cfg
