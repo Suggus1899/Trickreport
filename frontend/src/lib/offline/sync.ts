@@ -6,7 +6,6 @@
 
 import { createTicket, getMe, ApiAuthError, ApiValidationError } from '../api';
 import {
-  type PendingTicket,
   getPendingTickets,
   deletePending,
   putTicket,

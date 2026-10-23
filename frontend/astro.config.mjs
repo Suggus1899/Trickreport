@@ -1,3 +1,4 @@
+import process from 'node:process';
 import { defineConfig } from 'astro/config';
 import node from '@astrojs/node';
 import react from '@astrojs/react';

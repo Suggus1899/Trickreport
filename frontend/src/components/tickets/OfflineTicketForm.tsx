@@ -6,6 +6,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { createTicket, ApiNetworkError } from '@/lib/api';
 import { useOnlineStatus } from '@/lib/hooks/useOnlineStatus';
 import { useOfflineTickets } from '@/lib/hooks/useOfflineTickets';
+import type { OfflineIdentity } from '@/lib/offline/db';
 
 const PRIORITIES = [
   { value: 'low', label: 'Low' },
@@ -14,9 +15,9 @@ const PRIORITIES = [
   { value: 'critical', label: 'Critical' },
 ];
 
-export function OfflineTicketForm() {
+export function OfflineTicketForm({ identity }: { identity: OfflineIdentity }) {
   const online = useOnlineStatus();
-  const { pendingCount, save, sync } = useOfflineTickets();
+  const { pendingCount, save, sync } = useOfflineTickets(identity);
   const [banner, setBanner] = useState('');
   const [syncMessage, setSyncMessage] = useState('');
   const [syncing, setSyncing] = useState(false);
@@ -50,7 +51,6 @@ export function OfflineTicketForm() {
       window.removeEventListener('online', runSync);
       window.removeEventListener('trickreport:sync-tickets', runSync);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {

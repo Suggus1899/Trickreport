@@ -25,7 +25,7 @@ describe('SSR session recovery', () => {
   it('clears an invalid cookie before login can redirect back into a loop', async () => {
     vi.stubGlobal('fetch', async () => new Response('{"error":"invalid session"}', { status: 401 }));
     const ctx = context('/login', 'expired');
-    const response = await onRequest(ctx as never, async () => new Response(ctx.locals.user ? 'dashboard' : 'login'));
+    const response = (await onRequest(ctx as never, async () => new Response(ctx.locals.user ? 'dashboard' : 'login'))) as Response;
     expect(await response.text()).toBe('login');
     expect(ctx.jar.size).toBe(0);
     expect(ctx.locals.token).toBeUndefined();
@@ -35,7 +35,7 @@ describe('SSR session recovery', () => {
     let resolutions = 0;
     vi.stubGlobal('fetch', async () => { resolutions++; return new Response(JSON.stringify(user)); });
     const ctx = context('/dashboard', 'valid');
-    const response = await onRequest(ctx as never, async () => new Response(ctx.locals.user?.name));
+    const response = (await onRequest(ctx as never, async () => new Response(ctx.locals.user?.name))) as Response;
     expect(await response.text()).toBe('Agent');
     expect(resolutions).toBe(1);
   });
@@ -43,7 +43,7 @@ describe('SSR session recovery', () => {
   it('presents a recoverable 503 on a backend outage without clearing the session', async () => {
     vi.stubGlobal('fetch', async () => { throw new TypeError('network unavailable'); });
     const ctx = context('/dashboard', 'valid');
-    const response = await onRequest(ctx as never, async () => new Response('unexpected'));
+    const response = (await onRequest(ctx as never, async () => new Response('unexpected'))) as Response;
     expect(response.status).toBe(503);
     expect(response.headers.get('Location')).toBeNull();
     expect(await response.text()).toMatch(/try again|retry/i);
@@ -53,7 +53,7 @@ describe('SSR session recovery', () => {
   it('rejects a cross-origin SSR form before forwarding its cookie-derived CSRF token', async () => {
     vi.stubGlobal('fetch', async () => new Response(JSON.stringify(user)));
     const ctx = context('/tickets/new', 'valid', { method: 'POST', headers: { Origin: 'https://outside.test' } });
-    const response = await onRequest(ctx as never, async () => new Response('mutation reached'));
+    const response = (await onRequest(ctx as never, async () => new Response('mutation reached'))) as Response;
     expect(response.status).toBe(403);
   });
 });

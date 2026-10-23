@@ -417,7 +417,7 @@ const wsUrl = API_URL
         });
 
         ws.addEventListener('error', () => {
-          try { ws.close(); } catch {}
+          try { ws.close(); } catch { /* socket already closed */ }
         });
       } catch { ws = null; }
     }

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { getViteConfig } from 'astro/config';
 import react from '@vitejs/plugin-react';
 import { fileURLToPath } from 'node:url';

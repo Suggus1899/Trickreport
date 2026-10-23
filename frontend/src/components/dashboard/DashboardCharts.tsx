@@ -46,7 +46,10 @@ function Sparkline({ points, color }: { points: DailyPoint[]; color: string }) {
  * skips the judgment call entirely (more total tickets isn't inherently
  * good or bad) and just reports the number.
  */
-function DeltaChip({ value, goodDirection }: { value: number; goodDirection: 'up' | 'down' | 'neutral' }) {
+function DeltaChip({ value, goodDirection }: { value: number | null; goodDirection: 'up' | 'down' | 'neutral' }) {
+  if (value === null) {
+    return null;
+  }
   if (value === 0) {
     return (
       <span className="inline-flex items-center gap-0.5 text-xs font-medium text-muted-foreground">

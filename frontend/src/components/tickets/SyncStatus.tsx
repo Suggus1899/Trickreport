@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { getPendingTickets, deletePending, type PendingTicket } from '@/lib/offline/db';
+import { getPendingTickets, deletePending, type OfflineIdentity, type PendingTicket } from '@/lib/offline/db';
 import { syncPendingTickets, retryPending, resolveConflict } from '@/lib/offline/sync';
 
 const STATUS_BADGE: Record<string, { variant: 'default' | 'destructive' | 'secondary' | 'outline'; label: string }> = {
@@ -11,15 +11,15 @@ const STATUS_BADGE: Record<string, { variant: 'default' | 'destructive' | 'secon
   synced: { variant: 'default', label: 'Synced' },
 };
 
-export function SyncStatus() {
+export function SyncStatus({ identity }: { identity: OfflineIdentity }) {
   const [tickets, setTickets] = useState<PendingTicket[]>([]);
   const [syncMessage, setSyncMessage] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
-    setTickets(await getPendingTickets());
-  }, []);
+    setTickets(await getPendingTickets(identity));
+  }, [identity]);
 
   useEffect(() => {
     refresh();
@@ -35,7 +35,7 @@ export function SyncStatus() {
     setSyncing(true);
     setSyncMessage('Syncing…');
     try {
-      const synced = await syncPendingTickets();
+      const synced = await syncPendingTickets(identity);
       setSyncMessage(synced > 0 ? `Synced ${synced} ticket${synced > 1 ? 's' : ''} successfully.` : 'No new tickets synced.');
       await refresh();
     } catch (err) {
@@ -49,11 +49,11 @@ export function SyncStatus() {
     setBusyId(id);
     try {
       if (action === 'delete') {
-        await deletePending(id);
+        await deletePending(id, identity);
       } else if (action === 'retry') {
-        await retryPending(id);
+        await retryPending(id, identity);
       } else {
-        await resolveConflict(id, action);
+        await resolveConflict(id, action, identity);
       }
     } catch (err) {
       setSyncMessage(`Action failed: ${err instanceof Error ? err.message : 'unknown error'}`);

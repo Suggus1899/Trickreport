@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { experimental_AstroContainer as AstroContainer } from 'astro/container';
 import reactRenderer from '@astrojs/react/server.js';
 import { JSDOM } from 'jsdom';
+import type { AstroComponentFactory } from 'astro/runtime/server/index.js';
 import Tickets from './tickets.astro';
 import SLA from './admin/sla.astro';
 import type { Ticket, User } from '../lib/api';
@@ -11,7 +12,7 @@ const hostile = 'Printer </script><div id="outside-marker">inert</div> " & <text
 const ticket: Ticket = { id: 'ticket-a', tenant_id: 'tenant-a', title: hostile, description: 'Details for printer', status: 'open', priority: 'high', category: 'hardware', created_by: 'user-a', sla_breached: false, created_at: '2026-10-21T10:00:00Z', updated_at: '2026-10-21T10:00:00Z' };
 afterEach(() => vi.unstubAllGlobals());
 
-async function render(component: Parameters<InstanceType<typeof AstroContainer>['renderToString']>[0], url: string) {
+async function render(component: AstroComponentFactory, url: string) {
   const container = await AstroContainer.create();
   container.addServerRenderer({ name: '@astrojs/react', renderer: reactRenderer });
   container.addClientRenderer({ name: '@astrojs/react', entrypoint: '@astrojs/react/client.js' });
