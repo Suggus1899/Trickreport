@@ -288,167 +288,173 @@ Revisar historial de exportaciones|auditor|Marta exportó tickets de Radiología
 '''),
 ])
 
-def write_matrix(product, name, groups):
+def write_generated(product, name, groups):
     generated = []
-    for area, label, phase, prerequisites, entities, operations, samples in groups:
+    for area, label, count, phase, prerequisites, entities, operations, samples in groups:
+        combos = [(operation, sample) for operation in operations for sample in samples]
+        assert len(combos) >= count, (product, area, len(combos), count)
         rows = []
-        for title, actor, action, outcome, exception in operations:
-            for resource, detail in samples:
-                rows.append('|'.join((
-                    f'{title}: {resource}', actor,
-                    f'{action} para {resource}: {detail}.',
-                    outcome.format(resource=resource),
-                    exception.format(resource=resource),
-                )))
-        generated.append((area, label, 20, phase, prerequisites, entities, '\n'.join(rows)))
+        for (title, actor, action, outcome, exception), (resource, detail) in combos[:count]:
+            rows.append('|'.join((
+                f'{title}: {resource}', actor,
+                f'{action} para {resource}: {detail}.',
+                outcome.format(resource=resource),
+                exception.format(resource=resource),
+            )))
+        generated.append((area, label, count, phase, prerequisites, entities, '\n'.join(rows)))
     write(product, name, generated)
 
-write_matrix('MSP', 'Trickreport · Servicios MSP', [
-('clients', 'Clientes y espacios aislados', 2, 'Proveedor Andes IT registrado; dominios y contactos verificados.', 'client,tenant,site,contact', [
+CLIENTS_MSP = [('Clínica Aurora', 'dominio aurora.example, Caracas'), ('Hotel Río', 'dominio hotelrio.example, Valencia'), ('Colegio Sol', 'dominio colegiosol.example, Maracay'), ('Logística Norte', 'dominio lognorte.example, Barquisimeto')]
+
+write_generated('MSP', 'Trickreport · Servicios MSP', [
+('clients', 'Clientes, contactos y permisos', 18, 4, 'Proveedor Andes IT registrado; dominios y contactos verificados.', 'client,site,contact,membership,role', [
 ('Crear espacio independiente', 'admin', 'Registrar un espacio con su dominio y administrador', 'El espacio de {resource} queda separado de los demás clientes.', 'Dominio ya asociado a otro espacio: bloquear el alta y conservar la asociación actual.'),
 ('Añadir sede de cliente', 'admin', 'Vincular una sede y su zona horaria', 'La sede de {resource} se incorpora al ámbito correcto del cliente.', 'Código de sede duplicado: solicitar corrección sin crear una sede parcial.'),
 ('Invitar contacto autorizado', 'contact', 'Invitar una persona con permisos mínimos', 'El contacto de {resource} sólo accede a recursos permitidos.', 'Correo de otro cliente: impedir que herede acceso entre espacios.'),
 ('Cambiar el estado del cliente', 'manager', 'Marcar el estado operativo y su motivo', 'El estado de {resource} se actualiza con autoría y fecha.', 'Contrato suspendido: limitar cambios a un administrador autorizado.'),
 ('Exportar inventario de cliente', 'auditor', 'Solicitar una exportación dentro del alcance asignado', 'La exportación de {resource} contiene únicamente activos autorizados.', 'Identificador de otro cliente: denegar sin revelar si existe.'),
-], [('Clínica Aurora', 'dominio aurora.example, Caracas'), ('Hotel Río', 'dominio hotelrio.example, Valencia'), ('Colegio Sol', 'dominio colegiosol.example, Maracay'), ('Logística Norte', 'dominio lognorte.example, Barquisimeto')]),
-('contracts', 'Contratos, catálogo y SLA', 2, 'Servicios publicables y reglas comerciales aprobadas.', 'contract,service,sla,renewal', [
-('Crear contrato administrado', 'finance', 'Registrar vigencia, moneda y capacidad mensual', 'El contrato de {resource} establece límites y fechas verificables.', 'Vigencia final anterior a la inicial: rechazar el contrato.'),
-('Asignar paquete de servicio', 'finance', 'Asociar cobertura, horario y canales incluidos', 'El paquete de {resource} refleja los servicios contratados.', 'Servicio fuera del catálogo vigente: impedir su activación.'),
-('Definir objetivo de respuesta', 'manager', 'Configurar objetivos por prioridad y horario hábil', 'El SLA de {resource} calcula plazos con el calendario del cliente.', 'Objetivo nulo o negativo: no guardar la política.'),
-('Renovar contrato con cambios', 'finance', 'Preparar una nueva versión para el próximo periodo', 'La renovación de {resource} mantiene el historial y aplica desde su fecha.', 'Dos versiones activas en el mismo periodo: exigir resolución del conflicto.'),
-('Suspender servicio por vencimiento', 'finance', 'Registrar autorización y fecha efectiva de suspensión', 'La cobertura de {resource} cambia según la política publicada.', 'Solicitud sin autorización contractual: mantener el servicio activo.'),
-], [('Contrato Aurora Gold', 'USD 4 000 al mes, 24x7'), ('Contrato Hotel Río', '80 horas al mes, horario extendido'), ('Contrato Colegio Sol', '40 endpoints, horario escolar'), ('Contrato Norte', 'soporte de red, lunes a sábado')]),
-('service-desk', 'Mesa de servicio para varios clientes', 2, 'Colas segregadas por cliente y reglas de asignación configuradas.', 'ticket,queue,client,priority', [
+], CLIENTS_MSP),
+('service-desk', 'Mesa de servicio multicliente', 30, 4, 'Colas segregadas por cliente y reglas de asignación configuradas.', 'ticket,queue,client,priority,assignment', [
 ('Registrar incidente del cliente', 'tech', 'Clasificar síntoma, impacto y cliente afectado', 'El incidente de {resource} se abre en la cola de su cliente.', 'Cliente desconocido o inactivo: no crear una solicitud huérfana.'),
 ('Asignar ticket a especialista', 'manager', 'Elegir técnico habilitado para el servicio requerido', 'La asignación de {resource} queda visible para la cola autorizada.', 'Técnico sin acceso a ese cliente: rechazar la asignación.'),
 ('Escalar incumplimiento de SLA', 'tech', 'Solicitar atención de segundo nivel antes del vencimiento', 'La escalación de {resource} registra regla, responsable y plazo.', 'SLA pausado según contrato: calcular con la pausa explícita.'),
 ('Coordinar incidente mayor', 'manager', 'Abrir sala de coordinación y actualización al contacto', 'El evento de {resource} reúne tareas sin mezclar clientes.', 'Impacto no confirmado: no notificar como incidente general.'),
 ('Cerrar solicitud con solución', 'tech', 'Documentar causa, acción y evidencia de resolución', 'El cierre de {resource} conserva el historial y notifica al contacto autorizado.', 'Trabajo incompleto: impedir cierre y conservar el estado actual.'),
+('Reasignar ticket entre técnicos', 'manager', 'Mover el ticket a otro técnico con acceso al mismo cliente', 'La reasignación de {resource} conserva historial y responsable anterior.', 'Técnico destino sin acceso al cliente: rechazar el movimiento.'),
+('Añadir nota interna de servicio', 'tech', 'Registrar diagnóstico visible sólo para el proveedor', 'La nota de {resource} no se expone al contacto del cliente.', 'Contacto consulta el ticket: filtrar la nota interna.'),
+('Consultar cola consolidada por cliente', 'manager', 'Revisar tickets abiertos, vencidos y sin asignar del cliente', 'La cola de {resource} muestra prioridad y SLA de cada ticket.', 'Cliente fuera del alcance del gestor: excluirlo del resultado.'),
 ], [('caída de VPN', 'Cliente Aurora, sede Caracas'), ('correo bloqueado', 'Hotel Río, equipo de recepción'), ('respaldo retrasado', 'Colegio Sol, servidor académico'), ('latencia WAN', 'Logística Norte, centro de despacho')]),
-('workforce', 'Técnicos, turnos y capacidad', 2, 'Técnicos, habilidades, calendarios y zonas horarias verificados.', 'technician,shift,skill,capacity', [
+('contracts', 'Contratos y SLA', 22, 4, 'Servicios publicables y reglas comerciales aprobadas.', 'contract,service,sla,calendar,renewal', [
+('Crear contrato administrado', 'finance', 'Registrar vigencia, moneda y capacidad mensual', 'El contrato de {resource} establece límites y fechas verificables.', 'Vigencia final anterior a la inicial: rechazar el contrato.'),
+('Asignar paquete de servicio', 'finance', 'Asociar cobertura, horario y canales incluidos', 'El paquete de {resource} refleja los servicios contratados.', 'Servicio fuera del catálogo vigente: impedir su activación.'),
+('Definir objetivo de respuesta', 'manager', 'Configurar objetivos por prioridad y horario hábil', 'El SLA de {resource} calcula plazos con el calendario del cliente.', 'Objetivo nulo o negativo: no guardar la política.'),
+('Renovar contrato con cambios', 'finance', 'Preparar una nueva versión para el próximo periodo', 'La renovación de {resource} mantiene el historial y aplica desde su fecha.', 'Dos versiones activas en el mismo periodo: exigir resolución del conflicto.'),
+('Suspender servicio por vencimiento', 'finance', 'Registrar autorización y fecha efectiva de suspensión', 'La cobertura de {resource} cambia según la política publicada.', 'Solicitud sin autorización contractual: mantener el servicio activo.'),
+('Registrar bonificación o penalización de SLA', 'finance', 'Calcular el ajuste del periodo a partir de los incumplimientos registrados', 'El ajuste de {resource} queda trazado a los tickets que lo originan.', 'Incumplimiento en disputa: excluirlo del cálculo hasta resolver la revisión.'),
+], [('Contrato Aurora Gold', 'USD 4 000 al mes, 24x7'), ('Contrato Hotel Río', '80 horas al mes, horario extendido'), ('Contrato Colegio Sol', '40 endpoints, horario escolar'), ('Contrato Norte', 'soporte de red, lunes a sábado')]),
+('technicians', 'Técnicos y planificación', 16, 4, 'Técnicos, habilidades, calendarios y zonas horarias verificados.', 'technician,shift,skill,capacity,schedule', [
 ('Crear turno de guardia', 'manager', 'Definir horario, zona y nivel de escalación', 'La guardia de {resource} queda asignada con cobertura visible.', 'Dos turnos incompatibles: pedir resolución antes de publicar.'),
 ('Asignar técnico por habilidad', 'manager', 'Filtrar personal por certificación y disponibilidad', 'La cobertura de {resource} corresponde a un técnico elegible.', 'Certificación vencida: excluir al técnico de la asignación.'),
 ('Registrar disponibilidad', 'tech', 'Indicar ausencia o cambio de disponibilidad', 'La agenda de {resource} actualiza la capacidad de planificación.', 'Periodo superpuesto con guardia confirmada: alertar y mantener el turno.'),
-('Distribuir carga entre equipos', 'manager', 'Comparar tickets abiertos y capacidad comprometida', 'La carga de {resource} se reparte sin exceder límites publicados.', 'Métrica incompleta: marcar la estimación como provisional.'),
 ('Transferir guardia con contexto', 'tech', 'Entregar pendientes, riesgos y contactos de emergencia', 'El relevo de {resource} preserva responsables y decisiones.', 'Receptor sin permiso de cliente: redactar el contexto restringido.'),
 ], [('guardia de redes', 'zona America/Caracas, 18:00–06:00'), ('equipo nube', 'dos técnicos certificados AZ-104'), ('turno fin de semana', 'sábado 08:00–20:00'), ('equipo de campo', 'dos sedes y cuatro visitas pendientes')]),
-('projects-time-expenses', 'Proyectos, horas y gastos', 2, 'Proyectos, presupuestos y reglas de aprobación definidos.', 'project,timesheet,expense,budget', [
-('Crear proyecto de cliente', 'manager', 'Definir alcance, responsable, presupuesto y fechas', 'El proyecto de {resource} tiene control de alcance y presupuesto.', 'Presupuesto sin aprobador: impedir su publicación.'),
+('time-expenses', 'Horas, gastos y costes', 20, 4, 'Contratos con tarifas y reglas de aprobación de costes definidos.', 'timesheet,expense,cost,approval', [
 ('Registrar horas trabajadas', 'tech', 'Asociar duración, tarea y evidencia del trabajo', 'Las horas de {resource} quedan ligadas al técnico y contrato correctos.', 'Periodo cerrado: enviar a aprobación excepcional.'),
 ('Presentar gasto reembolsable', 'tech', 'Adjuntar recibo y centro de coste', 'El gasto de {resource} entra al circuito de aprobación asignado.', 'Moneda o recibo inválidos: rechazar el gasto sin duplicarlo.'),
 ('Aprobar partes de tiempo', 'approver', 'Revisar detalle y comparar con el alcance contratado', 'La aprobación de {resource} conserva autor y comentario.', 'Aprobador es quien registró las horas: pedir aprobación independiente.'),
-('Revisar desvío de presupuesto', 'finance', 'Comparar horas, gastos y avance con el límite acordado', 'El desvío de {resource} se informa antes de exceder el límite.', 'Datos importados sin conciliar: mostrar advertencia y no facturar.'),
+('Imputar coste a un contrato', 'finance', 'Asignar el coste aprobado al contrato y periodo que lo originó', 'El coste de {resource} se refleja en la rentabilidad del contrato.', 'Contrato cerrado o de otro cliente: impedir la imputación.'),
+('Revisar desvío de costes', 'finance', 'Comparar horas, gastos y avance con el límite acordado', 'El desvío de {resource} se informa antes de exceder el límite.', 'Datos importados sin conciliar: mostrar advertencia y no facturar.'),
 ], [('migración M365', '120 horas presupuestadas, fase de descubrimiento'), ('renovación de red', '40 switches en seis sedes'), ('puesta en marcha del SOC', 'hitos mensuales y guardias incluidas'), ('inventario de portátiles', '75 equipos, Caracas y Valencia')]),
-('assets', 'Activos, garantías e inventario', 2, 'Ubicaciones, categorías, proveedores y estados de ciclo de vida configurados.', 'asset,model,warranty,location', [
+('projects', 'Proyectos de servicio', 14, 4, 'Proyectos, presupuestos y reglas de aprobación definidos.', 'project,milestone,task,budget', [
+('Crear proyecto de cliente', 'manager', 'Definir alcance, responsable, presupuesto y fechas', 'El proyecto de {resource} tiene control de alcance y presupuesto.', 'Presupuesto sin aprobador: impedir su publicación.'),
+('Definir hitos del proyecto', 'manager', 'Establecer entregables, fechas y criterios de aceptación por hito', 'Los hitos de {resource} quedan ordenados y visibles para el equipo.', 'Hito sin responsable o fecha: mantener el proyecto en borrador.'),
+('Asignar tareas del proyecto', 'manager', 'Repartir tareas entre técnicos con acceso al cliente', 'Las tareas de {resource} tienen responsable y fecha compromiso.', 'Técnico sin acceso al cliente del proyecto: rechazar la asignación.'),
+('Cerrar proyecto con informe', 'manager', 'Recopilar hitos, horas, costes y lecciones del proyecto', 'El cierre de {resource} conserva el informe y el historial completo.', 'Hitos abiertos o costes sin aprobar: impedir el cierre definitivo.'),
+], [('migración M365', '120 horas presupuestadas, fase de descubrimiento'), ('renovación de red', '40 switches en seis sedes'), ('puesta en marcha del SOC', 'hitos mensuales y guardias incluidas'), ('inventario de portátiles', '75 equipos, Caracas y Valencia')]),
+('profitability', 'Rentabilidad y preparación de facturación', 16, 4, 'Horas, gastos, contratos y costos conciliados.', 'revenue,cost,margin,invoice-draft', [
+('Calcular margen por cliente', 'finance', 'Comparar ingresos del contrato con costos aprobados', 'El margen de {resource} usa datos conciliados y periodo declarado.', 'Costos incompletos: rotular el margen como provisional.'),
+('Comparar rentabilidad de servicios', 'finance', 'Agrupar ingresos y costos por paquete de servicio', 'La comparación de {resource} separa contratos y moneda.', 'Mezcla de monedas: exigir conversión con tipo de cambio registrado.'),
+('Preparar borrador de facturación', 'finance', 'Reunir horas aprobadas, gastos y ajustes del periodo', 'El borrador de {resource} lista conceptos trazables a tickets y contratos.', 'Horas no aprobadas: excluirlas del borrador facturable.'),
+('Revisar desviación de horas', 'manager', 'Comparar horas estimadas, aprobadas y consumidas', 'La desviación de {resource} identifica contratos que requieren revisión.', 'Horas no aprobadas: excluirlas del total facturable.'),
+], [('octubre Aurora', 'ingreso USD 4 000, costos por conciliar'), ('servicio de guardia', 'tres clientes, periodo trimestral'), ('proyecto de migración', '120 h estimadas frente a 88 aprobadas'), ('renovaciones de diciembre', 'monedas USD y EUR en reportes separados')]),
+('inventory-discovery', 'Inventario y descubrimiento integrado', 20, 4, 'Ubicaciones, categorías, proveedores y conectores de descubrimiento autorizados.', 'asset,model,warranty,location,discovery', [
 ('Dar de alta un activo', 'asset', 'Capturar serial, modelo, cliente y ubicación', 'El activo de {resource} se identifica de forma única y trazable.', 'Número de serie ya registrado: evitar inventario duplicado.'),
 ('Vincular activo a un usuario', 'asset', 'Registrar custodio y fecha de entrega', 'La custodia de {resource} refleja la persona y sede autorizadas.', 'Usuario de otro cliente: bloquear el vínculo.'),
 ('Actualizar garantía', 'asset', 'Adjuntar proveedor, cobertura y vencimiento', 'La garantía de {resource} se consulta con alertas de vencimiento.', 'Documento no verificable: dejar la actualización en revisión.'),
-('Retirar activo con borrado seguro', 'asset', 'Registrar aprobación, respaldo y disposición final', 'La baja de {resource} conserva auditoría y certificado disponible.', 'Activo con trabajo pendiente: detener la baja hasta transferir tareas.'),
 ('Conciliar inventario físico', 'auditor', 'Comparar escaneo con inventario esperado de la sede', 'La conciliación de {resource} muestra diferencias para revisión.', 'Escaneo parcial: no marcar como verificada la ubicación completa.'),
-], [('laptop TR-104', 'Dell Latitude, Clínica Aurora, Caracas'), ('switch SW-22', 'Cisco Catalyst, Hotel Río, MDF 2'), ('servidor SR-08', 'Linux, Colegio Sol, sala técnica'), ('tablet TB-31', 'Zebra, Logística Norte, almacén 4')]),
-('monitoring', 'Descubrimiento y monitoreo', 2, 'Conectores autorizados, inventario objetivo y umbrales revisados.', 'monitor,event,asset,maintenance-window', [
 ('Importar descubrimiento aprobado', 'system', 'Conciliar dispositivos detectados con el cliente y segmento', 'Los hallazgos de {resource} se crean dentro del ámbito autorizado.', 'Segmento fuera de inventario: poner hallazgos en cuarentena.'),
+], [('laptop TR-104', 'Dell Latitude, Clínica Aurora, Caracas'), ('switch SW-22', 'Cisco Catalyst, Hotel Río, MDF 2'), ('servidor SR-08', 'Linux, Colegio Sol, sala técnica'), ('tablet TB-31', 'Zebra, Logística Norte, almacén 4')]),
+('monitoring-remote', 'Monitorización y acceso remoto integrado', 28, 4, 'Conectores Zabbix y MeshCentral autorizados; umbrales, consentimientos y ventanas revisados.', 'monitor,event,remote-session,device,consent,audit', [
 ('Convertir alerta en incidente', 'system', 'Aplicar umbral, ventana y regla de correlación', 'La alerta de {resource} genera un solo incidente asignable.', 'Alerta duplicada del mismo evento: actualizar el incidente existente.'),
 ('Silenciar mantenimiento autorizado', 'manager', 'Definir servicio, motivo y ventana temporal', 'El silencio de {resource} vence automáticamente al terminar la ventana.', 'Ventana sin aprobador: mantener la alerta activa.'),
 ('Correlacionar alertas relacionadas', 'tech', 'Agrupar eventos por servicio y causa probable', 'La correlación de {resource} reduce duplicados sin perder señales.', 'Causa no confirmada: mostrar relación sugerida, no consolidar automáticamente.'),
 ('Cerrar alerta tras recuperación', 'system', 'Comprobar recuperación y vincular evidencia de monitorización', 'La señal de {resource} cierra o actualiza el incidente asociado.', 'Sin lectura reciente: no inferir que el servicio se recuperó.'),
-], [('uso de CPU', 'Zabbix, host srv-aurora-02, umbral 90%'), ('pérdida de enlace', 'Zabbix, router hotel-rio-wan1'), ('disco casi lleno', 'Zabbix, servidor colegio-sol-db'), ('servicio de respaldo', 'Zabbix, nodo lognorte-bkp, tarea nocturna')]),
-('remote-support', 'Soporte remoto integrado', 2, 'MeshCentral autorizado; dispositivos y consentimientos documentados.', 'remote-session,device,consent,audit', [
 ('Solicitar sesión remota', 'tech', 'Elegir dispositivo y motivo de intervención', 'La sesión de {resource} requiere consentimiento del cliente.', 'Dispositivo no inventariado: impedir conexión remota.'),
-('Autorizar acceso temporal', 'contact', 'Confirmar técnico, duración y alcance de la sesión', 'La autorización de {resource} expira en el límite aprobado.', 'Aprobación vencida o revocada: negar la conexión.'),
 ('Iniciar sesión registrada', 'tech', 'Conectar mediante el conector administrado y autorizado', 'El acceso a {resource} deja registro de inicio y técnico.', 'Credencial de integración inválida: fallar cerrado y alertar al administrador.'),
 ('Revocar sesión en curso', 'manager', 'Detener sesión por solicitud del cliente', 'La conexión a {resource} se cierra y queda motivo registrado.', 'Estado remoto desconocido: no reportar desconexión confirmada.'),
-('Consultar auditoría remota', 'auditor', 'Filtrar por cliente, técnico y periodo permitido', 'La auditoría de {resource} muestra metadatos sin credenciales.', 'Rol sin alcance de auditoría: denegar consulta.'),
-], [('portátil del contacto', 'TR-104, consentimiento de la usuaria'), ('servidor de aplicación', 'SR-08, ventana 20:00–21:00'), ('terminal de almacén', 'TB-31, intervención supervisada'), ('router de sede', 'SW-22, cambio previamente aprobado')]),
-('profitability', 'Rentabilidad e informes comerciales', 2, 'Horas, gastos, contratos y costos conciliados.', 'revenue,cost,margin,report', [
-('Calcular margen por cliente', 'finance', 'Comparar ingresos del contrato con costos aprobados', 'El margen de {resource} usa datos conciliados y periodo declarado.', 'Costos incompletos: rotular el margen como provisional.'),
-('Comparar rentabilidad de servicios', 'finance', 'Agrupar ingresos y costos por paquete de servicio', 'La comparación de {resource} separa contratos y moneda.', 'Mezcla de monedas: exigir conversión con tipo de cambio registrado.'),
-('Preparar resumen mensual', 'manager', 'Seleccionar periodo y clientes autorizados', 'El resumen de {resource} informa métricas y fecha de corte.', 'Periodo abierto: distinguir valores preliminares de cerrados.'),
-('Exportar datos comerciales', 'finance', 'Descargar importes mínimos para contabilidad', 'La exportación de {resource} aplica permisos y filtros usados.', 'Fórmula en texto exportado: neutralizar contenido ejecutable.'),
-('Revisar desviación de horas', 'manager', 'Comparar horas estimadas, aprobadas y consumidas', 'La desviación de {resource} identifica contratos que requieren revisión.', 'Horas no aprobadas: excluirlas del total facturable.'),
-], [('octubre Aurora', 'ingreso USD 4 000, costos por conciliar'), ('servicio de guardia', 'tres clientes, periodo trimestral'), ('proyecto de migración', '120 h estimadas frente a 88 aprobadas'), ('renovaciones de diciembre', 'monedas USD y EUR en reportes separados')]),
-('integrations', 'Integraciones, API y seguridad', 2, 'Clientes de integración identificados y secretos almacenados de forma segura.', 'api-key,webhook,scope,audit', [
-('Crear credencial de integración', 'admin', 'Asignar permisos mínimos y fecha de expiración', 'La credencial de {resource} se muestra una vez y queda acotada.', 'Alcance administrativo no justificado: no emitir la credencial.'),
-('Verificar firma de webhook', 'system', 'Validar firma, marca temporal e identificador del evento', 'El evento de {resource} se acepta sólo si su origen es íntegro.', 'Firma inválida o repetida: rechazar sin aplicar efectos.'),
-('Rotar secreto de conector', 'admin', 'Reemplazar clave y revocar la anterior', 'La rotación de {resource} registra la transición sin exponer secretos.', 'Conector no validado: conservar clave previa hasta prueba explícita.'),
-('Limitar acceso por cliente', 'admin', 'Configurar clientes y operaciones permitidas', 'El conector de {resource} no puede consultar otros clientes.', 'Solicitud fuera del alcance: denegar y registrar evento mínimo.'),
-('Revisar fallos de integración', 'auditor', 'Consultar estado, reintentos y última entrega', 'El estado de {resource} distingue éxito, fallo y falta de ejecución.', 'Payload con datos sensibles: ocultarlo en logs de soporte.'),
-], [('Zabbix Aurora', 'token de lectura, expiración 30 días'), ('MeshCentral Norte', 'alcance para dispositivos administrados'), ('contabilidad MSP', 'webhook firmado de facturas'), ('inventario externo', 'solo consulta de activos del Hotel Río')]),
+], [('servidor SR-08', 'Colegio Sol, sala técnica'), ('portátil TR-104', 'Clínica Aurora, usuaria de Radiología'), ('router SW-22', 'Hotel Río, MDF 2'), ('terminal TB-31', 'Logística Norte, almacén 4')]),
+('reporting', 'Informes y auditoría', 16, 4, 'Datos operativos disponibles dentro del alcance del actor.', 'report,audit-event,export', [
+('Consultar volumen de tickets por cliente', 'manager', 'Agrupar tickets por cliente, estado y periodo', 'El volumen de {resource} coincide con los tickets visibles del periodo.', 'Cliente fuera del alcance: excluirlo sin revelar su actividad.'),
+('Comparar cumplimiento de SLA por contrato', 'manager', 'Calcular respuestas y resoluciones dentro de objetivo por contrato', 'El cumplimiento de {resource} separa pausas autorizadas de vencimientos.', 'Contrato sin política vigente: mostrarlo como sin cobertura, no como 100%.'),
+('Auditar accesos a datos de clientes', 'auditor', 'Revisar lecturas y cambios con actor, cliente y alcance', 'La auditoría de {resource} permite atribuir cada acceso registrado.', 'Evento sin actor identificable: marcarlo como evidencia incompleta.'),
+('Exportar informe operativo', 'manager', 'Descargar el informe con filtros y fecha de generación', 'La exportación de {resource} respeta filtros y permisos del solicitante.', 'Texto con fórmula de hoja de cálculo: exportarlo como texto seguro.'),
+], [('octubre multicliente', 'tickets y SLA de los cuatro clientes activos'), ('guardias del trimestre', 'turnos, escalaciones y tiempos de respuesta'), ('activos por sede', 'inventario y garantías de Caracas y Valencia'), ('costes por contrato', 'horas y gastos aprobados del periodo')]),
 ])
 
-write_matrix('CX', 'Trickreport · Atención al cliente', [
-('customer-identity', 'Clientes, perfiles y consentimiento', 2, 'Organización Tienda Faro y políticas de privacidad publicadas.', 'customer,profile,consent,preference', [
+write_generated('CX', 'Trickreport · Atención al cliente', [
+('customer-identity', 'Clientes, contactos y permisos', 20, 5, 'Organización Tienda Faro y políticas de privacidad publicadas.', 'customer,profile,consent,preference', [
 ('Crear perfil de cliente', 'customer', 'Registrar datos de contacto mínimos y canal preferido', 'El perfil de {resource} conserva sólo datos necesarios para atender.', 'Correo ya registrado: ofrecer recuperación sin crear un duplicado.'),
 ('Verificar identidad del solicitante', 'agent', 'Confirmar el factor permitido antes de revelar datos', 'La identidad de {resource} se valida antes de consultar su caso.', 'Verificación fallida: no confirmar si existe una compra o ticket.'),
 ('Actualizar preferencias de contacto', 'customer', 'Elegir canal, idioma y horario de comunicación', 'Las preferencias de {resource} se aplican a mensajes futuros.', 'Canal no disponible: mantener preferencia anterior y pedir elección.'),
 ('Registrar consentimiento', 'admin', 'Guardar texto, versión, propósito y fecha de aceptación', 'El consentimiento de {resource} queda ligado a la versión mostrada.', 'Propósito obligatorio ausente: no iniciar comunicaciones comerciales.'),
 ('Solicitar eliminación de datos', 'customer', 'Abrir solicitud de privacidad con verificación de identidad', 'La solicitud de {resource} entra a revisión y deja trazabilidad.', 'Obligación de conservación activa: informar alcance y retención aplicable.'),
 ], [('Ana Pérez', 'correo ana@example.test, español'), ('Luis Díaz', 'teléfono terminado en 4421, WhatsApp opt-in'), ('Marta Gil', 'compradora recurrente, idioma inglés'), ('Pablo León', 'cuenta compartida que requiere verificación')]),
-('case-intake', 'Portal y creación de casos', 2, 'Formularios, categorías, campos mínimos y reglas de acceso definidos.', 'case,form,category,attachment', [
+('inbox', 'Bandeja y gestión de conversaciones', 32, 5, 'Estados de conversación y visibilidad pública/interna configurados.', 'conversation,message,note,status,assignment', [
+('Responder consulta del cliente', 'agent', 'Redactar explicación pública con siguiente paso claro', 'La respuesta de {resource} se entrega y queda fechada.', 'Nota marcada como interna: impedir su envío al cliente.'),
+('Añadir nota privada al caso', 'agent', 'Registrar diagnóstico interno sin incluirlo en mensaje público', 'La nota de {resource} sólo se muestra a personal autorizado.', 'Solicitante consulta la conversación: filtrar la nota interna.'),
+('Solicitar información faltante', 'agent', 'Pedir el dato necesario y pausar el plazo según política', 'La solicitud de {resource} deja explícito qué dato falta.', 'Caso cerrado: validar reapertura antes de enviar el pedido.'),
+('Resolver caso con causa', 'agent', 'Documentar causa, acción y respuesta ofrecida', 'La resolución de {resource} conserva el historial previo.', 'Solución vacía: no permitir cerrar el caso.'),
+('Reabrir por respuesta nueva', 'customer', 'Responder al mismo hilo dentro de la ventana permitida', 'El caso de {resource} vuelve al flujo definido sin duplicarse.', 'Ventana de reapertura vencida: crear seguimiento relacionado.'),
+('Responder por canal de origen', 'agent', 'Seleccionar respuesta pública y canal permitido', 'La respuesta a {resource} mantiene el hilo y preferencia del cliente.', 'Canal no verificado: no enviar y conservar el borrador.'),
+('Fusionar conversaciones duplicadas', 'supervisor', 'Elegir la conversación principal y conservar ambas líneas temporales', 'La fusión de {resource} deja una sola conversación activa con historial completo.', 'Conversaciones de clientes distintos: impedir la fusión.'),
+('Marcar conversación como spam', 'agent', 'Clasificar el mensaje y detener respuestas automáticas', 'La conversación de {resource} sale de la bandeja activa conservando auditoría.', 'Cliente legítimo marcado por error: permitir restaurarla desde la bandeja.'),
+], [('consulta sobre ORD-1042', 'se explica ventana estimada de entrega'), ('devolución incompleta', 'nota de almacén restringida al personal'), ('garantía solicitada', 'falta foto del número de serie'), ('reembolso ORD-882', 'cliente informa que el abono no aparece')]),
+('email', 'Correo electrónico', 22, 5, 'Buzón IMAP/SMTP verificado; remitentes, firmas y retención aprobados.', 'email,message,thread,attachment,outbox', [
+('Recibir correo de soporte', 'system', 'Validar remitente y asociar mensaje a la conversación', 'El correo de {resource} aparece una sola vez en la línea temporal.', 'Mensaje duplicado o con firma inválida: no abrir otro caso.'),
+('Crear caso desde correo entrante', 'system', 'Extraer asunto, remitente y adjuntos permitidos del mensaje', 'El caso de {resource} nace vinculado al hilo de correo original.', 'Remitente no verificable: crear consulta sin datos de cuenta asociados.'),
+('Responder correo conservando el hilo', 'agent', 'Redactar la respuesta con referencias del mensaje original', 'La respuesta de {resource} llega al mismo hilo del cliente.', 'Dirección del cliente inválida: conservar el borrador y avisar al agente.'),
+('Detectar rebote y actualizar contacto', 'system', 'Interpretar el aviso de rebote y marcar la dirección afectada', 'El rebote de {resource} actualiza el contacto sin reenviar en bucle.', 'Rebote temporal: programar revisión sin marcar la dirección como muerta.'),
+('Adjuntar archivo permitido al correo', 'agent', 'Subir comprobante dentro del límite y tipo aceptado', 'La evidencia de {resource} queda vinculada con acceso controlado.', 'Archivo sobredimensionado o tipo falso: rechazar sin publicarlo.'),
+('Reintentar envío fallido', 'system', 'Reenviar el mensaje pendiente cuando SMTP vuelve a responder', 'El envío de {resource} se completa una sola vez o queda fallo visible.', 'Mensaje ya entregado: no duplicar el correo al cliente.'),
+], [('correo de Ana', 'asunto pedido ORD-1042, hilo con Message-ID único'), ('correo de Luis', 'consulta de horario, responde al hilo de bienvenida'), ('correo rebotado', 'dirección obsoleta, no reenviar automáticamente'), ('correo de Marta', 'factura adjunta del pedido ORD-2030')]),
+('portal-chat', 'Portal web y chat en vivo', 26, 5, 'Formularios, categorías, campos mínimos y reglas de acceso definidos.', 'case,form,category,attachment,chat', [
 ('Abrir consulta desde portal', 'customer', 'Describir el motivo y adjuntar evidencia opcional', 'El caso de {resource} recibe confirmación y número de seguimiento.', 'Campos inválidos: conservar el borrador y señalar el dato necesario.'),
 ('Enviar reporte en nombre del cliente', 'agent', 'Confirmar identidad y registrar canal de origen', 'El caso de {resource} identifica al cliente y al agente registrador.', 'Identidad no verificada: guardar como consulta interna sin datos de cuenta.'),
 ('Clasificar tipo de consulta', 'supervisor', 'Elegir categoría que corresponde al asunto recibido', 'La clasificación de {resource} dirige el caso a la cola adecuada.', 'Categoría desactivada: pedir una alternativa vigente.'),
 ('Guardar caso incompleto', 'customer', 'Continuar más tarde con los campos ya capturados', 'El borrador de {resource} queda privado a su propietario.', 'Sesión expirada: no guardar información en un perfil distinto.'),
 ('Adjuntar archivo permitido', 'customer', 'Subir comprobante dentro del límite y tipo aceptado', 'La evidencia de {resource} queda vinculada con acceso controlado.', 'Archivo sobredimensionado o tipo falso: rechazar sin publicarlo.'),
-], [('pedido ORD-1042', 'consulta de entrega, factura PDF opcional'), ('devolución ORD-882', 'producto recibido con embalaje dañado'), ('acceso a la cuenta', 'error al cambiar correo, sin incluir contraseña'), ('garantía de cafetera', 'número de serie y foto del defecto')]),
-('channels', 'Correo, chat y mensajería', 2, 'Canales verificados; remitentes, webhook y retención aprobados.', 'channel,message,conversation,webhook', [
-('Recibir correo de soporte', 'system', 'Validar remitente y asociar mensaje a la conversación', 'El correo de {resource} aparece una sola vez en la línea temporal.', 'Mensaje duplicado o con firma inválida: no abrir otro caso.'),
-('Responder por canal de origen', 'agent', 'Seleccionar respuesta pública y canal permitido', 'La respuesta a {resource} mantiene el hilo y preferencia del cliente.', 'Canal no verificado: no enviar y conservar el borrador.'),
 ('Iniciar chat con agente', 'customer', 'Solicitar ayuda y aceptar el aviso de privacidad', 'La conversación de {resource} se asigna sin compartir datos entre clientes.', 'Sin agentes disponibles: informar espera y ofrecer alternativa.'),
-('Procesar evento de mensajería', 'system', 'Verificar firma, cuenta y clave idempotente del proveedor', 'El evento de {resource} se procesa una sola vez.', 'Firma inválida o payload vencido: rechazar el evento.'),
-('Escalar conversación entre canales', 'supervisor', 'Mover el caso conservando consentimiento y contexto mínimo', 'El cambio de canal de {resource} conserva el historial autorizado.', 'Consentimiento ausente: solicitar autorización antes de continuar.'),
-], [('correo de Ana', 'asunto pedido ORD-1042, hilo con Message-ID único'), ('chat de Luis', 'consulta de horario, consentimiento mostrado'), ('mensaje de Marta', 'WhatsApp opt-in sobre estado de envío'), ('correo rebotado', 'dirección obsoleta, no reenviar automáticamente')]),
-('routing', 'Colas, competencias y asignación', 2, 'Horarios de atención, idiomas, competencias y cargas definidos.', 'queue,agent,skill,routing-rule', [
+('Continuar conversación del portal al chat', 'customer', 'Abrir el chat desde su caso conservando el contexto autorizado', 'La conversación de {resource} continúa en chat sin crear un caso nuevo.', 'Identidad no verificada en el chat: pedir verificación antes de mostrar el historial.'),
+], [('pedido ORD-1042', 'consulta de entrega, factura PDF opcional'), ('devolución ORD-882', 'producto recibido con embalaje dañado'), ('acceso a la cuenta', 'error al cambiar correo, sin incluir contraseña'), ('garantía de cafetera', 'número de serie y foto del defecto')]),
+('whatsapp', 'WhatsApp', 24, 5, 'Número de WhatsApp Business verificado; plantillas aprobadas por Meta y opt-in registrado.', 'whatsapp,conversation,template,opt-in', [
+('Iniciar conversación de WhatsApp', 'customer', 'Escribir al número oficial y aceptar el aviso de privacidad', 'La conversación de {resource} se crea con opt-in y canal registrados.', 'Número sin opt-in: no enviar mensajes proactivos.'),
+('Enviar plantilla aprobada', 'agent', 'Elegir plantilla vigente y completar sus variables verificadas', 'La plantilla de {resource} se envía con el contenido aprobado por Meta.', 'Plantilla pausada o rechazada: impedir el envío y ofrecer alternativa.'),
+('Recibir mensaje de WhatsApp', 'system', 'Verificar firma del webhook y asociar el número a la conversación', 'El mensaje de {resource} entra una sola vez en la bandeja.', 'Evento repetido del webhook: procesarlo una única vez por identificador.'),
+('Vincular conversación de WhatsApp al portal', 'agent', 'Verificar la identidad y relacionar el chat con el caso del portal', 'La conversación de {resource} comparte historial autorizado entre canales.', 'Identidad no verificada: no mostrar datos del portal en el chat.'),
+('Respetar la ventana de 24 horas', 'system', 'Comprobar la última interacción del cliente antes de responder en texto libre', 'La respuesta de {resource} usa texto libre sólo dentro de la ventana permitida.', 'Ventana vencida: exigir plantilla aprobada en lugar de texto libre.'),
+('Gestionar baja de WhatsApp', 'customer', 'Enviar la palabra de baja o revocar el canal desde el portal', 'La baja de {resource} detiene mensajes de WhatsApp conservando otros canales.', 'Baja ambigua: confirmar la interpretación antes de aplicarla.'),
+], [('mensaje de Marta', 'WhatsApp opt-in sobre estado de envío'), ('mensaje de Luis', 'teléfono terminado en 4421, primera consulta'), ('mensaje de Ana', 'continúa su caso del portal por WhatsApp'), ('mensaje de Pablo', 'solicita baja del canal')]),
+('routing', 'Asignación y automatización', 20, 5, 'Horarios de atención, idiomas, competencias y cargas definidos.', 'queue,agent,skill,routing-rule', [
 ('Asignar cola por categoría', 'system', 'Aplicar categoría, idioma y horario de servicio', 'El caso de {resource} llega a una cola habilitada.', 'Regla sin destino válido: enviar a triage y alertar al supervisor.'),
 ('Asignar agente por competencia', 'supervisor', 'Comparar producto, idioma y disponibilidad del agente', 'La asignación de {resource} cumple competencias mínimas.', 'Agente fuera de turno: dejar pendiente de asignación.'),
 ('Reequilibrar cola saturada', 'supervisor', 'Mover casos según prioridad y capacidad disponible', 'La carga de {resource} se reparte respetando prioridad y propiedad.', 'Caso en atención activa: solicitar transferencia acordada.'),
 ('Priorizar cliente con impacto alto', 'system', 'Aplicar política publicada a la prioridad del caso', 'La prioridad de {resource} refleja impacto y urgencia verificables.', 'Atributo de cliente no verificado: no elevar privilegios automáticamente.'),
 ('Asignar caso al volver de espera', 'system', 'Reactivar caso tras respuesta entrante del cliente', 'La respuesta de {resource} vuelve a la cola apropiada.', 'Caso cerrado por política: mostrar estado y ofrecer reapertura controlada.'),
 ], [('devolución de producto', 'cola Garantías, español, horario hábil'), ('facturación empresarial', 'cola Cuentas, idioma inglés'), ('chat de entrega', 'equipo Envíos con dos agentes disponibles'), ('reclamo de seguridad', 'supervisor especializado, atención urgente')]),
-('case-workflow', 'Resolución y conversación', 2, 'Estados de caso y visibilidad pública/interna configurados.', 'case,reply,note,status,event', [
-('Responder consulta del cliente', 'agent', 'Redactar explicación pública con siguiente paso claro', 'La respuesta de {resource} se entrega y queda fechada.', 'Nota marcada como interna: impedir su envío al cliente.'),
-('Añadir nota privada al caso', 'agent', 'Registrar diagnóstico interno sin incluirlo en mensaje público', 'La nota de {resource} sólo se muestra a personal autorizado.', 'Solicitante consulta la conversación: filtrar la nota interna.'),
-('Solicitar información faltante', 'agent', 'Pedir el dato necesario y pausar el plazo según política', 'La solicitud de {resource} deja explícito qué dato falta.', 'Caso cerrado: validar reapertura antes de enviar el pedido.'),
-('Resolver caso con causa', 'agent', 'Documentar causa, acción y respuesta ofrecida', 'La resolución de {resource} conserva el historial previo.', 'Solución vacía: no permitir cerrar el caso.'),
-('Reabrir por respuesta nueva', 'customer', 'Responder al mismo hilo dentro de la ventana permitida', 'El caso de {resource} vuelve al flujo definido sin duplicarse.', 'Ventana de reapertura vencida: crear seguimiento relacionado.'),
-], [('consulta sobre ORD-1042', 'se explica ventana estimada de entrega'), ('devolución incompleta', 'nota de almacén restringida al personal'), ('garantía solicitada', 'falta foto del número de serie'), ('reembolso ORD-882', 'cliente informa que el abono no aparece')]),
-('service-levels', 'SLA y escalaciones de atención', 2, 'Calendario, horario de cobertura, feriados y niveles de prioridad publicados.', 'sla,calendar,escalation,case', [
-('Iniciar reloj de primera respuesta', 'system', 'Usar hora de recepción y calendario efectivo', 'El reloj de {resource} empieza con el primer evento confiable.', 'Zona horaria ausente: usar calendario configurado y registrar la elección.'),
-('Pausar SLA esperando al cliente', 'agent', 'Marcar la pregunta pública que requiere respuesta', 'El plazo de {resource} pausa según la regla aprobada.', 'Nota interna sola: no pausar el SLA del cliente.'),
-('Escalar caso próximo a vencer', 'system', 'Notificar supervisor antes del umbral configurado', 'La alerta de {resource} se emite una sola vez por umbral.', 'Canal de aviso caído: registrar y usar destino alternativo autorizado.'),
-('Recalcular objetivo por horario', 'manager', 'Revisar cambio de horario y fecha de vigencia', 'El objetivo de {resource} conserva auditoría y no altera cierres previos.', 'Cambio retroactivo: impedir modificación sin registro de corrección.'),
-('Reportar incumplimiento de SLA', 'auditor', 'Consultar casos del periodo y motivo de retraso', 'El informe de {resource} separa pausas y vencimientos reales.', 'Datos de periodo incompletos: mostrar conteo pendiente de conciliación.'),
-], [('respuesta de ORD-1042', 'prioridad normal, calendario Caracas'), ('reclamo de seguridad', 'prioridad crítica, escalación inmediata'), ('consulta recibida sábado', 'el horario inicia lunes 08:00'), ('caso en espera', 'pausado desde solicitud pública de evidencia')]),
-('self-service', 'Conocimiento y autoservicio', 2, 'Artículos aprobados, búsqueda e idioma de contenido identificados.', 'article,search,feedback,deflection', [
+('knowledge', 'Conocimiento y autoservicio', 14, 5, 'Artículos aprobados, búsqueda e idioma de contenido identificados.', 'article,search,feedback,deflection', [
 ('Buscar solución antes de crear caso', 'customer', 'Consultar frases relevantes en el idioma elegido', 'Los resultados de {resource} muestran artículos publicados.', 'Artículo borrador o restringido: no incluirlo en resultados públicos.'),
 ('Publicar artículo de ayuda', 'supervisor', 'Revisar exactitud, enlaces y público destinatario', 'La guía de {resource} queda disponible tras aprobación.', 'Instrucciones inseguras o desactualizadas: devolver a revisión.'),
 ('Valorar utilidad de artículo', 'customer', 'Indicar si la guía resolvió la consulta', 'La valoración de {resource} se registra sin exponer datos personales.', 'Voto repetido: actualizar respuesta anterior sin inflar conteos.'),
 ('Vincular artículo a caso', 'agent', 'Adjuntar una guía pertinente como respuesta sugerida', 'La recomendación de {resource} mantiene versión y enlace visibles.', 'Guía retirada: no enviar un enlace roto al cliente.'),
-('Medir resolución por autoservicio', 'manager', 'Comparar búsquedas y confirmaciones voluntarias', 'La métrica de {resource} distingue visita de resolución confirmada.', 'Sin confirmación del cliente: no contar como caso resuelto.'),
 ], [('restablecer contraseña', 'guía vigente en español e inglés'), ('devolver una compra', 'artículo aprobado con pasos y condiciones'), ('consultar garantía', 'contenido publicado para pequeños electrodomésticos'), ('seguimiento de envío', 'guía con enlace al portal de pedidos')]),
-('orders-returns', 'Pedidos, devoluciones y reembolsos', 2, 'Conector de pedidos de solo lectura y permisos de cambio revisados.', 'order,return,refund,shipment', [
-('Consultar estado de pedido', 'customer', 'Verificar identidad antes de consultar número de seguimiento', 'El estado de {resource} proviene de una fuente vigente.', 'Pedido de otra cuenta: responder sin revelar estado ni existencia.'),
-('Autorizar devolución', 'agent', 'Evaluar política, fecha de compra y condición reportada', 'La devolución de {resource} recibe motivo y pasos de entrega.', 'Fuera de ventana comercial: escalar según política, sin prometer excepción.'),
-('Solicitar reembolso', 'agent', 'Enviar solicitud al sistema de pagos con idempotencia', 'El reembolso de {resource} queda pendiente con referencia única.', 'Proveedor ya procesó la operación: consultar resultado antes de repetir.'),
-('Registrar paquete devuelto', 'system', 'Conciliar evento del transportista con devolución abierta', 'La recepción de {resource} actualiza el caso una sola vez.', 'Evento repetido o pedido no coincidente: poner en revisión.'),
-('Notificar cambio de entrega', 'system', 'Enviar actualización al canal consentido del cliente', 'La notificación de {resource} refleja estado confirmado del envío.', 'Estado no confirmado: no enviar una fecha estimada como certeza.'),
-], [('ORD-1042', 'pedido retrasado, transportista Ruta Azul'), ('ORD-882', 'cafetera rota, compra del 12 de octubre'), ('ORD-2030', 'reembolso pendiente de USD 49,90'), ('ORD-511', 'paquete devuelto, evento carrier EVT-77')]),
-('experience', 'Satisfacción, calidad e informes', 2, 'Encuestas, métricas y políticas de muestreo aprobadas.', 'survey,response,quality,report', [
+('sla', 'SLA y escalaciones', 16, 5, 'Calendario, horario de cobertura, feriados y niveles de prioridad publicados.', 'sla,calendar,escalation,case', [
+('Iniciar reloj de primera respuesta', 'system', 'Usar hora de recepción y calendario efectivo', 'El reloj de {resource} empieza con el primer evento confiable.', 'Zona horaria ausente: usar calendario configurado y registrar la elección.'),
+('Pausar SLA esperando al cliente', 'agent', 'Marcar la pregunta pública que requiere respuesta', 'El plazo de {resource} pausa según la regla aprobada.', 'Nota interna sola: no pausar el SLA del cliente.'),
+('Escalar caso próximo a vencer', 'system', 'Notificar supervisor antes del umbral configurado', 'La alerta de {resource} se emite una sola vez por umbral.', 'Canal de aviso caído: registrar y usar destino alternativo autorizado.'),
+('Reportar incumplimiento de SLA', 'auditor', 'Consultar casos del periodo y motivo de retraso', 'El informe de {resource} separa pausas y vencimientos reales.', 'Datos de periodo incompletos: mostrar conteo pendiente de conciliación.'),
+], [('respuesta de ORD-1042', 'prioridad normal, calendario Caracas'), ('reclamo de seguridad', 'prioridad crítica, escalación inmediata'), ('consulta recibida sábado', 'el horario inicia lunes 08:00'), ('caso en espera', 'pausado desde solicitud pública de evidencia')]),
+('surveys', 'Encuestas y satisfacción', 12, 5, 'Encuestas, métricas y políticas de muestreo aprobadas.', 'survey,response,quality', [
 ('Enviar encuesta tras resolución', 'system', 'Esperar cierre confirmado y respetar frecuencia máxima', 'La encuesta de {resource} se envía una vez al contacto autorizado.', 'Cliente sin consentimiento o con envío reciente: omitir encuesta.'),
 ('Registrar satisfacción del cliente', 'customer', 'Guardar puntuación y comentario opcional', 'La valoración de {resource} se asocia al caso sin alterar su cierre.', 'Comentario con secreto o datos excesivos: ocultar y solicitar ajuste.'),
 ('Revisar calidad de respuesta', 'supervisor', 'Muestrear respuestas según criterios publicados', 'La revisión de {resource} registra criterios y acción de mejora.', 'Muestra sesgada o pequeña: rotular el resultado con su límite.'),
-('Consultar tiempos por canal', 'manager', 'Comparar recepción y respuesta dentro del mismo periodo', 'El informe de {resource} separa canales y zonas horarias.', 'Canal sin marcas fiables: excluirlo y mostrar el dato faltante.'),
-('Exportar comentarios anonimizados', 'auditor', 'Descargar respuestas con identificadores minimizados', 'La exportación de {resource} reduce datos identificables.', 'Cohorte demasiado pequeña: agregar resultados para proteger privacidad.'),
 ], [('encuesta ORD-1042', 'cliente confirmó entrega y dejó 5/5'), ('queja por devolución', 'baja satisfacción, revisión de supervisor'), ('chat de compra', 'respuesta inicial en horario nocturno'), ('muestra de octubre', 'respuestas agrupadas por canal y semana')]),
-('privacy-integrations', 'Privacidad, administración e integraciones', 2, 'Acceso por rol, retención y conectores configurados y revisados.', 'privacy-request,api-key,audit,webhook', [
+('admin-reporting', 'Administración e informes', 14, 5, 'Acceso por rol, retención y conectores configurados y revisados.', 'privacy-request,api-key,audit,report,webhook', [
 ('Procesar solicitud de acceso a datos', 'admin', 'Verificar titular y preparar datos dentro del alcance legal', 'La solicitud de {resource} queda auditada y limitada al titular.', 'Identidad no verificada: no exportar datos de la cuenta.'),
-('Retirar permiso de contacto', 'customer', 'Revocar canal promocional sin perder mensajes de servicio necesarios', 'La preferencia de {resource} se aplica a futuros envíos.', 'Revocación de mensaje transaccional: explicar qué comunicaciones continúan.'),
 ('Configurar webhook firmado', 'admin', 'Guardar destino HTTPS y secreto de forma protegida', 'El conector de {resource} firma eventos y permite rotar claves.', 'URL privada o no verificable: impedir envío para evitar acceso interno.'),
-('Revisar auditoría de acceso', 'auditor', 'Consultar lecturas y cambios con actor y alcance', 'La auditoría de {resource} muestra eventos permitidos para el rol.', 'Rol fuera del alcance: denegar la consulta.'),
 ('Eliminar credencial comprometida', 'admin', 'Revocar clave y comprobar trabajos pendientes', 'La clave de {resource} deja de autorizar nuevas llamadas.', 'Revocación afecta tareas críticas: detener nuevas acciones y alertar responsable.'),
-], [('perfil de Ana', 'solicitud de exportación verificada por correo'), ('canal de marketing', 'cliente retira consentimiento promocional'), ('CRM externo', 'webhook HTTPS firmado de actualización de caso'), ('clave de chat', 'rotación por sospecha de exposición')]),
+('Consultar tiempos por canal', 'manager', 'Comparar recepción y respuesta dentro del mismo periodo', 'El informe de {resource} separa canales y zonas horarias.', 'Canal sin marcas fiables: excluirlo y mostrar el dato faltante.'),
+], [('perfil de Ana', 'solicitud de exportación verificada por correo'), ('CRM externo', 'webhook HTTPS firmado de actualización de caso'), ('clave de chat', 'rotación por sospecha de exposición'), ('muestra de octubre', 'respuestas agrupadas por canal y semana')]),
 ])
-
 (ROOT / 'README.md').write_text('''# Catálogo de casos de uso Trickreport
 
 El catálogo define alcance futuro para los tres productos. Tener un caso documentado no significa que esté implementado ni comprobado. Los casos sólo pueden salir de `planned` cuando se enlacen código, contrato, pruebas y evidencia operativa.
