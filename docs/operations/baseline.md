@@ -83,3 +83,32 @@ recorded here only.
 this environment (B3.4 remains a CI gate, not a verified pass); Codebase
 Memory is still unavailable as noted above; the remaining Stage-0 blocks of
 the stabilization plan continue from this verified base.
+
+## Correction addendum — 2026-10-23 (workspace lockfile and bundler)
+
+The addendum above stated that the root workspace build passed; that was
+only partially verified at the time. A from-scratch `npm ci` followed by
+`npm run build` on Linux x64 actually failed, for two independent reasons
+found and fixed here:
+
+1. **Incomplete root `package-lock.json`.** The lockfile had no package
+   entries for 42 platform-specific optional dependencies — the native
+   bindings `@tailwindcss/oxide-*` (11), `@next/swc-*` (7) and
+   `@img/sharp-*` / `@img/sharp-libvips-*` (24) — so a Linux `npm ci`
+   installed everything except the binaries the build needs. The entries
+   were completed from the npm registry metadata (version, `resolved`,
+   `integrity`, `cpu`, `os`, `libc`); no pinned version changed.
+2. **Turbopack cannot resolve the hoisted oxide binding.** With the
+   binding installed and loadable by plain Node, `next build` (Turbopack)
+   still failed evaluating `@tailwindcss/postcss` for `globals.css`:
+   `Cannot find module '@tailwindcss/oxide-linux-x64-gnu'` from inside
+   Turbopack's Node.js evaluation in this npm-workspaces layout. The same
+   app builds cleanly with webpack. Until Turbopack resolves hoisted
+   optional native dependencies in workspaces, the three apps use
+   `next build --webpack` and `next dev --webpack` (one-line revert per
+   app in `apps/*/package.json`).
+
+Re-verified after the fix, sequentially, from a clean `npm ci`:
+`npm run check`, `npm run lint` and `npm run test` (2/2) pass, and
+`npm run build` builds `@trickreport/customer-service`, `@trickreport/it`
+and `@trickreport/msp`.
