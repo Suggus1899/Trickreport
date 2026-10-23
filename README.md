@@ -2,6 +2,20 @@
 
 **Trickreport** is a multi-tenant service platform. The first product being migrated is IT support; MSP and customer-service products have separate Next.js applications, with their backend and database isolation still pending.
 
+## Features
+
+Implemented today in the Go API and the IT support product:
+
+- **Tickets:** create, assign, comment (public and internal notes), full change history, filters and CSV export.
+- **Attachments:** strict content validation per format (magic bytes and container structure, not just the declared MIME type); script-bearing formats such as SVG are rejected.
+- **SLA:** per-priority response/resolution/escalation deadlines persisted on each ticket, a background worker that escalates and notifies exactly once, and first-response/resolution metrics.
+- **Automations:** tenant-scoped rules with canonical conditions and actions executed transactionally against tickets.
+- **Knowledge base:** draft/publish workflow, categories, tags and role-aware visibility.
+- **Identity:** JWT access/refresh pairs backed by persistent sessions with atomic rotation and revocation, TOTP MFA with single-use challenges, optional LDAP, and email password reset with single-use hashed tokens delivered through a durable PostgreSQL outbox.
+- **Realtime:** WebSocket notifications targeted to authorized recipients per tenant — never tenant-wide broadcasts of private events.
+- **Offline drafts:** browser drafts are scoped to the signed-in user and tenant; legacy unowned drafts stay quarantined instead of leaking into another account.
+- **Administration and analytics:** user/role management, tenant-scoped KPIs, dashboards and exports.
+
 ## Current stack
 
 - **API:** Go 1.26.10, chi, pgx, PostgreSQL 16.
@@ -19,6 +33,13 @@ flowchart LR
 ```
 
 The browser talks to the Next.js same-origin proxy. Authentication tokens stay in HttpOnly cookies; auth JSON returned to the browser omits token fields. WebSocket upgrades go directly through Caddy to Go.
+
+## Architecture
+
+- **Backend (`backend/`):** a modular Go monolith organized as domain → application → infrastructure → HTTP interfaces, with manual wiring. PostgreSQL is the source of truth for data, sessions, background jobs and the email outbox. The existing API (`/api/v1`) is the IT support product's API; MSP and customer service will get their own compositions and databases.
+- **Web apps (`apps/`):** three Next.js applications — `apps/it` (active), `apps/msp` and `apps/customer-service` (workspace shells) — sharing UI, translations, API contracts and utilities from `packages/` through npm workspaces.
+- **Legacy frontend (`frontend/`):** the former Astro application, kept only as a migration reference. Its identity-scoped offline storage and security fixes remain maintained until the IT migration completes, then it is removed.
+- **Database migrations:** embedded in the API binary and applied on startup (or via `--migrate-up` / `--migrate-down`). The current sequence is `000001`–`000011`: base schema, ticket escalation, notifications, then the stabilization series — session security (`000005`), MFA challenges (`000006`), password-reset security (`000007`), ticket idempotency (`000008`), SLA tracking (`000009`), email outbox (`000010`) and user session revocation (`000011`).
 
 ## Get started
 
