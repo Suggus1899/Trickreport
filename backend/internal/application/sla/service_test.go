@@ -12,11 +12,11 @@ import (
 // --- Mocks ---
 
 type mockRepo struct {
-	policies   []sla.Policy
-	policy     *sla.Policy
-	err        error
-	upsertErr  error
-	gotUpsert  *sla.Policy
+	policies    []sla.Policy
+	policy      *sla.Policy
+	err         error
+	upsertErr   error
+	gotUpsert   *sla.Policy
 	upsertCalls int
 }
 
@@ -84,7 +84,7 @@ func TestService_Upsert_AllValidPriorities(t *testing.T) {
 		t.Run(pr, func(t *testing.T) {
 			repo := &mockRepo{}
 			svc := NewService(repo)
-			if _, err := svc.Upsert(context.Background(), UpsertInput{Priority: pr}); err != nil {
+			if _, err := svc.Upsert(context.Background(), UpsertInput{Priority: pr, ResponseTimeMinutes: 1, ResolutionTimeMinutes: 60}); err != nil {
 				t.Fatalf("priority %q: unexpected error %v", pr, err)
 			}
 		})

@@ -12,7 +12,7 @@ the local functional improvements and the corrected realtime test expectation.
 
 Codebase Memory is registered but its session tools currently return `Transport
 closed`, including project listing, status and coverage. This is an availability
-failure, not evidence of clean coverage. GitNexus CLI and source/tests provide the
+failure, not evidence of clean coverage. Graphify and source/tests provide the
 fallback. SQL, Astro scripts and dynamic calls require explicit source checks.
 
 The stabilization plan is `docs/superpowers/plans/2026-10-21-estabilizacion-integral.md`.

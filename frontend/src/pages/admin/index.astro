@@ -1,21 +1,15 @@
 ---
 import Layout from '../../layouts/Layout.astro';
-import { getMe } from '../../lib/api';
 import { Users, SlidersHorizontal, Zap, BarChart3, type LucideIcon } from 'lucide-react';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
-let user;
+const user = Astro.locals.user!;
 let error = '';
 
-try {
-  user = await getMe(token);
-} catch (err) {
-  error = err instanceof Error ? err.message : 'Failed to load user';
-}
 
 if (user && user.role !== 'admin') {
   return Astro.redirect('/dashboard');

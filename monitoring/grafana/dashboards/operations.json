@@ -1,0 +1,145 @@
+{
+  "version": 1,
+  "refresh": "30s",
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "title": "Trickreport operations",
+  "schemaVersion": 39,
+  "panels": [
+    {
+      "title": "Requests per second",
+      "gridPos": {
+        "w": 12,
+        "y": 0.0,
+        "h": 8,
+        "x": 0
+      },
+      "targets": [
+        {
+          "legendFormat": "{{method}}",
+          "refId": "A",
+          "expr": "sum(rate(http_requests_total{job=\"trickreport-backend\"}[5m])) by (method)"
+        }
+      ],
+      "id": 1,
+      "type": "timeseries",
+      "datasource": {
+        "uid": "prometheus",
+        "type": "prometheus"
+      }
+    },
+    {
+      "title": "Latency p95 (seconds)",
+      "gridPos": {
+        "w": 12,
+        "y": 0.0,
+        "h": 8,
+        "x": 12
+      },
+      "targets": [
+        {
+          "legendFormat": "p95",
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket{job=\"trickreport-backend\"}[5m])) by (le))"
+        }
+      ],
+      "id": 2,
+      "type": "timeseries",
+      "datasource": {
+        "uid": "prometheus",
+        "type": "prometheus"
+      }
+    },
+    {
+      "title": "HTTP errors per second",
+      "gridPos": {
+        "w": 12,
+        "y": 8.0,
+        "h": 8,
+        "x": 0
+      },
+      "targets": [
+        {
+          "legendFormat": "5xx",
+          "refId": "A",
+          "expr": "sum(rate(http_requests_total{job=\"trickreport-backend\",status=~\"5..\"}[5m]))"
+        }
+      ],
+      "id": 3,
+      "type": "timeseries",
+      "datasource": {
+        "uid": "prometheus",
+        "type": "prometheus"
+      }
+    },
+    {
+      "title": "Database pool connections",
+      "gridPos": {
+        "w": 12,
+        "y": 8.0,
+        "h": 8,
+        "x": 12
+      },
+      "targets": [
+        {
+          "legendFormat": "{{state}}",
+          "refId": "A",
+          "expr": "database_pool_connections{job=\"trickreport-backend\"}"
+        }
+      ],
+      "id": 4,
+      "type": "timeseries",
+      "datasource": {
+        "uid": "prometheus",
+        "type": "prometheus"
+      }
+    },
+    {
+      "title": "Worker seconds since success",
+      "gridPos": {
+        "w": 12,
+        "y": 16.0,
+        "h": 8,
+        "x": 0
+      },
+      "targets": [
+        {
+          "legendFormat": "{{worker}}",
+          "refId": "A",
+          "expr": "time() - worker_last_success_timestamp_seconds{job=\"trickreport-backend\"}"
+        }
+      ],
+      "id": 5,
+      "type": "timeseries",
+      "datasource": {
+        "uid": "prometheus",
+        "type": "prometheus"
+      }
+    },
+    {
+      "title": "Email jobs",
+      "gridPos": {
+        "w": 12,
+        "y": 16.0,
+        "h": 8,
+        "x": 12
+      },
+      "targets": [
+        {
+          "legendFormat": "{{__name__}}",
+          "refId": "A",
+          "expr": "{__name__=~\"outbox_pending_total|outbox_failed_total\",job=\"trickreport-backend\"}"
+        }
+      ],
+      "id": 6,
+      "type": "timeseries",
+      "datasource": {
+        "uid": "prometheus",
+        "type": "prometheus"
+      }
+    }
+  ],
+  "uid": "trickreport-operations"
+}

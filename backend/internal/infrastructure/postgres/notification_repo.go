@@ -40,7 +40,11 @@ func (r *NotificationRepo) Create(ctx context.Context, n *domainTicket.Notificat
 		INSERT INTO notifications (tenant_id, user_id, title, body, type, ref_id, ref_type)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, created_at`
-	return r.db.QueryRow(ctx, query,
+	conn := DBTX(r.db)
+	if tx, ok := TxFromContext(ctx); ok {
+		conn = tx
+	}
+	return conn.QueryRow(ctx, query,
 		n.TenantID, n.UserID, n.Title, n.Body, n.Type, n.RefID, n.RefType,
 	).Scan(&n.ID, &n.CreatedAt)
 }

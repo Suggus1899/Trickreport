@@ -6,8 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	domainautomation "github.com/trickreport/backend/internal/domain/automation"
 	"github.com/rs/zerolog"
+	domainautomation "github.com/trickreport/backend/internal/domain/automation"
 )
 
 // --- Mock TicketExecutor ---
@@ -218,8 +218,8 @@ func TestEngine_Evaluate_ActionErrorContinues(t *testing.T) {
 	exec := &mockExecutor{setPriorityErr: errors.New("fail")}
 	e := newEngine(repo, exec)
 
-	if err := e.Evaluate(context.Background(), uuid.New(), Event{Type: "ticket_created"}); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := e.Evaluate(context.Background(), uuid.New(), Event{Type: "ticket_created"}); err == nil {
+		t.Fatal("expected action error to be returned")
 	}
 	if exec.calls != 2 {
 		t.Errorf("expected 2 calls (continues after error), got %d", exec.calls)
@@ -271,8 +271,8 @@ func TestEngine_MatchConditions(t *testing.T) {
 func TestEngine_ExecuteActions_NonMapActionSkipped(t *testing.T) {
 	e := newEngine(&mockRepo{}, &mockExecutor{})
 	rule := domainautomation.Rule{ID: uuid.New(), Actions: []any{"not-a-map"}}
-	if err := e.executeActions(context.Background(), uuid.New(), rule, Event{}, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := e.executeActions(context.Background(), uuid.New(), rule, Event{}, nil); err == nil {
+		t.Fatal("expected malformed action error")
 	}
 }
 
@@ -280,8 +280,8 @@ func TestEngine_ExecuteActions_NoTypeSkipped(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	rule := domainautomation.Rule{ID: uuid.New(), Actions: []any{map[string]any{"foo": "bar"}}}
-	if err := e.executeActions(context.Background(), uuid.New(), rule, Event{}, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := e.executeActions(context.Background(), uuid.New(), rule, Event{}, nil); err == nil {
+		t.Fatal("expected missing type error")
 	}
 	if exec.calls != 0 {
 		t.Errorf("expected 0 calls, got %d", exec.calls)
@@ -428,11 +428,11 @@ func TestEngine_ExecuteAction_AddTag(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "add_tag",
-		map[string]any{"tag": "urgent"}, Event{}, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		map[string]any{"tag": "urgent"}, Event{}, nil); err == nil {
+		t.Fatal("unsupported add_tag must fail")
 	}
-	if exec.gotTag != "urgent" {
-		t.Errorf("tag = %q", exec.gotTag)
+	if exec.calls != 0 {
+		t.Errorf("unsupported action calls=%d", exec.calls)
 	}
 }
 
@@ -440,11 +440,11 @@ func TestEngine_ExecuteAction_AddTag_ValueFallback(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
 	if err := e.executeAction(context.Background(), uuid.New(), "add_tag",
-		map[string]any{"value": "vip"}, Event{}, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		map[string]any{"value": "vip"}, Event{}, nil); err == nil {
+		t.Fatal("unsupported add_tag must fail")
 	}
-	if exec.gotTag != "vip" {
-		t.Errorf("tag = %q", exec.gotTag)
+	if exec.calls != 0 {
+		t.Errorf("unsupported action calls=%d", exec.calls)
 	}
 }
 
@@ -526,16 +526,16 @@ func TestEngine_ExecuteAction_SendEmail_NoSenderConfigured(t *testing.T) {
 	// Deliberately not calling SetEmailSender — should degrade gracefully,
 	// same as an unknown action type, not fail the whole rule.
 	if err := e.executeAction(context.Background(), uuid.New(), "send_email",
-		map[string]any{"to": "a@b.com"}, Event{}, nil); err != nil {
-		t.Fatalf("expected graceful no-op, got error: %v", err)
+		map[string]any{"to": "a@b.com"}, Event{}, nil); err == nil {
+		t.Fatal("missing email sender must fail explicitly")
 	}
 }
 
 func TestEngine_ExecuteAction_UnknownType(t *testing.T) {
 	exec := &mockExecutor{}
 	e := newEngine(&mockRepo{}, exec)
-	if err := e.executeAction(context.Background(), uuid.New(), "unknown_type", map[string]any{}, Event{}, nil); err != nil {
-		t.Fatalf("unexpected error: %v", err)
+	if err := e.executeAction(context.Background(), uuid.New(), "unknown_type", map[string]any{}, Event{}, nil); err == nil {
+		t.Fatal("unknown action must fail")
 	}
 	if exec.calls != 0 {
 		t.Errorf("expected 0 calls, got %d", exec.calls)

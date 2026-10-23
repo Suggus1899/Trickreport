@@ -1,7 +1,9 @@
 package realtime
 
 import (
+	"context"
 	"encoding/json"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -24,7 +26,8 @@ type Hub struct {
 	// Unregister requests from clients.
 	Unregister chan *Client
 
-	mu sync.RWMutex
+	mu   sync.RWMutex
+	done chan struct{}
 }
 
 func NewHub() *Hub {
@@ -33,13 +36,32 @@ func NewHub() *Hub {
 		Broadcast:  make(chan BroadcastPayload),
 		Register:   make(chan *Client),
 		Unregister: make(chan *Client),
+		done:       make(chan struct{}),
 	}
 }
 
-func (h *Hub) Run() {
+func (h *Hub) Run(contexts ...context.Context) {
+	ctx := context.Background()
+	if len(contexts) > 0 {
+		ctx = contexts[0]
+	}
+	defer close(h.done)
 	log.Info().Msg("WebSocket Hub is running")
 	for {
 		select {
+		case <-ctx.Done():
+			h.mu.Lock()
+			for _, clients := range h.clients {
+				for client := range clients {
+					close(client.send)
+					if client.conn != nil {
+						client.conn.Close()
+					}
+				}
+			}
+			h.clients = make(map[uuid.UUID]map[*Client]bool)
+			h.mu.Unlock()
+			return
 		case client := <-h.Register:
 			h.mu.Lock()
 			if _, ok := h.clients[client.TenantID]; !ok {
@@ -67,6 +89,9 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			clients := h.clients[payload.TenantID]
 			for client := range clients {
+				if payload.Scoped && !slices.Contains(payload.UserIDs, client.UserID) {
+					continue
+				}
 				select {
 				case client.send <- payload.Message:
 				default:
@@ -93,8 +118,25 @@ func (h *Hub) BroadcastEvent(tenantID uuid.UUID, eventType EventType, data any) 
 		return
 	}
 
-	h.Broadcast <- BroadcastPayload{
+	select {
+	case h.Broadcast <- BroadcastPayload{
 		TenantID: tenantID,
 		Message:  b,
+	}:
+	case <-h.done:
+	}
+}
+
+func (h *Hub) SendToUsers(tenantID uuid.UUID, userIDs []uuid.UUID, eventType EventType, data any) {
+	if len(userIDs) == 0 {
+		return
+	}
+	b, err := json.Marshal(Message{Type: eventType, TenantID: tenantID, Data: data})
+	if err != nil {
+		return
+	}
+	select {
+	case h.Broadcast <- BroadcastPayload{TenantID: tenantID, Message: b, UserIDs: userIDs, Scoped: true}:
+	case <-h.done:
 	}
 }

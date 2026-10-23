@@ -11,6 +11,25 @@ function withHostname(hostname: string) {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+  vi.resetModules();
+});
+
+describe('request origins', () => {
+  it('uses same-origin browser requests by default so the session cookie can be sent', async () => {
+    vi.stubEnv('PUBLIC_API_URL', undefined);
+    vi.stubEnv('PUBLIC_ON_PREMISE', 'false');
+    vi.stubEnv('ON_PREMISE', 'false');
+    vi.resetModules();
+    expect((await import('./config')).PUBLIC_API_URL).toBe('');
+  });
+
+  it('keeps SSR fetches absolute in on-premise mode', async () => {
+    vi.stubEnv('API_URL', '');
+    vi.stubEnv('ON_PREMISE', 'true');
+    vi.resetModules();
+    expect((await import('./config')).API_URL).toBe('http://localhost:8080');
+  });
 });
 
 describe('resolveTenantSlug', () => {

@@ -2,21 +2,21 @@
 import Layout from '../layouts/Layout.astro';
 import { buttonVariants } from '../components/ui/button';
 import { DashboardCharts } from '../components/dashboard/DashboardCharts';
-import { getMe, getSummary, getTickets, ApiAuthError } from '../lib/api';
+import { getSummary, getTickets, ApiAuthError } from '../lib/api';
 import { dailyVolume, statusDistribution, myTickets as pickMyTickets } from '../lib/dashboard-metrics';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
-let user;
+const user = Astro.locals.user!;
 let summary;
 let tickets: Awaited<ReturnType<typeof getTickets>> = [];
 let error = '';
 
 try {
-  [user, summary, tickets] = await Promise.all([getMe(token), getSummary(token), getTickets(token)]);
+  [summary, tickets] = await Promise.all([getSummary(token), getTickets(token)]);
 } catch (err) {
   if (err instanceof ApiAuthError) {
     return Astro.redirect('/login');
@@ -27,7 +27,7 @@ try {
 const TREND_DAYS = 14;
 const totalVolume = dailyVolume(tickets, TREND_DAYS);
 const openVolume = dailyVolume(tickets.filter((t) => t.status !== 'resolved' && t.status !== 'closed'), TREND_DAYS);
-const resolvedVolume = dailyVolume(tickets.filter((t) => t.status === 'resolved'), TREND_DAYS);
+const resolvedVolume = dailyVolume(tickets, TREND_DAYS, 'resolved_at');
 const slaVolume = dailyVolume(tickets.filter((t) => t.sla_breached), TREND_DAYS);
 const distribution = statusDistribution(tickets);
 const assignedToMe = user ? pickMyTickets(tickets, user.id) : [];

@@ -2,23 +2,18 @@
 import Layout from '../../layouts/Layout.astro';
 import { buttonVariants } from '../../components/ui/button';
 import { Badge, priorityBadgeVariant } from '../../components/ui/badge';
-import { getMe, getSLAPolicies, upsertSLAPolicy } from '../../lib/api';
+import { getSLAPolicies, upsertSLAPolicy } from '../../lib/api';
 import type { SLAPolicy } from '../../lib/api';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
-let user;
+const user = Astro.locals.user!;
 let policies: SLAPolicy[] = [];
 let error = '';
 
-try {
-  user = await getMe(token);
-} catch {
-  return Astro.redirect('/login');
-}
 
 if (user.role !== 'admin') {
   return Astro.redirect('/dashboard');
@@ -35,7 +30,7 @@ if (Astro.request.method === 'POST') {
       response_time_minutes,
       resolution_time_minutes,
       escalation_minutes,
-    }, token);
+    }, token, { csrfToken: Astro.cookies.get('trickreport_csrf')?.value });
     return Astro.redirect(`/admin/sla?saved=${priority}`);
   } catch (e: any) {
     error = e?.message || 'Failed to update SLA policy';
@@ -101,13 +96,19 @@ const inputClass = 'h-9 rounded-md border bg-background px-3 text-sm outline-non
   </div>
 
   {saved && (
-    <script is:inline define:vars={{ saved }}>
-      (function () {
-        if (window.__toast) window.__toast(saved + ' SLA policy saved', 'success');
+    <span hidden data-saved={saved}></span>
+  )}
+    <script>
+      import { toast } from '../../lib/toast';
+      function showSavedPolicy() {
+        const saved = document.querySelector<HTMLElement>('[data-saved]')?.dataset.saved;
+        if (!saved) return;
+        toast(saved + ' SLA policy saved', 'success');
         const url = new URL(window.location.href);
         url.searchParams.delete('saved');
         window.history.replaceState({}, '', url);
-      })();
+      }
+      showSavedPolicy();
+      document.addEventListener('astro:page-load', showSavedPolicy);
     </script>
-  )}
 </Layout>

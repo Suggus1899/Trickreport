@@ -28,21 +28,27 @@ func NewTicketHandler(svc *appTicket.UserService) *TicketHandler {
 // DTOs — HTTP-specific, separate from domain entities.
 
 type TicketDTO struct {
-	ID           uuid.UUID  `json:"id"`
-	TenantID     uuid.UUID  `json:"tenant_id"`
-	Title        string     `json:"title"`
-	Description  string     `json:"description"`
-	Status       string     `json:"status"`
-	Priority     string     `json:"priority"`
-	Category     string     `json:"category"`
-	CreatedBy    uuid.UUID  `json:"created_by"`
-	AssignedTo   *uuid.UUID `json:"assigned_to,omitempty"`
-	SLADeadline  *time.Time `json:"sla_deadline,omitempty"`
-	SLABreached  bool       `json:"sla_breached"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	CreatorName  string     `json:"creator_name,omitempty"`
-	AssigneeName *string    `json:"assignee_name,omitempty"`
+	ID                  uuid.UUID  `json:"id"`
+	TenantID            uuid.UUID  `json:"tenant_id"`
+	Title               string     `json:"title"`
+	Description         string     `json:"description"`
+	Status              string     `json:"status"`
+	Priority            string     `json:"priority"`
+	Category            string     `json:"category"`
+	CreatedBy           uuid.UUID  `json:"created_by"`
+	AssignedTo          *uuid.UUID `json:"assigned_to"`
+	Version             int        `json:"version"`
+	ResponseDeadline    *time.Time `json:"response_deadline"`
+	EscalationDeadline  *time.Time `json:"escalation_deadline"`
+	FirstRespondedAt    *time.Time `json:"first_responded_at"`
+	ResolvedAt          *time.Time `json:"resolved_at"`
+	ResponseSLABreached bool       `json:"response_sla_breached"`
+	SLADeadline         *time.Time `json:"sla_deadline,omitempty"`
+	SLABreached         bool       `json:"sla_breached"`
+	CreatedAt           time.Time  `json:"created_at"`
+	UpdatedAt           time.Time  `json:"updated_at"`
+	CreatorName         string     `json:"creator_name,omitempty"`
+	AssigneeName        *string    `json:"assignee_name,omitempty"`
 }
 
 type CommentDTO struct {
@@ -74,7 +80,8 @@ type CreateTicketReq struct {
 }
 
 type UpdateStatusReq struct {
-	Status string `json:"status" validate:"required,oneof=open in_progress waiting_client resolved closed"`
+	Status  string `json:"status" validate:"required,oneof=open in_progress waiting_client resolved closed"`
+	Version *int   `json:"version" validate:"omitempty,min=0"`
 }
 
 type AssignReq struct {
@@ -93,6 +100,7 @@ func toTicketDTO(t *ticket.Ticket) TicketDTO {
 		CreatedBy: t.CreatedBy, AssignedTo: t.AssignedTo, SLADeadline: t.SLADeadline,
 		SLABreached: t.SLABreached, CreatedAt: t.CreatedAt, UpdatedAt: t.UpdatedAt,
 		CreatorName: t.CreatorName, AssigneeName: t.AssigneeName,
+		Version: t.Version, ResponseDeadline: t.ResponseDeadline, EscalationDeadline: t.EscalationDeadline, FirstRespondedAt: t.FirstRespondedAt, ResolvedAt: t.ResolvedAt, ResponseSLABreached: t.ResponseSLABreached,
 	}
 }
 
@@ -134,6 +142,7 @@ func (h *TicketHandler) List(w http.ResponseWriter, r *http.Request) {
 
 	filter := appTicket.Filter{
 		Status:     r.URL.Query().Get("status"),
+		Category:   r.URL.Query().Get("category"),
 		Priority:   r.URL.Query().Get("priority"),
 		AssignedTo: r.URL.Query().Get("assigned_to"),
 		Search:     r.URL.Query().Get("q"),
@@ -216,15 +225,29 @@ func (h *TicketHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	var idempotencyKey uuid.UUID
+	if value := r.Header.Get("Idempotency-Key"); value != "" {
+		var err error
+		idempotencyKey, err = uuid.Parse(value)
+		if err != nil || idempotencyKey == uuid.Nil {
+			response.Error(w, http.StatusBadRequest, "Idempotency-Key must be a UUID")
+			return
+		}
+	}
 	t, err := h.svc.Create(r.Context(), appTicket.CreateInput{
-		TenantID:    tenantID,
-		Title:       req.Title,
-		Description: req.Description,
-		Priority:    req.Priority,
-		Category:    req.Category,
-		CreatedBy:   claims.UserID,
+		TenantID:       tenantID,
+		Title:          req.Title,
+		Description:    req.Description,
+		Priority:       req.Priority,
+		Category:       req.Category,
+		CreatedBy:      claims.UserID,
+		IdempotencyKey: idempotencyKey,
 	})
 	if err != nil {
+		if errors.Is(err, ticket.ErrIdempotencyConflict) {
+			response.Error(w, http.StatusConflict, err.Error())
+			return
+		}
 		if errors.Is(err, ticket.ErrValidation) {
 			response.Error(w, http.StatusBadRequest, "title and description are required")
 			return
@@ -255,9 +278,15 @@ func (h *TicketHandler) UpdateStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = h.svc.ChangeStatus(r.Context(), ticketID, tenantID, claims.UserID, claims.Role, req.Status)
+	var versions []int
+	if req.Version != nil {
+		versions = append(versions, *req.Version)
+	}
+	err = h.svc.ChangeStatus(r.Context(), ticketID, tenantID, claims.UserID, claims.Role, req.Status, versions...)
 	if err != nil {
 		switch {
+		case errors.Is(err, ticket.ErrConcurrentModification):
+			response.Error(w, http.StatusConflict, "ticket was changed; reload before retrying")
 		case errors.Is(err, ticket.ErrValidation):
 			response.Error(w, http.StatusBadRequest, "invalid status")
 		case errors.Is(err, ticket.ErrNotFound):
@@ -300,6 +329,10 @@ func (h *TicketHandler) Assign(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.svc.Assign(r.Context(), ticketID, tenantID, assignedTo, claims.UserID); err != nil {
+		if errors.Is(err, ticket.ErrValidation) {
+			response.Error(w, http.StatusBadRequest, err.Error())
+			return
+		}
 		if errors.Is(err, ticket.ErrNotFound) {
 			response.Error(w, http.StatusNotFound, "ticket not found")
 			return

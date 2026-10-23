@@ -1,0 +1,21 @@
+{
+  "name": "trickreport",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "engines": { "node": ">=24.22.1 <25" },
+  "workspaces": ["apps/*", "packages/*"],
+  "scripts": {
+    "dev": "npm run dev -w @trickreport/it",
+    "dev:it": "npm run dev -w @trickreport/it",
+    "dev:msp": "npm run dev -w @trickreport/msp",
+    "dev:customer-service": "npm run dev -w @trickreport/customer-service",
+    "build": "npm run build --workspaces --if-present",
+    "lint": "eslint apps packages",
+    "check": "tsc --noEmit -p packages/workspace/tsconfig.json",
+    "test": "vitest run --config packages/workspace/vitest.config.ts",
+    "test:e2e": "playwright test --config packages/workspace/playwright.config.ts",
+    "test:e2e:integration": "playwright test --config packages/workspace/playwright.integration.config.ts"
+  },
+  "devDependencies": { "@playwright/test": "1.64.1", "@types/node": "^24.0.0", "@types/react": "19.2.18", "@types/react-dom": "19.2.4", "eslint": "9.39.1", "eslint-config-next": "16.4.2", "fake-indexeddb": "6.2.5", "typescript": "5.9.3", "vitest": "4.1.12" }
+}

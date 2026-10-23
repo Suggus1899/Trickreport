@@ -1,74 +1,49 @@
 #!/usr/bin/env bash
-#
-# Trickreport — restore a PostgreSQL backup.
-#
-# Usage:
-#   ./scripts/restore.sh <backup-file>
-#
-# Example:
-#   ./scripts/restore.sh backups/trickreport_2024-01-01T00:00:00Z.sql.gz
-#
-# Requirements:
-#   - docker compose with the main docker-compose.yml running a healthy postgres.
-#   - The backup file must be readable by the postgres container (mounted under /backups).
-#
+# Restore a trusted pg_dump SQL file into a NEW, explicitly named rehearsal DB.
+# Compose discovers the service/network and reads COMPOSE_FILE/COMPOSE_PROJECT_NAME.
 set -euo pipefail
 
-if [ "$#" -lt 1 ]; then
-  echo "Usage: $0 <backup-file>" >&2
-  echo "Example: $0 backups/trickreport_2024-01-01T00:00:00Z.sql.gz" >&2
+if [ "$#" -ne 2 ]; then
+  echo "Usage: $0 <dump.sql[.gz]> <trickreport_restore_name>" >&2
   exit 1
 fi
-
 BACKUP_FILE="$1"
-
-if [ ! -f "$BACKUP_FILE" ]; then
-  echo "Error: backup file not found: $BACKUP_FILE" >&2
+RESTORE_DB="$2"
+if [[ ! "$RESTORE_DB" =~ ^trickreport_restore_[a-zA-Z0-9_]+$ ]] || [ "${#RESTORE_DB}" -gt 63 ]; then
+  echo 'Destination must be a new database named trickreport_restore_<name> (max 63 characters).' >&2
+  exit 1
+fi
+if [ ! -r "$BACKUP_FILE" ] || [ ! -s "$BACKUP_FILE" ]; then
+  echo 'The dump must be readable and nonempty.' >&2
   exit 1
 fi
 
-# Resolve to an absolute path so we can mount it reliably.
+SQL_FILE="$(mktemp)"
+trap 'rm -f "$SQL_FILE"' EXIT
 case "$BACKUP_FILE" in
-  /*) ABS_PATH="$BACKUP_FILE" ;;
-  *)  ABS_PATH="$(cd "$(dirname "$BACKUP_FILE")" && pwd)/$(basename "$BACKUP_FILE")" ;;
+  *.gz) gzip -t -- "$BACKUP_FILE"; gzip -cd -- "$BACKUP_FILE" > "$SQL_FILE" ;;
+  *) cat -- "$BACKUP_FILE" > "$SQL_FILE" ;;
 esac
-
-FILE_NAME="$(basename "$ABS_PATH")"
-
-# Load env (POSTGRES_USER, POSTGRES_PASSWORD, POSTGRES_DB) if a .env file exists.
-if [ -f .env ]; then
-  set -a
-  # shellcheck disable=SC1091
-  . ./.env
-  set +a
+if ! grep -q '^-- PostgreSQL database dump' "$SQL_FILE" || ! grep -Eq '^(CREATE|COPY|INSERT|ALTER|SET|SELECT) ' "$SQL_FILE"; then
+  echo 'Expected a nonempty, plain SQL pg_dump file without --create.' >&2
+  exit 1
+fi
+if grep -Eiq '^[[:space:]]*((CREATE|DROP|ALTER)[[:space:]]+DATABASE|\\(connect|c|!|i|ir|include|include_relative)([[:space:]]|$))' "$SQL_FILE"; then
+  echo 'Dump may not create, drop, alter or switch databases, or include external commands/files.' >&2
+  exit 1
 fi
 
-POSTGRES_USER="${POSTGRES_USER:-trickreport}"
-POSTGRES_DB="${POSTGRES_DB:-trickreport}"
-POSTGRES_PASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}"
-
-echo "==> Restoring backup: $FILE_NAME"
-echo "    Database: $POSTGRES_DB (user: $POSTGRES_USER)"
-echo
-
-# Detect compression by extension.
-case "$FILE_NAME" in
-  *.gz)
-    CMD="gunzip -c /backups/$FILE_NAME | psql -v ON_ERROR_STOP=1"
-    ;;
-  *)
-    CMD="psql -v ON_ERROR_STOP=1 -f /backups/$FILE_NAME"
-    ;;
-esac
-
-# Run the restore inside a throwaway postgres container on the same network.
-docker run --rm \
-  -v "$ABS_PATH:/backups/$FILE_NAME:ro" \
-  -e PGPASSWORD="$POSTGRES_PASSWORD" \
-  --network trickreport_trickreport_net \
-  --entrypoint /bin/sh \
-  postgres:16-alpine \
-  -c "psql -h postgres -U $POSTGRES_USER -d $POSTGRES_DB -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && $CMD -h postgres -U $POSTGRES_USER -d $POSTGRES_DB"
-
-echo
-echo "==> Restore complete."
+# createdb fails if the destination exists; never drop or replace the source DB.
+docker compose exec -T postgres sh -c '
+  test "$1" != "$POSTGRES_DB" || exit 1
+  export PGPASSWORD="$POSTGRES_PASSWORD"
+  exec createdb --username="$POSTGRES_USER" --maintenance-db=postgres -- "$1"
+' sh "$RESTORE_DB"
+if ! docker compose exec -T postgres sh -c '
+  export PGPASSWORD="$POSTGRES_PASSWORD"
+  exec psql --username="$POSTGRES_USER" --no-psqlrc --set=ON_ERROR_STOP=1 --single-transaction --dbname="$1"
+' sh "$RESTORE_DB" < "$SQL_FILE"; then
+  echo "Restore failed; source database unchanged. Inspect the rehearsal database $RESTORE_DB before removing it." >&2
+  exit 1
+fi
+echo "Restored to $RESTORE_DB. Validate schema, counts and tenant relationships before any separate cutover."

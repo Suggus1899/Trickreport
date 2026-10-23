@@ -1,7 +1,7 @@
 package realtime
 
 import (
-	"bytes"
+	"context"
 	"net/http"
 	"strings"
 	"time"
@@ -76,27 +76,34 @@ type Client struct {
 
 	// Buffered channel of outbound messages.
 	send chan []byte
+	done chan struct{}
 }
 
 // readPump pumps messages from the websocket connection to the hub.
 func (c *Client) readPump() {
 	defer func() {
-		c.Hub.Unregister <- c
-		c.conn.Close()
+		if c.done != nil {
+			close(c.done)
+		}
+		select {
+		case c.Hub.Unregister <- c:
+		case <-c.Hub.done:
+		}
+		_ = c.conn.Close()
 	}()
 	c.conn.SetReadLimit(maxMessageSize)
-	c.conn.SetReadDeadline(time.Now().Add(pongWait))
-	c.conn.SetPongHandler(func(string) error { c.conn.SetReadDeadline(time.Now().Add(pongWait)); return nil })
+	if err := c.conn.SetReadDeadline(time.Now().Add(pongWait)); err != nil {
+		return
+	}
+	c.conn.SetPongHandler(func(string) error { return c.conn.SetReadDeadline(time.Now().Add(pongWait)) })
 	for {
-		_, message, err := c.conn.ReadMessage()
+		_, _, err := c.conn.ReadMessage()
 		if err != nil {
 			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Error().Err(err).Msg("websocket close error")
 			}
 			break
 		}
-		// For our MVP, clients only consume. We can drop any incoming data.
-		_ = bytes.TrimSpace(bytes.Replace(message, []byte{'\n'}, []byte{' '}, -1))
 	}
 }
 
@@ -105,15 +112,17 @@ func (c *Client) writePump() {
 	ticker := time.NewTicker(pingPeriod)
 	defer func() {
 		ticker.Stop()
-		c.conn.Close()
+		_ = c.conn.Close()
 	}()
 	for {
 		select {
 		case message, ok := <-c.send:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				return
+			}
 			if !ok {
 				// The hub closed the channel.
-				c.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = c.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
@@ -121,20 +130,31 @@ func (c *Client) writePump() {
 			if err != nil {
 				return
 			}
-			w.Write(message)
+			if _, err := w.Write(message); err != nil {
+				_ = w.Close()
+				return
+			}
 
 			// Add queued chat messages to the current websocket message.
 			n := len(c.send)
 			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-c.send)
+				if _, err := w.Write([]byte{'\n'}); err != nil {
+					_ = w.Close()
+					return
+				}
+				if _, err := w.Write(<-c.send); err != nil {
+					_ = w.Close()
+					return
+				}
 			}
 
 			if err := w.Close(); err != nil {
 				return
 			}
 		case <-ticker.C:
-			c.conn.SetWriteDeadline(time.Now().Add(writeWait))
+			if err := c.conn.SetWriteDeadline(time.Now().Add(writeWait)); err != nil {
+				return
+			}
 			if err := c.conn.WriteMessage(websocket.PingMessage, nil); err != nil {
 				return
 			}
@@ -143,7 +163,7 @@ func (c *Client) writePump() {
 }
 
 // ServeWs handles websocket requests from the peer.
-func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, userID uuid.UUID) {
+func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, tenantID uuid.UUID, userID uuid.UUID, guards ...func(context.Context) error) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Error().Err(err).Msg("failed to upgrade websocket connection")
@@ -156,6 +176,7 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, tenantID uuid.UUI
 		UserID:   userID,
 		conn:     conn,
 		send:     make(chan []byte, 256),
+		done:     make(chan struct{}),
 	}
 	client.Hub.Register <- client
 
@@ -163,4 +184,26 @@ func ServeWs(hub *Hub, w http.ResponseWriter, r *http.Request, tenantID uuid.UUI
 	// new goroutines.
 	go client.writePump()
 	go client.readPump()
+	if len(guards) > 0 {
+		go func() {
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-client.done:
+					return
+				case <-hub.done:
+					return
+				case <-ticker.C:
+					ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+					err := guards[0](ctx)
+					cancel()
+					if err != nil {
+						_ = client.conn.Close()
+						return
+					}
+				}
+			}
+		}()
+	}
 }

@@ -2,22 +2,21 @@
 import Layout from '../../layouts/Layout.astro';
 import { Badge } from '../../components/ui/badge';
 import { buttonVariants } from '../../components/ui/button';
-import { getMe, getArticle } from '../../lib/api';
+import { getArticle } from '../../lib/api';
 import type { Article } from '../../lib/api';
 import { ArrowLeft } from 'lucide-react';
 
 const { id } = Astro.params;
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token || !id) {
   return Astro.redirect('/login');
 }
 
-let user;
+const user = Astro.locals.user!;
 let article: Article | null = null;
 let error = '';
 
 try {
-  user = await getMe(token);
   article = await getArticle(id, token);
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load article';

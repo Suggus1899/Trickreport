@@ -1,10 +1,8 @@
 /**
  * On-premise / self-hosted configuration.
  *
- * When ON_PREMISE is true the frontend expects to be served from the same
- * origin as the API, so API_URL is empty and all requests use relative paths
- * (e.g. `/api/v1/...`). No external resources (fonts, CDNs, analytics) are
- * loaded, keeping the deployment fully air-gapped.
+ * Browser requests use the frontend origin; SSR uses the internal API origin.
+ * Fonts and other public resources are bundled locally.
  */
 export const ON_PREMISE =
   import.meta.env.ON_PREMISE === 'true' ||
@@ -13,20 +11,16 @@ export const ON_PREMISE =
 /**
  * Base URL for the backend API.
  *
- * - On-premise: empty string → requests go to the same origin (`/api/v1/...`).
- * - Development/standalone: defaults to `http://localhost:8080`.
+ * The server reads its internal origin at runtime so one build can be promoted
+ * between environments. Node fetch requires an absolute URL, also on-premise.
  */
-// `??`, not `||`: an empty value is a deliberate choice meaning "same origin,
-// use relative paths", and `||` would discard it for the fallback.
-export const API_URL = import.meta.env.API_URL ?? (ON_PREMISE ? '' : 'http://localhost:8080');
+export const API_URL = (import.meta.env.SSR ? process.env.API_URL : undefined) || import.meta.env.API_URL || 'http://localhost:8080';
 
 /**
- * Client-safe copy of API_URL for React islands and other browser-side code.
- * Astro only inlines `PUBLIC_`-prefixed env vars into the client bundle, so
- * this must be set to the same value as API_URL in every environment.
+ * Empty means same-origin behind the reverse proxy or the development proxy.
+ * This public build setting is independent of the server's private API_URL.
  */
-export const PUBLIC_API_URL =
-  import.meta.env.PUBLIC_API_URL ?? (ON_PREMISE ? '' : 'http://localhost:8080');
+export const PUBLIC_API_URL = import.meta.env.PUBLIC_API_URL ?? '';
 
 /** Tenant used when the host carries no organization subdomain. */
 export const DEFAULT_TENANT_SLUG = 'default';

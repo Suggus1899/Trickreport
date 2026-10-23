@@ -1,0 +1,13 @@
+.git
+.agents
+.cache
+**/node_modules
+**/.next
+backend
+docs
+frontend
+monitoring
+scripts
+*.log
+.env*
+!.env.example

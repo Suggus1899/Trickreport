@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -41,7 +42,11 @@ func TenantFromContext(ctx context.Context) uuid.UUID {
 }
 
 // Authenticate validates the JWT from the Authorization header or cookie.
-func Authenticate(tokenGen auth.TokenGenerator) func(http.Handler) http.Handler {
+type AccessAuthenticator interface {
+	AuthenticateAccess(context.Context, string) (*auth.Claims, error)
+}
+
+func Authenticate(authenticator AccessAuthenticator) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			token := extractToken(r)
@@ -50,8 +55,12 @@ func Authenticate(tokenGen auth.TokenGenerator) func(http.Handler) http.Handler 
 				return
 			}
 
-			claims, err := tokenGen.Validate(token)
+			claims, err := authenticator.AuthenticateAccess(r.Context(), token)
 			if err != nil {
+				if errors.Is(err, auth.ErrAuthUnavailable) {
+					response.Error(w, http.StatusServiceUnavailable, "authentication temporarily unavailable")
+					return
+				}
 				response.Error(w, http.StatusUnauthorized, "invalid or expired token")
 				return
 			}
@@ -142,7 +151,7 @@ func extractToken(r *http.Request) string {
 		return c.Value
 	}
 	// WebSocket clients can't set custom headers, so allow token as query param.
-	if q := r.URL.Query().Get("token"); q != "" {
+	if q := r.URL.Query().Get("token"); r.URL.Path == "/api/v1/ws" && isWebSocket(r) && q != "" {
 		return q
 	}
 	return ""

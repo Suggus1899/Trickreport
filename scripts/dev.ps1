@@ -25,21 +25,22 @@ if (-not (Test-Path "$root\backend\.env")) {
     exit 1
 }
 
-# Check frontend node_modules
-if (-not (Test-Path "$root\frontend\node_modules")) {
-    Write-Host "Installing frontend dependencies..." -ForegroundColor Cyan
-    Push-Location "$root\frontend"
-    npm install
+# Check workspace node_modules
+if (-not (Test-Path "$root\node_modules")) {
+    Write-Host "Installing workspace dependencies..." -ForegroundColor Cyan
+    Push-Location $root
+    npm ci
+    if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
     Pop-Location
 }
 
 # Start backend
 Write-Host "[backend] Starting on http://localhost:8080 ..." -ForegroundColor Green
-$backend = Start-Process -FilePath "go" -ArgumentList "run", "cmd/api/main.go" -WorkingDirectory "$root\backend" -PassThru -NoNewWindow
+$backend = Start-Process -FilePath "go" -ArgumentList "run", "./cmd/api" -WorkingDirectory "$root\backend" -PassThru -WindowStyle Hidden
 
 # Start frontend
-Write-Host "[frontend] Starting on http://localhost:4321 ..." -ForegroundColor Green
-$frontend = Start-Process -FilePath "npm" -ArgumentList "run", "dev" -WorkingDirectory "$root\frontend" -PassThru -NoNewWindow
+Write-Host "[frontend] Starting Next.js on http://localhost:3000 ..." -ForegroundColor Green
+$frontend = Start-Process -FilePath "npm.cmd" -ArgumentList "run", "dev:it" -WorkingDirectory $root -PassThru -WindowStyle Hidden
 
 Write-Host ""
 Write-Host "Both services are running. Press Ctrl+C to stop." -ForegroundColor Cyan

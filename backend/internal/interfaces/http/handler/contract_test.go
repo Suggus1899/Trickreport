@@ -98,7 +98,7 @@ func buildContractServer(t *testing.T) (*httptest.Server, string, string, uuid.U
 
 	hub := realtime.NewHub()
 	go hub.Run()
-	hubAdapter := infraRealtime.NewHubAdapter(hub)
+	hubAdapter := infraRealtime.NewHubAdapter(hub, repos.User)
 
 	sender := email.NewConsoleSender()
 	authCfg := appAuth.Config{JWTSecret: "contract-test-secret", JWTExpHours: 8, SecureCookie: false}
@@ -109,10 +109,10 @@ func buildContractServer(t *testing.T) (*httptest.Server, string, string, uuid.U
 	r := chi.NewRouter()
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
-			r.Post("/login", handlers.Auth.Login)
+			r.With(middleware.Tenant(repos.TenantResolver)).Post("/login", handlers.Auth.Login)
 		})
 		r.Group(func(r chi.Router) {
-			r.Use(middleware.Authenticate(tokenGen))
+			r.Use(middleware.Authenticate(services.Auth))
 			r.Use(middleware.Tenant(repos.TenantResolver))
 
 			r.Route("/tickets", func(r chi.Router) {
@@ -143,7 +143,18 @@ func buildContractServer(t *testing.T) (*httptest.Server, string, string, uuid.U
 func loginAndGetToken(t *testing.T, ts *httptest.Server, email, password string) string {
 	t.Helper()
 	body := `{"email":"` + email + `","password":"` + password + `"}`
-	resp, err := http.Post(ts.URL+"/api/v1/auth/login", "application/json", strings.NewReader(body))
+	// Resolve the tenant associated with the fixture, as production login requires.
+	var tenantID string
+	if err := contractPool.QueryRow(context.Background(), `SELECT tenant_id::text FROM users WHERE email=$1`, email).Scan(&tenantID); err != nil {
+		t.Fatal(err)
+	}
+	req, err := http.NewRequest(http.MethodPost, ts.URL+"/api/v1/auth/login", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tenant-ID", tenantID)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("login request: %v", err)
 	}

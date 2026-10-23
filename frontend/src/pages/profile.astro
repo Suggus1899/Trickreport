@@ -3,19 +3,13 @@ import Layout from '../layouts/Layout.astro';
 import { buttonVariants } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
 import { MfaSettings } from '../components/auth/MfaSettings';
-import { getMe } from '../lib/api';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
-let me;
-try {
-  me = await getMe(token);
-} catch {
-  return Astro.redirect('/login');
-}
+const me = Astro.locals.user!;
 ---
 
 <Layout title="Profile — Trickreport" user={{ name: me.name, role: me.role }}>

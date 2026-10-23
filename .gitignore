@@ -5,9 +5,14 @@ node_modules/
 .pnp
 .pnp.js
 
-# Astro build
+# Legacy frontend build
 frontend/dist/
 frontend/.astro/
+
+# Next.js build
+apps/*/.next/
+**/test-results/
+**/playwright-report/
 
 # Environment files
 .env
@@ -44,6 +49,5 @@ Thumbs.db
 .devin/
 
 # Local code intelligence and audit artifacts
-.gitnexus/
 graphify-out/
 .superpowers/

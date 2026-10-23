@@ -1,13 +1,12 @@
-name: Release (SLSA Go Releaser)
+name: Release (SLSA)
 
 on:
   push:
-    tags:
-      - "v*"
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       tag-name:
-        description: "Tag name for the release (e.g. v1.0.0)"
+        description: Existing version tag; run this workflow at that tag or the same commit
         required: true
         type: string
 
@@ -15,125 +14,118 @@ permissions:
   contents: read
 
 jobs:
-  # ────────────────────────────────────────────────────────────────────────────
-  # Prepare version metadata for ldflags.
-  # ────────────────────────────────────────────────────────────────────────────
   prepare:
-    name: Prepare version metadata
+    name: Verify release source
     runs-on: ubuntu-latest
     outputs:
+      tag: ${{ steps.meta.outputs.tag }}
       version: ${{ steps.meta.outputs.version }}
       commit-date: ${{ steps.meta.outputs.commit-date }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Extract version metadata
-        id: meta
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+      - id: meta
+        env:
+          RELEASE_TAG: ${{ inputs.tag-name || github.ref_name }}
         run: |
-          # VERSION: strip leading 'v' from tag (e.g. v1.0.0 → 1.0.0)
-          if [ "${{ github.ref_type }}" = "tag" ]; then
-            VERSION="${GITHUB_REF_NAME#v}"
-          else
-            VERSION="$(git describe --tags --always --dirty | cut -c2-)"
-          fi
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          tag_commit=$(git rev-parse --verify "refs/tags/$RELEASE_TAG^{commit}")
+          test "$tag_commit" = "$GITHUB_SHA" || { echo 'Select the release tag ref; tag and workflow commit must match.' >&2; exit 1; }
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+          echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          echo "commit-date=$(git show -s --format=%cI "$tag_commit")" >> "$GITHUB_OUTPUT"
 
-          # COMMIT_DATE: ISO 8601 of the last commit
-          COMMIT_DATE="$(git log --date=iso8601-strict -1 --pretty=%cd)"
-          echo "commit-date=${COMMIT_DATE}" >> "$GITHUB_OUTPUT"
+  verify:
+    name: Validate the release commit
+    needs: prepare
+    uses: ./.github/workflows/ci.yml
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # SLSA Go Releaser: compile the Go backend with a SLSA3 compliant builder.
-  # Generates non-forgeable provenance for each binary.
-  # https://github.com/slsa-framework/slsa-github-generator
-  # ────────────────────────────────────────────────────────────────────────────
   build:
-    name: Build (${{ matrix.os }}/${{ matrix.arch }})
-    needs: [prepare]
+    name: Backend (${{ matrix.os }}/${{ matrix.arch }})
+    needs: [prepare, verify]
     permissions:
-      id-token: write # To sign the provenance.
-      contents: write # To upload assets to release.
-      actions: read   # To read the workflow path.
+      id-token: write
+      contents: write
+      actions: read
     strategy:
       fail-fast: false
       matrix:
         os: [linux, windows, darwin]
         arch: [amd64, arm64]
         exclude:
-          # windows/arm64 is not commonly used; skip it.
           - os: windows
             arch: arm64
+    # SLSA requires a full version tag, rather than a SHA, to verify the builder identity.
     uses: slsa-framework/slsa-github-generator/.github/workflows/builder_go_slsa3.yml@v2.1.0
     with:
-      go-version: "1.25"
+      go-version: "1.26.10"
       config-file: backend/.slsa-goreleaser/${{ matrix.os }}-${{ matrix.arch }}.yml
       upload-assets: true
-      # Pass dynamically-generated env vars for ldflags.
-      evaluated-envs: |
-        VERSION=${{ needs.prepare.outputs.version }},
-        COMMIT=${{ github.sha }},
-        COMMIT_DATE=${{ needs.prepare.outputs.commit-date }}
+      upload-tag-name: ${{ needs.prepare.outputs.tag }}
+      draft-release: "true"
+      evaluated-envs: >-
+        VERSION=${{ needs.prepare.outputs.version }},COMMIT=${{ github.sha }},COMMIT_DATE=${{ needs.prepare.outputs.commit-date }}
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # Frontend build (Astro SSR) + compute subjects for SLSA provenance.
-  # ────────────────────────────────────────────────────────────────────────────
   frontend:
-    name: Frontend (Astro SSR)
+    name: Frontend runtime (Linux amd64)
+    needs: [prepare, verify]
     runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      actions: read
-      id-token: write
     outputs:
       base64-subjects: ${{ steps.subjects.outputs.base64-subjects }}
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
-          node-version: "20"
+          node-version-file: .node-version
           cache: npm
-          cache-dependency-path: frontend/package-lock.json
-
-      - name: Install dependencies
-        working-directory: frontend
-        run: npm ci
-
-      - name: Build
-        working-directory: frontend
-        run: npm run build
-
-      - name: Package frontend
+          cache-dependency-path: package-lock.json
+      - run: npm ci && npm run build -w @trickreport/it
+      - name: Package complete runtime
+        env:
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          mkdir -p dist
-          tar -czf dist/trickreport-frontend.tar.gz -C frontend/dist .
-
-      - name: Compute subjects for SLSA provenance
+          set -euo pipefail
+          mkdir -p artifacts
+          runtime_dir=$(mktemp -d)
+          cp -a apps/it/.next/standalone/. "$runtime_dir/"
+          mkdir -p "$runtime_dir/apps/it/.next/static" "$runtime_dir/apps/it/public"
+          cp -a apps/it/.next/static/. "$runtime_dir/apps/it/.next/static/"
+          cp -a apps/it/public/. "$runtime_dir/apps/it/public/"
+          node -e 'require("node:fs").writeFileSync(process.argv[1], JSON.stringify({version:process.env.RELEASE_VERSION,commit:process.env.GITHUB_SHA,node:"24.22.1",platform:"linux-amd64",migrationCommand:"backend --migrate-up"})+"\n")' "$runtime_dir/release.json"
+          tar -czf artifacts/trickreport-frontend-linux-amd64.tar.gz -C "$runtime_dir" .
+      - name: Exercise the unpacked runtime
+        run: |
+          set -euo pipefail
+          runtime_dir=$(mktemp -d)
+          tar -xzf artifacts/trickreport-frontend-linux-amd64.tar.gz -C "$runtime_dir"
+          (cd "$runtime_dir" && HOSTNAME=127.0.0.1 PORT=44321 API_URL=http://127.0.0.1:8080 node apps/it/server.js) > artifacts/frontend-runtime.log 2>&1 &
+          runtime_pid=$!
+          trap 'kill "$runtime_pid" 2>/dev/null || true; rm -rf "$runtime_dir"' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:44321/login > /dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:44321/login > /dev/null
+      - name: Compute provenance subjects
         id: subjects
-        working-directory: dist
+        working-directory: artifacts
         run: |
-          # Compute sha256sum and base64 encode it for the SLSA generic generator.
-          sha256sum trickreport-frontend.tar.gz > subjects.sha256sum
-          cat subjects.sha256sum
-          BASE64_SUBJECTS=$(base64 -w0 subjects.sha256sum)
-          echo "base64-subjects=${BASE64_SUBJECTS}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload frontend artifact
-        uses: actions/upload-artifact@v4
+          sha256sum trickreport-frontend-linux-amd64.tar.gz > frontend.sha256sum
+          echo "base64-subjects=$(base64 -w0 frontend.sha256sum)" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: trickreport-frontend
-          path: dist/trickreport-frontend.tar.gz
+          path: |
+            artifacts/trickreport-frontend-linux-amd64.tar.gz
+            artifacts/frontend.sha256sum
           if-no-files-found: error
           retention-days: 30
 
-  # ────────────────────────────────────────────────────────────────────────────
-  # SLSA Generic Generator: generate SLSA3 provenance for the frontend artifact.
-  # https://github.com/slsa-framework/slsa-github-generator
-  # ────────────────────────────────────────────────────────────────────────────
   frontend-provenance:
-    name: Frontend Provenance (SLSA Generic Generator)
-    needs: [frontend]
+    name: Frontend provenance
+    needs: [prepare, frontend]
     permissions:
       id-token: write
       contents: write
@@ -141,4 +133,23 @@ jobs:
     uses: slsa-framework/slsa-github-generator/.github/workflows/generator_generic_slsa3.yml@v2.1.0
     with:
       upload-assets: true
+      upload-tag-name: ${{ needs.prepare.outputs.tag }}
+      draft-release: "true"
       base64-subjects: ${{ needs.frontend.outputs.base64-subjects }}
+
+  release-assets:
+    name: Attach frontend runtime to draft release
+    needs: [prepare, build, frontend-provenance]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: trickreport-frontend
+          path: artifacts
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" artifacts/trickreport-frontend-linux-amd64.tar.gz artifacts/frontend.sha256sum

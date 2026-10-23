@@ -5,7 +5,7 @@
 .DESCRIPTION
     Creates the database (if it does not exist), starts the Go backend
     (which applies embedded database migrations on startup) and the
-    Astro frontend dev server.
+    Next.js IT frontend dev server.
 .PARAMETER PostgresPassword
     Password for the local postgres user.
 .PARAMETER SkipDb
@@ -60,38 +60,33 @@ try {
             Write-Host "Created $backendEnv. Please review it before running again if you need custom values." -ForegroundColor Yellow
         }
 
-        Write-Host 'Generating Templ files...' -ForegroundColor Cyan
-        Push-Location $backendPath
-        templ generate ./internal/interfaces/http/views/
-        Pop-Location
-
         Write-Host 'Starting Go backend on http://localhost:8080 ...' -ForegroundColor Cyan
         $backendJob = Start-Job -ScriptBlock {
             param($path)
             Set-Location $path
-            go run cmd/api/main.go
+            go run ./cmd/api
         } -ArgumentList $backendPath
     }
 
     if (-not $SkipFrontend) {
-        $frontendPath = Join-Path $root 'frontend'
-        $frontendEnv = Join-Path $frontendPath '.env'
+        $frontendPath = Join-Path $root 'apps/it'
+        $frontendEnv = Join-Path $frontendPath '.env.local'
         if (-not (Test-Path $frontendEnv)) {
             Copy-Item (Join-Path $frontendPath '.env.example') $frontendEnv
-            Write-Host "Created $frontendEnv. Please review it before running again if you need custom values." -ForegroundColor Yellow
         }
 
-        Write-Host 'Installing frontend dependencies...' -ForegroundColor Cyan
-        Push-Location $frontendPath
-        npm install
+        Write-Host 'Installing workspace dependencies...' -ForegroundColor Cyan
+        Push-Location $root
+        npm ci
+        if ($LASTEXITCODE -ne 0) { throw "npm ci failed" }
         Pop-Location
 
-        Write-Host 'Starting Astro frontend on http://localhost:4321 ...' -ForegroundColor Cyan
+        Write-Host 'Starting Next.js frontend on http://localhost:3000 ...' -ForegroundColor Cyan
         $frontendJob = Start-Job -ScriptBlock {
             param($path)
             Set-Location $path
-            npm run dev
-        } -ArgumentList $frontendPath
+            npm run dev:it
+        } -ArgumentList $root
     }
 
     Write-Host ''

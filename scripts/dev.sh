@@ -27,10 +27,10 @@ if [ ! -f "$ROOT/backend/.env" ]; then
     exit 1
 fi
 
-# Check frontend node_modules
-if [ ! -d "$ROOT/frontend/node_modules" ]; then
-    echo -e "\033[36mInstalling frontend dependencies...\033[0m"
-    (cd "$ROOT/frontend" && npm install)
+# Check workspace node_modules
+if [ ! -d "$ROOT/node_modules" ]; then
+    echo -e "\033[36mInstalling workspace dependencies...\033[0m"
+    (cd "$ROOT" && npm ci)
 fi
 
 # Cleanup on exit
@@ -47,12 +47,12 @@ trap cleanup EXIT INT TERM
 
 # Start backend
 echo -e "\033[32m[backend] Starting on http://localhost:8080 ...\033[0m"
-(cd "$ROOT/backend" && go run cmd/api/main.go) &
+(cd "$ROOT/backend" && go run ./cmd/api) &
 BACKEND_PID=$!
 
 # Start frontend
-echo -e "\033[32m[frontend] Starting on http://localhost:4321 ...\033[0m"
-(cd "$ROOT/frontend" && npm run dev) &
+echo -e "\033[32m[frontend] Starting Next.js on http://localhost:3000 ...\033[0m"
+(cd "$ROOT" && npm run dev:it) &
 FRONTEND_PID=$!
 
 echo ""

@@ -12,19 +12,19 @@ import (
 // --- Mocks ---
 
 type mockRepo struct {
-	users        []domainUser.User
-	user         *domainUser.User
-	err          error
-	createErr    error
-	updateErr    error
-	deactErr     error
-	gotEmail     string
-	gotCreated   *domainUser.User
-	gotHash      string
-	gotFields    UpdateFields
-	createCalls  int
-	updateCalls  int
-	deactCalls   int
+	users       []domainUser.User
+	user        *domainUser.User
+	err         error
+	createErr   error
+	updateErr   error
+	deactErr    error
+	gotEmail    string
+	gotCreated  *domainUser.User
+	gotHash     string
+	gotFields   UpdateFields
+	createCalls int
+	updateCalls int
+	deactCalls  int
 }
 
 func (m *mockRepo) List(ctx context.Context, tenantID uuid.UUID) ([]domainUser.User, error) {
@@ -132,7 +132,7 @@ func TestService_Create_Success(t *testing.T) {
 	svc := NewService(repo, hasher)
 
 	u, err := svc.Create(context.Background(), CreateInput{
-		TenantID: tenant, Name: "Jane", Email: "jane@x.com", Role: "agent", Password: "secret",
+		TenantID: tenant, Name: "Jane", Email: "jane@x.com", Role: "agent", Password: "StrongSecret123!",
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -146,7 +146,7 @@ func TestService_Create_Success(t *testing.T) {
 	if repo.gotHash != "hashed" {
 		t.Errorf("hash = %q", repo.gotHash)
 	}
-	if hasher.gotPwd != "secret" {
+	if hasher.gotPwd != "StrongSecret123!" {
 		t.Errorf("hasher got pwd %q", hasher.gotPwd)
 	}
 	if repo.createCalls != 1 {
@@ -206,9 +206,9 @@ func TestService_Create_InvalidRole(t *testing.T) {
 func TestService_Create_HashError(t *testing.T) {
 	hasher := &mockHasher{hashErr: errors.New("bcrypt fail")}
 	svc := NewService(&mockRepo{}, hasher)
-	_, err := svc.Create(context.Background(), CreateInput{Name: "Jane", Email: "a@b.com", Password: "x"})
-	if err == nil {
-		t.Fatal("expected error")
+	_, err := svc.Create(context.Background(), CreateInput{Name: "Jane", Email: "a@b.com", Password: "StrongSecret123!"})
+	if !errors.Is(err, hasher.hashErr) {
+		t.Fatalf("expected hash error, got %v", err)
 	}
 }
 

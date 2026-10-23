@@ -1,20 +1,13 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { ArticleEditor } from '../../components/articles/ArticleEditor';
-import { getMe, ApiAuthError } from '../../lib/api';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
-let user;
-try {
-  user = await getMe(token);
-} catch (err) {
-  if (err instanceof ApiAuthError) return Astro.redirect('/login');
-  throw err;
-}
+const user = Astro.locals.user!;
 
 // Matches the backend: POST /articles is admin/agent only.
 if (user.role !== 'admin' && user.role !== 'agent') {
@@ -33,7 +26,7 @@ if (user.role !== 'admin' && user.role !== 'agent') {
     </div>
 
     <div class="rounded-xl border bg-card p-6">
-      <ArticleEditor client:load />
+      <ArticleEditor role={user.role} client:load />
     </div>
   </div>
 </Layout>

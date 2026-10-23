@@ -3,6 +3,7 @@ package http
 // wire.go — dependency wiring helpers
 
 import (
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -36,6 +37,7 @@ type Repos struct {
 	Attachment     *postgres.AttachmentRepo
 	PasswordReset  *postgres.PasswordResetRepo
 	Session        *postgres.SessionRepo
+	MFAChallenge   *postgres.MFAChallengeRepo
 	TxManager      *postgres.TxManager
 	Notification   *postgres.NotificationRepo
 }
@@ -55,6 +57,7 @@ func NewRepos(pool *pgxpool.Pool) *Repos {
 		Attachment:     postgres.NewAttachmentRepo(pool),
 		PasswordReset:  postgres.NewPasswordResetRepo(pool),
 		Session:        postgres.NewSessionRepo(pool),
+		MFAChallenge:   postgres.NewMFAChallengeRepo(pool),
 		TxManager:      postgres.NewTxManager(pool),
 		Notification:   postgres.NewNotificationRepo(pool),
 	}
@@ -91,7 +94,7 @@ func NewServices(
 	// Email queue: decouples sending from the request path, with retry and
 	// dead-letter logging. Process() must be started by the caller (see
 	// server.go) since it blocks until the given context is cancelled.
-	emailQueue := infraEmail.NewEmailQueue(200)
+	emailQueue := infraEmail.NewEmailQueue(postgres.NewEmailOutboxRepo(repos.Automation.DB()))
 
 	// Build the automation engine: executor uses direct SQL on the pool,
 	// engine uses the automation repo + executor.
@@ -117,6 +120,7 @@ func NewServices(
 	authSvc := appAuth.NewService(repos.User, hasher, ldapAuth, tokenGen, authCfg)
 	authSvc.SetTokenStore(tokenStore)
 	authSvc.SetSessionRepository(repos.Session)
+	authSvc.SetMFAChallengeRepository(repos.MFAChallenge)
 	authSvc.SetAccountLockoutRepository(repos.User)
 	authSvc.SetPasswordHasherFull(hasher)
 	authSvc.SetMFARepository(repos.User)
@@ -131,13 +135,14 @@ func NewServices(
 		repos.PasswordReset,
 		repos.User,
 		hasher,
-		sender,
+		emailQueue,
 		appAuth.PasswordResetConfig{
 			TokenExpiry: time.Hour,
-			ResetURL:    "/password-reset/confirm",
+			ResetURL:    strings.TrimRight(authCfg.PublicURL, "/") + "/password-reset/confirm",
 		},
 	)
 
+	resetSvc.SetTxManager(repos.TxManager)
 	return &Services{
 		Ticket:        ticketSvc,
 		User:          appUser.NewService(repos.User, hasher),

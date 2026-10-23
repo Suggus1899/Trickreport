@@ -37,16 +37,16 @@ type SLAPolicyDTO struct {
 type upsertSLAReq struct {
 	ResponseTimeMinutes   int `json:"response_time_minutes" validate:"required,min=1,max=525600"`
 	ResolutionTimeMinutes int `json:"resolution_time_minutes" validate:"required,min=1,max=525600"`
-	EscalationMinutes     int `json:"escalation_minutes" validate:"required,min=1,max=525600"`
+	EscalationMinutes     int `json:"escalation_minutes" validate:"min=0,max=525600"`
 }
 
 func toSLADTO(p *sla.Policy) SLAPolicyDTO {
 	return SLAPolicyDTO{
 		ID: p.ID, TenantID: p.TenantID, Priority: p.Priority,
-		ResponseTimeMinutes: p.ResponseTimeMinutes,
+		ResponseTimeMinutes:   p.ResponseTimeMinutes,
 		ResolutionTimeMinutes: p.ResolutionTimeMinutes,
-		EscalationMinutes: p.EscalationMinutes,
-		CreatedAt: p.CreatedAt, UpdatedAt: p.UpdatedAt,
+		EscalationMinutes:     p.EscalationMinutes,
+		CreatedAt:             p.CreatedAt, UpdatedAt: p.UpdatedAt,
 	}
 }
 
@@ -88,8 +88,8 @@ func (h *SLAHandler) Upsert(w http.ResponseWriter, r *http.Request) {
 		EscalationMinutes:     req.EscalationMinutes,
 	})
 	if err != nil {
-		if errors.Is(err, sla.ErrInvalidPriority) {
-			response.Error(w, http.StatusBadRequest, "invalid priority")
+		if errors.Is(err, sla.ErrInvalidPriority) || errors.Is(err, sla.ErrValidation) {
+			response.Error(w, http.StatusBadRequest, "invalid priority or SLA durations")
 			return
 		}
 		response.Error(w, http.StatusInternalServerError, "failed to upsert sla policy")

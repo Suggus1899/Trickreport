@@ -1,6 +1,7 @@
 package email
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -9,6 +10,10 @@ import (
 
 type Sender interface {
 	Send(to, subject, body string) error
+}
+
+type ContextSender interface {
+	SendContext(context.Context, string, string, string) error
 }
 
 // ConsoleSender logs the email to stdout instead of sending it. Good for dev.

@@ -2,12 +2,12 @@ package worker
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 
@@ -38,7 +38,9 @@ type Worker struct {
 	engine       *appAuto.Engine
 	maxRetries   int
 
-	metrics Metrics
+	metrics     Metrics
+	lastSuccess atomic.Int64
+	lastFailed  atomic.Bool
 
 	wg sync.WaitGroup
 }
@@ -90,6 +92,13 @@ func (w *Worker) Start(ctx context.Context) {
 	defer ticker.Stop()
 
 	log.Info().Dur("interval", w.interval).Msg("Background worker started")
+	if ctx.Err() != nil {
+		return
+	}
+	// Run immediately so readiness reflects a completed SLA cycle after startup.
+	if w.db != nil {
+		w.runCycle(ctx)
+	}
 
 	for {
 		select {
@@ -102,8 +111,7 @@ func (w *Worker) Start(ctx context.Context) {
 			w.wg.Add(1)
 			func() {
 				defer w.wg.Done()
-				w.runWithRetry(ctx, w.checkSLABreachesErr)
-				w.runWithRetry(ctx, w.checkEscalationsErr)
+				w.runCycle(ctx)
 			}()
 		}
 	}
@@ -111,26 +119,42 @@ func (w *Worker) Start(ctx context.Context) {
 
 // runWithRetry executes fn with retry logic and exponential backoff
 // (1s, 2s, 4s). If fn returns an error, it is retried up to maxRetries times.
-func (w *Worker) runWithRetry(ctx context.Context, fn func(ctx context.Context) error) {
+func (w *Worker) runWithRetry(ctx context.Context, fn func(ctx context.Context) error) bool {
 	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
 	for attempt := 0; ; attempt++ {
 		if err := fn(ctx); err == nil {
-			return
+			return true
 		} else {
 			atomic.AddInt64(&w.metrics.Errors, 1)
 			if attempt >= w.maxRetries {
 				log.Error().Int("attempt", attempt+1).Msg("Worker check failed after max retries")
-				return
+				return false
 			}
 			backoff := backoffs[attempt%len(backoffs)]
 			log.Warn().Int("attempt", attempt+1).Dur("backoff", backoff).Msg("Worker check failed — retrying")
 			select {
 			case <-ctx.Done():
-				return
+				return false
 			case <-time.After(backoff):
 			}
 		}
 	}
+}
+
+func (w *Worker) runCycle(ctx context.Context) {
+	breaches := w.runWithRetry(ctx, w.checkSLABreachesErr)
+	escalations := w.runWithRetry(ctx, w.checkEscalationsErr)
+	w.lastFailed.Store(!breaches || !escalations)
+	if breaches && escalations {
+		w.lastSuccess.Store(time.Now().Unix())
+	}
+}
+
+func (w *Worker) LastSuccessUnix() int64 { return w.lastSuccess.Load() }
+
+func (w *Worker) ReadyHealthy() bool {
+	last := w.LastSuccessUnix()
+	return last > 0 && !w.lastFailed.Load() && time.Since(time.Unix(last, 0)) <= 3*w.interval
 }
 
 // HealthCheck verifies database connectivity. Returns nil if the database is
@@ -147,177 +171,81 @@ func (w *Worker) checkSLABreachesErr(ctx context.Context) error {
 }
 
 func (w *Worker) checkSLABreaches(ctx context.Context) error {
-	q := `
-		WITH breached_tickets AS (
-			SELECT t.id, t.tenant_id, t.priority, s.resolution_time_minutes
-			FROM tickets t
-			JOIN sla_policies s ON t.tenant_id = s.tenant_id AND t.priority = s.priority
-			WHERE t.status NOT IN ('resolved', 'closed')
-			  AND t.sla_breached = FALSE
-			  AND t.created_at + (s.resolution_time_minutes || ' minutes')::interval < NOW()
-		)
-		UPDATE tickets
-		SET sla_breached = TRUE, updated_at = NOW()
-		WHERE id IN (SELECT id FROM breached_tickets)
-		RETURNING id, tenant_id;
-	`
-
-	rows, err := w.db.Query(ctx, q)
-	if err != nil {
-		log.Error().Err(err).Msg("Worker failed to check SLA breaches")
+	if err := w.processDeadline(ctx, "sla_breached", "sla_deadline", "SLA Resolution Time Breached", "sla_breach"); err != nil {
 		return err
 	}
-	defer rows.Close()
-
-	breachCount := 0
-	for rows.Next() {
-		var id, tenantID pgtype.UUID
-		if err := rows.Scan(&id, &tenantID); err != nil {
-			atomic.AddInt64(&w.metrics.Errors, 1)
-			log.Error().Err(err).Msg("Worker failed to scan breached ticket row")
-			continue
-		}
-		breachCount++
-		ticketIDStr := ""
-		tenantIDStr := ""
-		if id.Valid {
-			ticketIDStr = uuid.UUID(id.Bytes).String()
-		}
-		if tenantID.Valid {
-			tenantIDStr = uuid.UUID(tenantID.Bytes).String()
-		}
-
-		if _, err := w.db.Exec(ctx, `
-			INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
-			VALUES ($1, $2, 'SYSTEM: SLA Resolution Time Breached', TRUE)
-		`, id, w.systemUserID); err != nil {
-			atomic.AddInt64(&w.metrics.Errors, 1)
-			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach comment")
-		}
-
-		if _, err := w.db.Exec(ctx, `
-			INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value)
-			VALUES ($1, $2, 'sla_breached', 'false', 'true')
-		`, id, w.systemUserID); err != nil {
-			atomic.AddInt64(&w.metrics.Errors, 1)
-			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert SLA breach history")
-		}
-
-		// Fire automation rules for the SLA breach event.
-		if w.engine != nil && id.Valid && tenantID.Valid {
-			event := appAuto.Event{
-				Type:     "sla_breach",
-				TenantID: uuid.UUID(tenantID.Bytes),
-				TicketID: uuid.UUID(id.Bytes),
-				UserID:   w.systemUserID,
-				OldValue: "false",
-				NewValue: "true",
-			}
-			if err := w.engine.Evaluate(ctx, uuid.UUID(tenantID.Bytes), event); err != nil {
-				atomic.AddInt64(&w.metrics.Errors, 1)
-				log.Error().Err(err).Str("ticket_id", ticketIDStr).Str("tenant_id", tenantIDStr).Msg("Worker failed to evaluate automations for SLA breach")
-			} else {
-				atomic.AddInt64(&w.metrics.AutomationsRun, 1)
-			}
-		}
-	}
-
-	if breachCount > 0 {
-		atomic.AddInt64(&w.metrics.BreachesDetected, int64(breachCount))
-		log.Info().Int("breached_tickets", breachCount).Msg("SLA breaches detected and marked")
-	}
-	return nil
+	return w.processDeadline(ctx, "response_sla_breached", "response_deadline", "SLA First Response Time Breached", "sla_breach")
 }
-
-// checkEscalationsErr wraps checkEscalations to return an error for retry logic.
-func (w *Worker) checkEscalationsErr(ctx context.Context) error {
-	return w.checkEscalations(ctx)
-}
-
-// checkEscalations fires once per ticket when it has been open longer than
-// its priority's SLA escalation_minutes, guarded by escalated_at so it never
-// fires twice. Mirrors checkSLABreaches exactly; the two are independent
-// (escalation_minutes is meant to warn well before resolution_time_minutes
-// is actually breached).
+func (w *Worker) checkEscalationsErr(ctx context.Context) error { return w.checkEscalations(ctx) }
 func (w *Worker) checkEscalations(ctx context.Context) error {
-	q := `
-		WITH escalated_tickets AS (
-			SELECT t.id, t.tenant_id
-			FROM tickets t
-			JOIN sla_policies s ON t.tenant_id = s.tenant_id AND t.priority = s.priority
-			WHERE t.status NOT IN ('resolved', 'closed')
-			  AND t.escalated_at IS NULL
-			  AND t.created_at + (s.escalation_minutes || ' minutes')::interval < NOW()
-		)
-		UPDATE tickets
-		SET escalated_at = NOW(), updated_at = NOW()
-		WHERE id IN (SELECT id FROM escalated_tickets)
-		RETURNING id, tenant_id;
-	`
+	return w.processDeadline(ctx, "escalated_at", "escalation_deadline", "SLA Escalation Threshold Reached", "escalation")
+}
 
-	rows, err := w.db.Query(ctx, q)
+// processDeadline commits the claim, comment and history together before dispatching events.
+func (w *Worker) processDeadline(ctx context.Context, field, deadline, message, eventType string) error {
+	tx, err := w.db.Begin(ctx)
 	if err != nil {
-		log.Error().Err(err).Msg("Worker failed to check SLA escalations")
 		return err
 	}
-	defer rows.Close()
-
-	escalationCount := 0
+	defer tx.Rollback(ctx)
+	condition := field + "=FALSE"
+	update := field + "=TRUE"
+	oldValue, newValue := "false", "true"
+	if field == "escalated_at" {
+		condition = field + " IS NULL"
+		update = field + "=NOW()"
+		oldValue, newValue = "", "escalated"
+	}
+	if field == "response_sla_breached" {
+		condition += " AND first_responded_at IS NULL"
+	}
+	query := fmt.Sprintf(`SELECT id,tenant_id FROM tickets WHERE status NOT IN ('resolved','closed') AND %s AND %s < NOW() ORDER BY id FOR UPDATE SKIP LOCKED`, condition, deadline)
+	rows, err := tx.Query(ctx, query)
+	if err != nil {
+		return err
+	}
+	type claimed struct{ id, tenant uuid.UUID }
+	var tickets []claimed
 	for rows.Next() {
-		var id, tenantID pgtype.UUID
-		if err := rows.Scan(&id, &tenantID); err != nil {
-			atomic.AddInt64(&w.metrics.Errors, 1)
-			log.Error().Err(err).Msg("Worker failed to scan escalated ticket row")
-			continue
+		var ticket claimed
+		if err := rows.Scan(&ticket.id, &ticket.tenant); err != nil {
+			rows.Close()
+			return err
 		}
-		escalationCount++
-		ticketIDStr := ""
-		tenantIDStr := ""
-		if id.Valid {
-			ticketIDStr = uuid.UUID(id.Bytes).String()
+		tickets = append(tickets, ticket)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil {
+		return err
+	}
+	for _, ticket := range tickets {
+		if _, err := tx.Exec(ctx, `UPDATE tickets SET `+update+`,version=version+1,updated_at=NOW() WHERE id=$1`, ticket.id); err != nil {
+			return err
 		}
-		if tenantID.Valid {
-			tenantIDStr = uuid.UUID(tenantID.Bytes).String()
+		if _, err := tx.Exec(ctx, `INSERT INTO ticket_comments(ticket_id,user_id,content,is_internal)VALUES($1,$2,$3,TRUE)`, ticket.id, w.systemUserID, "SYSTEM: "+message); err != nil {
+			return err
 		}
-
-		if _, err := w.db.Exec(ctx, `
-			INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal)
-			VALUES ($1, $2, 'SYSTEM: SLA Escalation Threshold Reached', TRUE)
-		`, id, w.systemUserID); err != nil {
-			atomic.AddInt64(&w.metrics.Errors, 1)
-			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert escalation comment")
-		}
-
-		if _, err := w.db.Exec(ctx, `
-			INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value)
-			VALUES ($1, $2, 'escalated_at', '', 'escalated')
-		`, id, w.systemUserID); err != nil {
-			atomic.AddInt64(&w.metrics.Errors, 1)
-			log.Error().Err(err).Str("ticket_id", ticketIDStr).Msg("Worker failed to insert escalation history")
-		}
-
-		// Fire automation rules for the escalation event.
-		if w.engine != nil && id.Valid && tenantID.Valid {
-			event := appAuto.Event{
-				Type:     "escalation",
-				TenantID: uuid.UUID(tenantID.Bytes),
-				TicketID: uuid.UUID(id.Bytes),
-				UserID:   w.systemUserID,
-				OldValue: "",
-				NewValue: "escalated",
-			}
-			if err := w.engine.Evaluate(ctx, uuid.UUID(tenantID.Bytes), event); err != nil {
-				atomic.AddInt64(&w.metrics.Errors, 1)
-				log.Error().Err(err).Str("ticket_id", ticketIDStr).Str("tenant_id", tenantIDStr).Msg("Worker failed to evaluate automations for escalation")
-			} else {
-				atomic.AddInt64(&w.metrics.AutomationsRun, 1)
-			}
+		if _, err := tx.Exec(ctx, `INSERT INTO ticket_history(ticket_id,user_id,field,old_value,new_value)VALUES($1,$2,$3,$4,$5)`, ticket.id, w.systemUserID, field, oldValue, newValue); err != nil {
+			return err
 		}
 	}
-
-	if escalationCount > 0 {
-		atomic.AddInt64(&w.metrics.EscalationsDetected, int64(escalationCount))
-		log.Info().Int("escalated_tickets", escalationCount).Msg("SLA escalations detected and marked")
+	if err := tx.Commit(ctx); err != nil {
+		return err
+	}
+	if field == "escalated_at" {
+		atomic.AddInt64(&w.metrics.EscalationsDetected, int64(len(tickets)))
+	} else {
+		atomic.AddInt64(&w.metrics.BreachesDetected, int64(len(tickets)))
+	}
+	for _, ticket := range tickets {
+		if w.engine != nil {
+			event := appAuto.Event{Type: eventType, TenantID: ticket.tenant, TicketID: ticket.id, UserID: w.systemUserID, OldValue: oldValue, NewValue: newValue}
+			if err := w.engine.Evaluate(ctx, ticket.tenant, event); err != nil {
+				return err
+			}
+			atomic.AddInt64(&w.metrics.AutomationsRun, 1)
+		}
 	}
 	return nil
 }

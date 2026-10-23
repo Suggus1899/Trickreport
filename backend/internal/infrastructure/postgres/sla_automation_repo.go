@@ -84,7 +84,7 @@ func (r *SLARepo) GetByPriority(ctx context.Context, tenantID uuid.UUID, priorit
 		Scan(&id, &tid, &p.Priority, &p.ResponseTimeMinutes, &p.ResolutionTimeMinutes, &p.EscalationMinutes, &p.CreatedAt, &p.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			return nil, fmt.Errorf("sla_repo.GetByPriority: not found: %w", err)
+			return nil, domainsla.ErrNotFound
 		}
 		return nil, fmt.Errorf("sla_repo.GetByPriority: %w", err)
 	}

@@ -2,115 +2,88 @@ package email
 
 import (
 	"context"
-	"sync"
-	"time"
-
+	"errors"
+	"github.com/google/uuid"
 	"github.com/rs/zerolog/log"
-
 	"github.com/trickreport/backend/internal/email"
+	"sync"
+	"sync/atomic"
+	"time"
 )
 
-// queuedEmail holds the data needed to send a single email.
-type queuedEmail struct {
-	to      string
-	subject string
-	body    string
+type QueuedEmail struct {
+	ID                uuid.UUID
+	To, Subject, Body string
+	Attempts          int
 }
-
-// EmailQueue is a channel-based email queue with retry and dead-letter
-// logging. It decouples email sending from the request path.
+type OutboxRepository interface {
+	Enqueue(context.Context, string, string, string) error
+	Claim(context.Context) (*QueuedEmail, error)
+	Finish(context.Context, *QueuedEmail, bool) error
+	Counts(context.Context) (pending, failed int64, err error)
+}
 type EmailQueue struct {
-	queue chan queuedEmail
-	wg    sync.WaitGroup
+	store       OutboxRepository
+	lastSuccess atomic.Int64
+	done        chan struct{}
 }
 
-// NewEmailQueue creates a new EmailQueue with the given buffer size.
-func NewEmailQueue(bufferSize int) *EmailQueue {
-	if bufferSize <= 0 {
-		bufferSize = 100
-	}
-	return &EmailQueue{
-		queue: make(chan queuedEmail, bufferSize),
-	}
+func NewEmailQueue(store OutboxRepository) *EmailQueue {
+	return &EmailQueue{store: store, done: make(chan struct{})}
 }
-
-// Enqueue adds an email to the queue. It is non-blocking — if the queue is
-// full the email is logged as dropped (dead-letter) and not sent.
-func (q *EmailQueue) Enqueue(to, subject, body string) {
-	select {
-	case q.queue <- queuedEmail{to: to, subject: subject, body: body}:
-	default:
-		log.Warn().
-			Str("to", to).
-			Str("subject", subject).
-			Msg("Email queue full — message dead-lettered")
-	}
-}
-
-// Send enqueues the email and returns immediately. It lets EmailQueue satisfy
-// any port shaped like Send(to, subject, body string) error — e.g.
-// ticket.EmailNotifier and automation.EmailSender — without the caller
-// blocking on SMTP latency the way a direct Sender.Send would.
 func (q *EmailQueue) Send(to, subject, body string) error {
-	q.Enqueue(to, subject, body)
-	return nil
+	return q.SendContext(context.Background(), to, subject, body)
 }
-
-// processWorkers is the number of goroutines concurrently draining the
-// queue. A single worker would let one message's retry backoff (up to 7s)
-// block every other queued email behind it.
-const processWorkers = 5
-
-// Process drains the queue across a fixed pool of worker goroutines and sends
-// emails via the provided sender. It blocks until ctx is cancelled. Failed
-// sends are retried with exponential backoff (1s, 2s, 4s) up to maxRetries
-// times. Emails that still fail after all retries are logged as dead letters.
-// Message order is not preserved across workers.
+func (q *EmailQueue) SendContext(ctx context.Context, to, subject, body string) error {
+	if q.store == nil {
+		return errors.New("email outbox is not configured")
+	}
+	return q.store.Enqueue(ctx, to, subject, body)
+}
+func (q *EmailQueue) LastSuccessUnix() int64 { return q.lastSuccess.Load() }
+func (q *EmailQueue) Done() <-chan struct{}  { return q.done }
 func (q *EmailQueue) Process(ctx context.Context, sender email.Sender) {
-	backoffs := []time.Duration{1 * time.Second, 2 * time.Second, 4 * time.Second}
-	maxRetries := 3
-
-	for i := 0; i < processWorkers; i++ {
-		q.wg.Add(1)
+	defer close(q.done)
+	var wg sync.WaitGroup
+	for range 5 {
+		wg.Add(1)
 		go func() {
-			defer q.wg.Done()
+			defer wg.Done()
+			ticker := time.NewTicker(time.Second)
+			defer ticker.Stop()
 			for {
+				if ctx.Err() != nil {
+					return
+				}
+				if err := q.deliverNext(ctx, sender); err != nil {
+					log.Error().Msg("email outbox cycle failed")
+				}
 				select {
 				case <-ctx.Done():
 					return
-				case msg := <-q.queue:
-					q.sendWithRetry(ctx, sender, msg, backoffs, maxRetries)
+				case <-ticker.C:
 				}
 			}
 		}()
 	}
-	q.wg.Wait()
+	wg.Wait()
 }
-
-func (q *EmailQueue) sendWithRetry(ctx context.Context, sender email.Sender, msg queuedEmail, backoffs []time.Duration, maxRetries int) {
-	var lastErr error
-	for attempt := 0; attempt <= maxRetries; attempt++ {
-		if err := sender.Send(msg.to, msg.subject, msg.body); err == nil {
-			return
-		} else {
-			lastErr = err
-		}
-
-		if attempt < maxRetries {
-			backoff := backoffs[attempt%len(backoffs)]
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(backoff):
-			}
-		}
+func (q *EmailQueue) deliverNext(ctx context.Context, sender email.Sender) error {
+	msg, err := q.store.Claim(ctx)
+	if err != nil {
+		return err
 	}
-
-	// Dead letter — all retries exhausted.
-	log.Error().
-		Err(lastErr).
-		Str("to", msg.to).
-		Str("subject", msg.subject).
-		Int("attempts", maxRetries+1).
-		Msg("Email dead-lettered after max retries")
+	q.lastSuccess.Store(time.Now().Unix())
+	if msg == nil {
+		return nil
+	}
+	if contextSender, ok := sender.(email.ContextSender); ok {
+		err = contextSender.SendContext(ctx, msg.To, msg.Subject, msg.Body)
+	} else {
+		err = sender.Send(msg.To, msg.Subject, msg.Body)
+	}
+	if err != nil {
+		log.Warn().Str("message_id", msg.ID.String()).Int("attempt", msg.Attempts).Msg("email delivery failed; retained for retry")
+	}
+	return q.store.Finish(ctx, msg, err == nil)
 }

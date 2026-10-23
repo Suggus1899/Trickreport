@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	chiMiddleware "github.com/go-chi/chi/v5/middleware"
 	"net/http"
 	"time"
 
@@ -72,13 +73,13 @@ func RequestLogger(next http.Handler) http.Handler {
 
 		ctx := contextWithLogger(r.Context(), reqLogger)
 
-		rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+		rec := chiMiddleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(rec, r.WithContext(ctx))
 
 		reqLogger.Info().
 			Str("method", r.Method).
 			Str("path", r.URL.Path).
-			Int("status", rec.status).
+			Int("status", responseStatus(rec.Status())).
 			Int64("duration_ms", time.Since(start).Milliseconds()).
 			Msg("request completed")
 	})

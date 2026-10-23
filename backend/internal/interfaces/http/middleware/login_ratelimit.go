@@ -82,8 +82,8 @@ func (l *LoginRateLimiter) LoginLimit(next http.Handler) http.Handler {
 }
 
 // Start initializes the background cleanup goroutine for the underlying limiter.
-func (l *LoginRateLimiter) Start() {
-	l.limiter.Start()
+func (l *LoginRateLimiter) Start(ctx context.Context) <-chan struct{} {
+	return l.limiter.Start(ctx)
 }
 
 // extractEmailFromBody attempts to parse the email field from a JSON body.

@@ -53,11 +53,17 @@ export interface Ticket {
   category: string;
   created_by: string;
   creator_name?: string;
-  assigned_to?: string;
+  assigned_to?: string | null;
   assignee_name?: string;
   sla_breached: boolean;
   created_at: string;
   updated_at: string;
+  version?: number;
+  resolved_at?: string | null;
+  first_responded_at?: string | null;
+  response_deadline?: string | null;
+  escalation_deadline?: string | null;
+  response_sla_breached?: boolean;
 }
 
 export interface Article {
@@ -124,10 +130,19 @@ export interface ChartsData {
   status_distribution: StatusDistribution[];
   resolution_time: ResolutionMetrics[];
   sla_compliance: SLACompliance;
+  first_response_time?: ResolutionMetrics[];
+  response_sla_compliance?: SLACompliance;
+  timezone?: string;
 }
 
 export interface ApiError {
   error: string;
+}
+
+export interface ApiOptions extends RequestInit {
+  token?: string;
+  csrfToken?: string;
+  idempotencyKey?: string;
 }
 
 export interface Comment {
@@ -219,8 +234,8 @@ function getCsrfToken(): string | undefined {
   return match ? decodeURIComponent(match[1]) : undefined;
 }
 
-function getHeaders(token: string | undefined, skipJson: boolean, method: string): HeadersInit {
-  const headers: HeadersInit = {
+function getHeaders(token: string | undefined, skipJson: boolean, method: string, csrfToken?: string, idempotencyKey?: string): Record<string, string> {
+  const headers: Record<string, string> = {
     // Only the public auth routes (login, register, password reset) read this.
     // Authenticated requests take the tenant from the JWT claim server-side.
     'X-Tenant-ID': resolveTenantSlug(),
@@ -232,11 +247,15 @@ function getHeaders(token: string | undefined, skipJson: boolean, method: string
     headers['Authorization'] = `Bearer ${token}`;
   }
   if (!SAFE_METHODS.has(method)) {
-    const csrfToken = getCsrfToken();
-    if (csrfToken) {
-      headers[CSRF_HEADER_NAME] = csrfToken;
+    const csrf = typeof document === 'undefined' ? csrfToken : getCsrfToken();
+    if (csrf) {
+      headers[CSRF_HEADER_NAME] = csrf;
+      if (typeof document === 'undefined') {
+        headers.Cookie = `${CSRF_COOKIE_NAME}=${encodeURIComponent(csrf)}`;
+      }
     }
   }
+  if (idempotencyKey) headers['Idempotency-Key'] = idempotencyKey;
   return headers;
 }
 
@@ -246,20 +265,21 @@ function sleep(ms: number): Promise<void> {
 
 async function doFetch<T>(
   path: string,
-  init: RequestInit & { token?: string; signal?: AbortSignal },
+  init: ApiOptions,
   attempt = 0,
 ): Promise<T> {
-  const { token, signal, ...rest } = init;
+  const { token, csrfToken, idempotencyKey, signal, ...rest } = init;
   const method = (rest.method || 'GET').toUpperCase();
   const skipJson = rest.body instanceof FormData;
-  const headers = getHeaders(token, skipJson, method);
+  const headers = getHeaders(token, skipJson, method, csrfToken, idempotencyKey);
 
   // Combine caller signal with a timeout signal.
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), DEFAULT_TIMEOUT);
+  const abort = () => controller.abort();
   if (signal) {
     if (signal.aborted) controller.abort();
-    else signal.addEventListener('abort', () => controller.abort(), { once: true });
+    else signal.addEventListener('abort', abort, { once: true });
   }
 
   let res: Response;
@@ -271,16 +291,21 @@ async function doFetch<T>(
       signal: controller.signal,
     });
   } catch (err) {
-    clearTimeout(timeoutId);
     if (err instanceof DOMException && err.name === 'AbortError') {
+      if (signal?.aborted) throw err;
       throw new ApiNetworkError('Request timed out');
     }
     throw new ApiNetworkError(err instanceof Error ? err.message : 'Network request failed');
+  } finally {
+    clearTimeout(timeoutId);
+    signal?.removeEventListener('abort', abort);
   }
-  clearTimeout(timeoutId);
 
   if (res.status === 401) {
     const body = (await res.json().catch(() => ({}))) as ApiError;
+    if (typeof window !== 'undefined' && !path.startsWith('/auth/')) {
+      window.dispatchEvent(new Event('trickreport:session-ended'));
+    }
     throw new ApiAuthError(body.error || 'Authentication required');
   }
 
@@ -293,7 +318,7 @@ async function doFetch<T>(
     );
   }
 
-  if (res.status >= 500 && attempt < MAX_RETRIES) {
+  if (res.status >= 500 && (SAFE_METHODS.has(method) || idempotencyKey) && attempt < MAX_RETRIES && !signal?.aborted) {
     const backoff = Math.pow(2, attempt) * 500;
     await sleep(backoff);
     return doFetch<T>(path, init, attempt + 1);
@@ -301,7 +326,7 @@ async function doFetch<T>(
 
   if (!res.ok) {
     const body = (await res.json().catch(() => ({}))) as ApiError;
-    throw new Error(body.error || `Request failed with status ${res.status}`);
+    throw new ApiNetworkError(body.error || `Request failed with status ${res.status}`);
   }
 
   if (res.status === 204) {
@@ -310,10 +335,17 @@ async function doFetch<T>(
   return res.json() as Promise<T>;
 }
 
+let csrfBootstrap: Promise<void> | undefined;
+
 export async function api<T>(
   path: string,
-  init: RequestInit & { token?: string; signal?: AbortSignal } = {},
+  init: ApiOptions = {},
 ): Promise<T> {
+  if (typeof document !== 'undefined' && !SAFE_METHODS.has((init.method || 'GET').toUpperCase()) && !getCsrfToken()) {
+    csrfBootstrap ??= doFetch<void>('/auth/csrf', {}).finally(() => { csrfBootstrap = undefined; });
+    await csrfBootstrap;
+    if (!getCsrfToken()) throw new ApiValidationError('Unable to initialize CSRF protection. Please reload and try again.', 403);
+  }
   return doFetch<T>(path, init);
 }
 
@@ -341,8 +373,8 @@ export async function getMe(token?: string): Promise<User> {
   return api<User>('/auth/me', { token });
 }
 
-export async function logout(): Promise<void> {
-  return api<void>('/auth/logout', { method: 'POST' });
+export async function logout(token?: string, options: ApiOptions = {}): Promise<void> {
+  return api<void>('/auth/logout', { ...options, token, method: 'POST' });
 }
 
 /**
@@ -421,19 +453,21 @@ export async function getTicket(id: string, token?: string): Promise<Ticket> {
 export async function createTicket(
   data: { title: string; description: string; priority: string; category: string },
   token?: string,
+  options: ApiOptions = {},
 ): Promise<Ticket> {
-  return api<Ticket>('/tickets', { token, method: 'POST', body: JSON.stringify(data) });
+  return api<Ticket>('/tickets', { ...options, token, method: 'POST', body: JSON.stringify(data) });
 }
 
 export async function updateTicketStatus(
   id: string,
   status: string,
   token?: string,
-): Promise<{ status: string }> {
-  return api<{ status: string }>(`/tickets/${id}/status`, {
+  version?: number,
+): Promise<{ status: string; version?: number }> {
+  return api<{ status: string; version?: number }>(`/tickets/${id}/status`, {
     token,
     method: 'PATCH',
-    body: JSON.stringify({ status }),
+    body: JSON.stringify({ status, version }),
   });
 }
 
@@ -550,8 +584,10 @@ export async function upsertSLAPolicy(
   priority: string,
   data: Omit<SLAPolicy, 'priority'>,
   token?: string,
+  options: ApiOptions = {},
 ): Promise<SLAPolicy> {
   return api<SLAPolicy>(`/admin/sla/${priority}`, {
+    ...options,
     token,
     method: 'PUT',
     body: JSON.stringify(data),

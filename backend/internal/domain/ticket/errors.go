@@ -3,6 +3,7 @@ package ticket
 import "errors"
 
 var (
+	ErrIdempotencyConflict = errors.New("idempotency key already used for a different payload")
 	// ErrNotFound is returned when a ticket does not exist or does not belong to the tenant.
 	ErrNotFound = errors.New("ticket not found")
 

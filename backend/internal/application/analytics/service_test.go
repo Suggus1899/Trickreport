@@ -11,14 +11,14 @@ import (
 // --- Mocks ---
 
 type mockRepo struct {
-	summary        Summary
-	summaryErr     error
-	volume         []VolumePoint
-	volumeErr      error
-	dist           []StatusDistribution
-	distErr        error
-	resolution     []ResolutionMetrics
-	resolutionErr  error
+	summary       Summary
+	summaryErr    error
+	volume        []VolumePoint
+	volumeErr     error
+	dist          []StatusDistribution
+	distErr       error
+	resolution    []ResolutionMetrics
+	resolutionErr error
 }
 
 func (m *mockRepo) GetSummary(ctx context.Context, tenantID uuid.UUID) (Summary, error) {
@@ -131,7 +131,7 @@ func TestService_GetResolutionTime_Error(t *testing.T) {
 
 func TestService_GetCharts_Success(t *testing.T) {
 	repo := &mockRepo{
-		summary:    Summary{TotalTickets: 10, SLABreached: 3},
+		summary:    Summary{TotalTickets: 10, SLAEligible: 10, SLABreached: 3},
 		volume:     []VolumePoint{{Date: "2025-01-01", Count: 5}},
 		dist:       []StatusDistribution{{Status: "open", Count: 3}},
 		resolution: []ResolutionMetrics{{Priority: "high", AvgHours: 4.5}},

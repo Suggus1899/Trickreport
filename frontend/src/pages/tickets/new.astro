@@ -1,19 +1,14 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { buttonVariants } from '../../components/ui/button';
-import { getMe, createTicket } from '../../lib/api';
+import { createTicket } from '../../lib/api';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
-let me;
-try {
-  me = await getMe(token);
-} catch {
-  return Astro.redirect('/login');
-}
+const me = Astro.locals.user!;
 
 let error = '';
 if (Astro.request.method === 'POST') {

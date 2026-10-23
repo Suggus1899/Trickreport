@@ -25,9 +25,10 @@ const LIMITS = {
 interface Props {
   /** Omitted when creating; present when editing an existing article. */
   article?: Article;
+  role: 'admin' | 'agent';
 }
 
-export function ArticleEditor({ article }: Props) {
+export function ArticleEditor({ article, role }: Props) {
   const isEdit = Boolean(article);
 
   const [title, setTitle] = useState(article?.title ?? '');
@@ -53,7 +54,6 @@ export function ArticleEditor({ article }: Props) {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError('');
-    setSaving(true);
 
     const payload = {
       title: title.trim(),
@@ -66,9 +66,14 @@ export function ArticleEditor({ article }: Props) {
         .filter(Boolean),
       published,
     };
+    if (payload.title.length < LIMITS.titleMin) { setError('Title must contain at least 3 characters.'); return; }
+    if (payload.content.length < LIMITS.contentMin) { setError('Content must contain at least 10 characters.'); return; }
+    setSaving(true);
 
     try {
-      const saved = isEdit ? await updateArticle(article!.id, payload) : await createArticle(payload);
+      const saved = isEdit
+        ? await updateArticle(article!.id, payload)
+        : await createArticle(payload);
       window.location.href = `/articles/${saved.id}`;
     } catch (err) {
       setError(describe(err));
@@ -175,7 +180,7 @@ export function ArticleEditor({ article }: Props) {
       </label>
 
       <div className="flex flex-wrap items-center justify-end gap-3 pt-2 border-t">
-        {isEdit && (
+        {isEdit && role === 'admin' && (
           <Button
             type="button"
             variant="outline"

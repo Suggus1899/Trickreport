@@ -3,7 +3,7 @@ import Layout from '../layouts/Layout.astro';
 import { LoginForm } from '../components/auth/LoginForm';
 import { Ticket } from 'lucide-react';
 
-if (Astro.cookies.has('trickreport_token')) {
+if (Astro.locals.user) {
   return Astro.redirect('/dashboard');
 }
 ---

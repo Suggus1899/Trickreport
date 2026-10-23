@@ -10,20 +10,25 @@ import (
 
 // Ticket is the aggregate root for the ticket domain.
 type Ticket struct {
-	ID          uuid.UUID
-	TenantID    uuid.UUID
-	Title       string
-	Description string
-	Status      Status
-	Priority    Priority
-	Category    string
-	CreatedBy   uuid.UUID
-	AssignedTo  *uuid.UUID
-	SLADeadline *time.Time
-	SLABreached bool
-	Version     int
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
+	ID                  uuid.UUID
+	TenantID            uuid.UUID
+	Title               string
+	Description         string
+	Status              Status
+	Priority            Priority
+	Category            string
+	CreatedBy           uuid.UUID
+	AssignedTo          *uuid.UUID
+	SLADeadline         *time.Time
+	ResponseDeadline    *time.Time
+	EscalationDeadline  *time.Time
+	FirstRespondedAt    *time.Time
+	ResolvedAt          *time.Time
+	ResponseSLABreached bool
+	SLABreached         bool
+	Version             int
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 
 	// Events holds domain events raised by this aggregate. They are cleared
 	// after being published by the application layer.

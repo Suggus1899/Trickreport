@@ -3,152 +3,72 @@ package postgres
 import (
 	"context"
 	"fmt"
-
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/rs/zerolog/log"
-
 	appAuto "github.com/trickreport/backend/internal/application/automation"
+	domainAuto "github.com/trickreport/backend/internal/domain/automation"
+	domainTicket "github.com/trickreport/backend/internal/domain/ticket"
+	"strings"
 )
 
-// AutomationExecutor implements appAuto.TicketExecutor using direct SQL.
-// It is used by the automation engine to execute actions on tickets.
+// AutomationExecutor uses the same transactional ticket mutations as HTTP callers.
 type AutomationExecutor struct {
 	db           *pgxpool.Pool
 	systemUserID uuid.UUID
 }
 
-// NewAutomationExecutor creates a new AutomationExecutor.
 func NewAutomationExecutor(db *pgxpool.Pool) *AutomationExecutor {
-	return &AutomationExecutor{
-		db:           db,
-		systemUserID: uuid.MustParse("00000000-0000-0000-0000-000000000002"),
-	}
+	return &AutomationExecutor{db: db, systemUserID: uuid.MustParse("00000000-0000-0000-0000-000000000002")}
 }
-
-// WithSystemUserID sets the user ID used for system-generated comments and history.
 func (e *AutomationExecutor) WithSystemUserID(id uuid.UUID) *AutomationExecutor {
 	e.systemUserID = id
 	return e
 }
 
-// Compile-time assertion that AutomationExecutor implements appAuto.TicketExecutor.
 var _ appAuto.TicketExecutor = (*AutomationExecutor)(nil)
 
-// GetTicket returns a snapshot of the ticket for condition evaluation.
+func (e *AutomationExecutor) RunInTx(ctx context.Context, fn func(context.Context) error) error {
+	return withTx(ctx, e.db, fn)
+}
 func (e *AutomationExecutor) GetTicket(ctx context.Context, tenantID, ticketID uuid.UUID) (*appAuto.TicketSnapshot, error) {
-	const q = `SELECT id, status, priority, category, title FROM tickets WHERE id = $1 AND tenant_id = $2`
-
-	var s appAuto.TicketSnapshot
-	var id pgtype.UUID
-	if err := e.db.QueryRow(ctx, q, ticketID, tenantID).Scan(&id, &s.Status, &s.Priority, &s.Category, &s.Title); err != nil {
-		return nil, fmt.Errorf("automation_executor.GetTicket: %w", err)
+	t, err := NewTicketRepo(e.db).GetByID(ctx, ticketID, tenantID)
+	if err != nil {
+		return nil, err
 	}
-	s.ID = pgToUUID(id)
-	return &s, nil
+	return &appAuto.TicketSnapshot{ID: t.ID, Status: string(t.Status), Priority: string(t.Priority), Category: t.Category, Title: t.Title}, nil
 }
-
-// SetPriority updates the ticket priority and records a history entry.
 func (e *AutomationExecutor) SetPriority(ctx context.Context, tenantID, ticketID uuid.UUID, priority string) error {
-	tx, err := e.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("automation_executor.SetPriority: begin: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	var oldPriority string
-	if err := tx.QueryRow(ctx, `SELECT priority FROM tickets WHERE id = $1 AND tenant_id = $2`, ticketID, tenantID).Scan(&oldPriority); err != nil {
-		return fmt.Errorf("automation_executor.SetPriority: select: %w", err)
-	}
-
-	if _, err := tx.Exec(ctx, `UPDATE tickets SET priority = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, priority, ticketID, tenantID); err != nil {
-		return fmt.Errorf("automation_executor.SetPriority: update: %w", err)
-	}
-
-	if _, err := tx.Exec(ctx, `INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value) VALUES ($1, $2, 'priority', $3, $4)`, ticketID, e.systemUserID, oldPriority, priority); err != nil {
-		return fmt.Errorf("automation_executor.SetPriority: history: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("automation_executor.SetPriority: commit: %w", err)
-	}
-	return nil
+	return NewTicketRepo(e.db).UpdatePriority(ctx, ticketID, tenantID, e.systemUserID, priority)
 }
-
-// SetStatus updates the ticket status and records a history entry.
-func (e *AutomationExecutor) SetStatus(ctx context.Context, tenantID, ticketID uuid.UUID, status string) error {
-	tx, err := e.db.Begin(ctx)
+func (e *AutomationExecutor) SetStatus(ctx context.Context, tenantID, ticketID uuid.UUID, value string) error {
+	status, err := domainTicket.ParseStatus(value)
 	if err != nil {
-		return fmt.Errorf("automation_executor.SetStatus: begin: %w", err)
+		return domainTicket.ErrValidation
 	}
-	defer tx.Rollback(ctx)
-
-	var oldStatus string
-	if err := tx.QueryRow(ctx, `SELECT status FROM tickets WHERE id = $1 AND tenant_id = $2`, ticketID, tenantID).Scan(&oldStatus); err != nil {
-		return fmt.Errorf("automation_executor.SetStatus: select: %w", err)
-	}
-
-	if _, err := tx.Exec(ctx, `UPDATE tickets SET status = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, status, ticketID, tenantID); err != nil {
-		return fmt.Errorf("automation_executor.SetStatus: update: %w", err)
-	}
-
-	if _, err := tx.Exec(ctx, `INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value) VALUES ($1, $2, 'status', $3, $4)`, ticketID, e.systemUserID, oldStatus, status); err != nil {
-		return fmt.Errorf("automation_executor.SetStatus: history: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("automation_executor.SetStatus: commit: %w", err)
-	}
-	return nil
+	repo := NewTicketRepo(e.db)
+	return withTx(ctx, e.db, func(ctx context.Context) error {
+		var version int
+		if err := repo.conn(ctx).QueryRow(ctx, `SELECT version FROM tickets WHERE id=$1 AND tenant_id=$2 FOR UPDATE`, ticketID, tenantID).Scan(&version); err != nil {
+			return err
+		}
+		_, err := repo.UpdateStatus(ctx, ticketID, tenantID, version, status, e.systemUserID)
+		return err
+	})
 }
-
-// AssignTo assigns the ticket to a user and records a history entry.
 func (e *AutomationExecutor) AssignTo(ctx context.Context, tenantID, ticketID, userID uuid.UUID) error {
-	tx, err := e.db.Begin(ctx)
-	if err != nil {
-		return fmt.Errorf("automation_executor.AssignTo: begin: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	var currentAssignee pgtype.UUID
-	if err := tx.QueryRow(ctx, `SELECT assigned_to FROM tickets WHERE id = $1 AND tenant_id = $2`, ticketID, tenantID).Scan(&currentAssignee); err != nil {
-		return fmt.Errorf("automation_executor.AssignTo: select: %w", err)
-	}
-
-	if _, err := tx.Exec(ctx, `UPDATE tickets SET assigned_to = $1, updated_at = NOW() WHERE id = $2 AND tenant_id = $3`, userID, ticketID, tenantID); err != nil {
-		return fmt.Errorf("automation_executor.AssignTo: update: %w", err)
-	}
-
-	oldVal := ""
-	if currentAssignee.Valid {
-		oldVal = pgToUUID(currentAssignee).String()
-	}
-	if _, err := tx.Exec(ctx, `INSERT INTO ticket_history (ticket_id, user_id, field, old_value, new_value) VALUES ($1, $2, 'assigned_to', $3, $4)`, ticketID, e.systemUserID, oldVal, userID.String()); err != nil {
-		return fmt.Errorf("automation_executor.AssignTo: history: %w", err)
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("automation_executor.AssignTo: commit: %w", err)
-	}
-	return nil
+	return NewTicketRepo(e.db).Assign(ctx, ticketID, tenantID, userID, e.systemUserID)
 }
-
-// AddComment adds an internal comment to the ticket.
 func (e *AutomationExecutor) AddComment(ctx context.Context, tenantID, ticketID uuid.UUID, content string, isInternal bool) error {
-	const q = `INSERT INTO ticket_comments (ticket_id, user_id, content, is_internal) VALUES ($1, $2, $3, $4)`
-	if _, err := e.db.Exec(ctx, q, ticketID, e.systemUserID, content, isInternal); err != nil {
-		return fmt.Errorf("automation_executor.AddComment: %w", err)
+	if strings.TrimSpace(content) == "" {
+		return domainTicket.ErrValidation
 	}
-	return nil
+	return withTx(ctx, e.db, func(ctx context.Context) error {
+		if _, err := NewTicketRepo(e.db).GetByID(ctx, ticketID, tenantID); err != nil {
+			return err
+		}
+		return NewCommentRepo(e.db).Create(ctx, &domainTicket.Comment{TicketID: ticketID, UserID: e.systemUserID, Content: content, IsInternal: isInternal})
+	})
 }
-
-// AddTag adds a tag to the ticket. The tickets table does not currently have a
-// tags column, so this is a no-op that logs a warning.
 func (e *AutomationExecutor) AddTag(ctx context.Context, tenantID, ticketID uuid.UUID, tag string) error {
-	log.Warn().
-		Str("ticket_id", ticketID.String()).
-		Str("tag", tag).
-		Msg("automation_executor.AddTag: tickets table has no tags column, skipping")
-	return nil
+	return fmt.Errorf("%w: add_tag is not supported", domainAuto.ErrValidation)
 }

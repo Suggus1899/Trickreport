@@ -1,0 +1,4 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+@import "@trickreport/workspace/styles.css";
+@source "../../../packages/workspace/src";

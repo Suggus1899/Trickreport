@@ -14,18 +14,20 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const STATUS_ORDER = ['open', 'in_progress', 'waiting_client', 'resolved', 'closed'];
 
 function dayKey(iso: string): string {
-  return iso.slice(0, 10);
+  return new Date(iso).toISOString().slice(0, 10);
 }
 
 /** Daily count of tickets created within the trailing `days` days, oldest first. */
-export function dailyVolume(tickets: Ticket[], days: number): DailyPoint[] {
+export function dailyVolume(tickets: Ticket[], days: number, field: 'created_at' | 'resolved_at' = 'created_at'): DailyPoint[] {
   const buckets = new Map<string, number>();
   const now = Date.now();
   for (let i = days - 1; i >= 0; i--) {
     buckets.set(dayKey(new Date(now - i * DAY_MS).toISOString()), 0);
   }
   for (const t of tickets) {
-    const key = dayKey(t.created_at);
+    const date = t[field];
+    if (!date || Number.isNaN(Date.parse(date))) continue;
+    const key = dayKey(date);
     if (buckets.has(key)) buckets.set(key, (buckets.get(key) ?? 0) + 1);
   }
   return [...buckets.entries()].map(([date, count]) => ({ date, count }));
@@ -41,11 +43,11 @@ export function statusDistribution(tickets: Ticket[]): StatusSlice[] {
 }
 
 /** % change between the two halves of a daily series (e.g. this week vs last week). */
-export function weekOverWeekDelta(points: DailyPoint[]): number {
+export function weekOverWeekDelta(points: DailyPoint[]): number | null {
   const half = Math.floor(points.length / 2);
   const prev = points.slice(0, half).reduce((s, p) => s + p.count, 0);
   const curr = points.slice(half).reduce((s, p) => s + p.count, 0);
-  if (prev === 0) return curr > 0 ? 100 : 0;
+  if (prev === 0) return null;
   return Math.round(((curr - prev) / prev) * 100);
 }
 

@@ -44,6 +44,9 @@ func (s *Service) Upsert(ctx context.Context, input UpsertInput) (*sla.Policy, e
 	default:
 		return nil, sla.ErrInvalidPriority
 	}
+	if input.ResponseTimeMinutes <= 0 || input.ResponseTimeMinutes > 525600 || input.ResolutionTimeMinutes <= 0 || input.ResolutionTimeMinutes > 525600 || input.EscalationMinutes < 0 || input.EscalationMinutes > 525600 {
+		return nil, sla.ErrValidation
+	}
 
 	p := &sla.Policy{
 		TenantID:              input.TenantID,

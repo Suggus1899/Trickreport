@@ -20,8 +20,8 @@ export function RegisterForm() {
       setError('Passwords do not match');
       return;
     }
-    if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+    if (password.length < 12) {
+      setError('Password must be at least 12 characters');
       return;
     }
 
@@ -59,12 +59,13 @@ export function RegisterForm() {
         <Input
           id="password"
           type="password"
-          placeholder="At least 6 characters"
+          placeholder="At least 12 characters"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          minLength={12}
         />
-        <p className="text-xs text-muted-foreground">Minimum 6 characters</p>
+        <p className="text-xs text-muted-foreground">At least 12 characters, with uppercase, lowercase, a number and a symbol.</p>
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="confirm">Confirm password</Label>

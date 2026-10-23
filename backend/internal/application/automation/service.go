@@ -27,7 +27,18 @@ func NewService(repo Repository) *Service {
 
 // List returns all automation rules for the tenant.
 func (s *Service) List(ctx context.Context, tenantID uuid.UUID) ([]automation.Rule, error) {
-	return s.repo.List(ctx, tenantID)
+	rules, err := s.repo.List(ctx, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range rules {
+		canonical, err := automation.NormalizeConditions(rules[i].Conditions)
+		if err != nil {
+			return nil, err
+		}
+		rules[i].Conditions = canonical
+	}
+	return rules, nil
 }
 
 // CreateInput holds the data for creating a new automation rule.
@@ -43,8 +54,9 @@ type CreateInput struct {
 
 // Create creates a new automation rule.
 func (s *Service) Create(ctx context.Context, input CreateInput) (*automation.Rule, error) {
-	if input.Name == "" || input.TriggerType == "" {
-		return nil, automation.ErrValidation
+	conditions, err := automation.ValidateRule(input.Name, input.TriggerType, input.Conditions, input.Actions)
+	if err != nil {
+		return nil, err
 	}
 
 	r := &automation.Rule{
@@ -52,7 +64,7 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*automation.Ru
 		Name:        input.Name,
 		Description: input.Description,
 		TriggerType: input.TriggerType,
-		Conditions:  input.Conditions,
+		Conditions:  conditions,
 		Actions:     input.Actions,
 		IsActive:    input.IsActive,
 	}
@@ -77,8 +89,9 @@ type UpdateInput struct {
 
 // Update modifies an existing automation rule.
 func (s *Service) Update(ctx context.Context, input UpdateInput) (*automation.Rule, error) {
-	if input.Name == "" || input.TriggerType == "" {
-		return nil, automation.ErrValidation
+	conditions, err := automation.ValidateRule(input.Name, input.TriggerType, input.Conditions, input.Actions)
+	if err != nil {
+		return nil, err
 	}
 
 	r := &automation.Rule{
@@ -87,7 +100,7 @@ func (s *Service) Update(ctx context.Context, input UpdateInput) (*automation.Ru
 		Name:        input.Name,
 		Description: input.Description,
 		TriggerType: input.TriggerType,
-		Conditions:  input.Conditions,
+		Conditions:  conditions,
 		Actions:     input.Actions,
 		IsActive:    input.IsActive,
 	}

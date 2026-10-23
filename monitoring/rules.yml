@@ -1,35 +1,41 @@
-# Prometheus alerting rules for Trickreport.
-#
-# These rules fire when the backend is unreachable or reports a high error rate
-# via its /metrics endpoint.
-
 groups:
   - name: trickreport-service
     rules:
-      # Fires when no successful scrape of the backend has occurred for ~1 minute.
       - alert: TrickreportBackendDown
-        expr: up{job="trickreport-backend"} == 0
+        expr: up{job="trickreport-backend"} == 0 or absent(up{job="trickreport-backend"})
         for: 1m
         labels:
           severity: critical
           service: backend
         annotations:
-          summary: "Trickreport backend is down"
-          description: "Prometheus has been unable to scrape the backend /metrics endpoint for {{ $labels.instance }} for more than 1 minute."
-
-      # Fires when the backend reports an elevated HTTP error rate (5xx).
-      # Requires the backend to expose a metric such as
-      # `http_requests_total{status=~"5.."}` or equivalent.
+          summary: Trickreport backend is down
+          description: The backend metrics scrape has failed or disappeared for more than one minute.
       - alert: TrickreportHighErrorRate
         expr: |
           sum(rate(http_requests_total{job="trickreport-backend",status=~"5.."}[5m]))
-            /
-          sum(rate(http_requests_total{job="trickreport-backend"}[5m]))
-          > 0.05
+          / clamp_min(sum(rate(http_requests_total{job="trickreport-backend"}[5m])), 0.001) > 0.05
         for: 5m
         labels:
           severity: warning
           service: backend
         annotations:
-          summary: "High error rate on Trickreport backend"
-          description: "More than 5% of requests to the backend returned 5xx errors over the last 5 minutes."
+          summary: High error rate on Trickreport backend
+          description: More than 5% of requests returned 5xx responses for five minutes.
+      - alert: TrickreportWorkerStale
+        expr: time() - worker_last_success_timestamp_seconds{job="trickreport-backend"} > 180
+        for: 2m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: Trickreport worker stopped progressing
+          description: A worker has not completed a successful poll for more than three minutes.
+      - alert: TrickreportOutboxFailed
+        expr: outbox_failed_total{job="trickreport-backend"} > 0
+        for: 5m
+        labels:
+          severity: warning
+          service: backend
+        annotations:
+          summary: Email outbox has failed messages
+          description: Inspect failed email jobs and SMTP configuration before retrying.

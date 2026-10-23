@@ -42,8 +42,8 @@ var ErrInvalidMFACode = errors.New("invalid mfa code")
 
 // SetupResult holds the data for MFA setup.
 type SetupResult struct {
-	Secret  string
-	QRURL   string
+	Secret string
+	QRURL  string
 }
 
 // Setup generates a new TOTP secret for the user and stores it (not yet enabled).
@@ -107,7 +107,14 @@ func (s *MFAService) Enable(ctx context.Context, userID uuid.UUID, secret, code 
 		return errors.New("mfa repository not configured")
 	}
 
-	if !validateTOTP(secret, code) {
+	stored, enabled, err := s.repo.GetMFASecret(ctx, userID)
+	if err != nil {
+		return err
+	}
+	if enabled {
+		return ErrMFAAlreadyEnabled
+	}
+	if stored == "" || secret != stored || !validateTOTP(stored, code) {
 		return ErrInvalidMFACode
 	}
 

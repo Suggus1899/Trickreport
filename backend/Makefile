@@ -10,21 +10,20 @@ all: build
 
 ## run: run the API in development mode
 run:
-	go run $(CMD_PATH)/main.go
+	go run $(CMD_PATH)
 
 ## build: compile the binary
 build:
 	@mkdir -p $(BUILD_DIR)
-	go build -o $(BUILD_DIR)/$(BINARY) $(CMD_PATH)/main.go
+	go build -o $(BUILD_DIR)/$(BINARY) $(CMD_PATH)
 	@echo "Built $(BUILD_DIR)/$(BINARY)"
 
 ## test: run all tests
 test:
 	go test ./... -v -race
 
-## migrate: apply database migrations (runs the API, which applies them on startup)
-migrate:
-	go run $(CMD_PATH)/main.go
+## migrate: apply database migrations and exit
+migrate: migrate-up
 
 ## clean: remove build artifacts
 clean:
@@ -69,7 +68,8 @@ generate:
 
 ## install-tools: install developer tooling (swag, golangci-lint, etc.)
 install-tools:
-	go install github.com/swaggo/swag/cmd/swag@latest
+	go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.15.0
+	go install golang.org/x/vuln/cmd/govulncheck@v1.9.0
 
 ## security: run govulncheck across the module
 security:

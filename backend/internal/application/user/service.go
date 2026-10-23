@@ -2,6 +2,7 @@ package user
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/google/uuid"
 	"github.com/trickreport/backend/internal/domain/user"
@@ -77,6 +78,9 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*user.User, er
 
 	var passwordHash string
 	if input.Password != "" {
+		if err := user.ValidatePasswordComplexity(input.Password); err != nil {
+			return nil, fmt.Errorf("%w: %v", user.ErrValidation, err)
+		}
 		hash, err := s.hasher.Hash(input.Password)
 		if err != nil {
 			return nil, err
@@ -100,6 +104,11 @@ func (s *Service) Create(ctx context.Context, input CreateInput) (*user.User, er
 
 // Update partially updates a user.
 func (s *Service) Update(ctx context.Context, id, tenantID uuid.UUID, fields UpdateFields) (*user.User, error) {
+	if fields.Role != nil {
+		if _, err := user.ParseRole(*fields.Role); err != nil {
+			return nil, user.ErrValidation
+		}
+	}
 	return s.repo.Update(ctx, id, tenantID, fields)
 }
 

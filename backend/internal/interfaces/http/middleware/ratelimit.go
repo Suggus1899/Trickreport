@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"context"
 	"net"
 	"net/http"
 	"sync"
@@ -8,8 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"golang.org/x/time/rate"
 	"github.com/trickreport/backend/internal/interfaces/http/response"
+	"golang.org/x/time/rate"
 )
 
 // rateLimitConfig holds a token bucket limiter and the last time it was used.
@@ -84,9 +85,9 @@ func (s *memoryStore) Cleanup(maxAge time.Duration) {
 // RateLimiter is a per-client rate limiter. It uses an in-memory store by
 // default and can be configured with a Redis store for distributed deployments.
 type RateLimiter struct {
-	rate  rate.Limit
-	burst int
-	store Store
+	rate   rate.Limit
+	burst  int
+	store  Store
 	maxAge time.Duration
 }
 
@@ -110,22 +111,22 @@ func NewRateLimiterWithStore(r rate.Limit, burst int, maxAge time.Duration, stor
 	}
 }
 
-func (rl *RateLimiter) cleanup() {
+func (rl *RateLimiter) cleanup(ctx context.Context) {
 	ticker := time.NewTicker(rl.maxAge / 2)
 	defer ticker.Stop()
-	for range ticker.C {
-		rl.store.Cleanup(rl.maxAge)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			rl.store.Cleanup(rl.maxAge)
+		}
 	}
 }
 
-// clientIP returns the client IP from the request, preferring X-Forwarded-For.
+// clientIP uses the connected peer because forwarded headers are untrusted.
+// shortcut: proxies share a bucket; configure explicit proxy trust before requiring per-client limits.
 func clientIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Forwarded-For"); ip != "" {
-		if host, _, err := net.SplitHostPort(ip); err == nil {
-			return host
-		}
-		return ip
-	}
 	host, _, _ := net.SplitHostPort(r.RemoteAddr)
 	if host != "" {
 		return host
@@ -181,8 +182,13 @@ func (rl *RateLimiter) LimitByAccount(next http.Handler) http.Handler {
 }
 
 // Start initializes the background cleanup goroutine.
-func (rl *RateLimiter) Start() {
-	go rl.cleanup()
+func (rl *RateLimiter) Start(ctx context.Context) <-chan struct{} {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		rl.cleanup(ctx)
+	}()
+	return done
 }
 
 // accountKeyCtxKey is the context key for the per-account rate limit key.

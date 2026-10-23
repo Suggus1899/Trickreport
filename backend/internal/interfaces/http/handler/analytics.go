@@ -18,8 +18,10 @@ func NewAnalyticsHandler(svc *appAnalytics.Service) *AnalyticsHandler {
 
 func (h *AnalyticsHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
+	claims, _ := middleware.ClaimsFromContext(r.Context())
+	ctx := appAnalytics.WithViewer(r.Context(), claims.Role, claims.UserID)
 
-	summary, err := h.svc.GetSummary(r.Context(), tenantID)
+	summary, err := h.svc.GetSummary(ctx, tenantID)
 	if err != nil {
 		middleware.LoggerFromContext(r.Context()).Error().Err(err).Str("tenant_id", tenantID.String()).Msg("analytics summary failed")
 		response.Error(w, http.StatusInternalServerError, "failed to get metrics")
@@ -31,8 +33,10 @@ func (h *AnalyticsHandler) GetSummary(w http.ResponseWriter, r *http.Request) {
 
 func (h *AnalyticsHandler) GetVolume(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
+	claims, _ := middleware.ClaimsFromContext(r.Context())
+	ctx := appAnalytics.WithViewer(r.Context(), claims.Role, claims.UserID)
 
-	volume, err := h.svc.GetVolume(r.Context(), tenantID)
+	volume, err := h.svc.GetVolume(ctx, tenantID)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to get volume")
 		return
@@ -43,8 +47,10 @@ func (h *AnalyticsHandler) GetVolume(w http.ResponseWriter, r *http.Request) {
 
 func (h *AnalyticsHandler) GetStatusDistribution(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
+	claims, _ := middleware.ClaimsFromContext(r.Context())
+	ctx := appAnalytics.WithViewer(r.Context(), claims.Role, claims.UserID)
 
-	dist, err := h.svc.GetStatusDistribution(r.Context(), tenantID)
+	dist, err := h.svc.GetStatusDistribution(ctx, tenantID)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to get status distribution")
 		return
@@ -55,8 +61,10 @@ func (h *AnalyticsHandler) GetStatusDistribution(w http.ResponseWriter, r *http.
 
 func (h *AnalyticsHandler) GetResolutionTime(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
+	claims, _ := middleware.ClaimsFromContext(r.Context())
+	ctx := appAnalytics.WithViewer(r.Context(), claims.Role, claims.UserID)
 
-	metrics, err := h.svc.GetResolutionTime(r.Context(), tenantID)
+	metrics, err := h.svc.GetResolutionTime(ctx, tenantID)
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to get resolution time")
 		return
@@ -69,8 +77,10 @@ func (h *AnalyticsHandler) GetResolutionTime(w http.ResponseWriter, r *http.Requ
 // for frontend rendering.
 func (h *AnalyticsHandler) GetCharts(w http.ResponseWriter, r *http.Request) {
 	tenantID := middleware.TenantFromContext(r.Context())
+	claims, _ := middleware.ClaimsFromContext(r.Context())
+	ctx := appAnalytics.WithViewer(r.Context(), claims.Role, claims.UserID)
 
-	data, err := h.svc.GetCharts(r.Context(), tenantID)
+	data, err := h.svc.GetCharts(ctx, tenantID)
 	if err != nil {
 		middleware.LoggerFromContext(r.Context()).Error().Err(err).Str("tenant_id", tenantID.String()).Msg("analytics charts failed")
 		response.Error(w, http.StatusInternalServerError, "failed to get chart data")

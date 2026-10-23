@@ -3,8 +3,11 @@ package handler
 import (
 	"errors"
 	"io"
+	"mime"
 	"net/http"
+	"path"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -68,11 +71,17 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Limit request body size.
-	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
+	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize+(1<<20))
 	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
-		response.Error(w, http.StatusBadRequest, "file too large or invalid multipart form")
+		var limit *http.MaxBytesError
+		if errors.As(err, &limit) {
+			response.Error(w, http.StatusRequestEntityTooLarge, "upload exceeds request limit")
+			return
+		}
+		response.Error(w, http.StatusBadRequest, "invalid multipart form")
 		return
 	}
+	defer r.MultipartForm.RemoveAll()
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -81,7 +90,7 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 
-	data, err := io.ReadAll(file)
+	data, err := io.ReadAll(io.LimitReader(file, MaxUploadSize+1))
 	if err != nil {
 		response.Error(w, http.StatusInternalServerError, "failed to read uploaded file")
 		return
@@ -194,8 +203,23 @@ func (h *AttachmentHandler) Download(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", att.ContentType)
-	w.Header().Set("Content-Disposition", "attachment; filename=\""+att.Filename+"\"")
+	contentType, _, err := mime.ParseMediaType(att.ContentType)
+	if err != nil {
+		contentType = "application/octet-stream"
+	}
+	w.Header().Set("Content-Type", contentType)
+	filename := path.Base(strings.ReplaceAll(att.Filename, "\\", "/"))
+	filename = strings.Map(func(r rune) rune {
+		if r < 32 || r == 127 {
+			return '_'
+		}
+		return r
+	}, filename)
+	if filename == "." || filename == "/" || filename == "" {
+		filename = "download"
+	}
+	w.Header().Set("Content-Disposition", mime.FormatMediaType("attachment", map[string]string{"filename": filename}))
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)

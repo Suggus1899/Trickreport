@@ -33,32 +33,32 @@ func TestAllowedOrigins_Empty(t *testing.T) {
 }
 
 func TestAllowedOrigins_Single(t *testing.T) {
-	c := &Config{CORSOrigins: "http://localhost:4321"}
+	c := &Config{CORSOrigins: "http://localhost:3000"}
 	got := c.AllowedOrigins()
-	if len(got) != 1 || got[0] != "http://localhost:4321" {
+	if len(got) != 1 || got[0] != "http://localhost:3000" {
 		t.Errorf("got %v", got)
 	}
 }
 
 func TestAllowedOrigins_Multiple(t *testing.T) {
-	c := &Config{CORSOrigins: "http://localhost:4321, https://app.example.com , http://localhost:3000"}
+	c := &Config{CORSOrigins: "http://localhost:3000, https://app.example.com , http://localhost:3001"}
 	got := c.AllowedOrigins()
 	if len(got) != 3 {
 		t.Fatalf("got %d origins, want 3", len(got))
 	}
-	if got[0] != "http://localhost:4321" {
+	if got[0] != "http://localhost:3000" {
 		t.Errorf("got[0] = %q", got[0])
 	}
 	if got[1] != "https://app.example.com" {
 		t.Errorf("got[1] = %q", got[1])
 	}
-	if got[2] != "http://localhost:3000" {
+	if got[2] != "http://localhost:3001" {
 		t.Errorf("got[2] = %q", got[2])
 	}
 }
 
 func TestAllowedOrigins_WithEmptyParts(t *testing.T) {
-	c := &Config{CORSOrigins: "http://localhost:4321, , , https://app.example.com"}
+	c := &Config{CORSOrigins: "http://localhost:3000, , , https://app.example.com"}
 	got := c.AllowedOrigins()
 	if len(got) != 2 {
 		t.Fatalf("got %d origins, want 2 (empty parts should be skipped)", len(got))

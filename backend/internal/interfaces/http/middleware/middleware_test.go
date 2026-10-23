@@ -43,6 +43,10 @@ func (m *mockTokenGen) Validate(token string) (*auth.Claims, error) {
 	return m.claims, m.err
 }
 
+func (m *mockTokenGen) AuthenticateAccess(ctx context.Context, token string) (*auth.Claims, error) {
+	return m.Validate(token)
+}
+
 // nextHandler returns a handler that sets a flag and writes 200.
 func nextHandler(called *bool) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

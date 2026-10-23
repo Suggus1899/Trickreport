@@ -78,17 +78,19 @@ func TestMemoryStore_Cleanup(t *testing.T) {
 
 func TestClientIP_XForwardedFor(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "198.51.100.7:4000"
 	req.Header.Set("X-Forwarded-For", "203.0.113.5:1234")
-	if got := clientIP(req); got != "203.0.113.5" {
-		t.Errorf("clientIP = %q, want 203.0.113.5", got)
+	if got := clientIP(req); got != "198.51.100.7" {
+		t.Errorf("clientIP = %q, want connected peer 198.51.100.7", got)
 	}
 }
 
 func TestClientIP_XForwardedForNoPort(t *testing.T) {
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.RemoteAddr = "198.51.100.7:4000"
 	req.Header.Set("X-Forwarded-For", "203.0.113.5")
-	if got := clientIP(req); got != "203.0.113.5" {
-		t.Errorf("clientIP = %q, want 203.0.113.5", got)
+	if got := clientIP(req); got != "198.51.100.7" {
+		t.Errorf("clientIP = %q, want connected peer 198.51.100.7", got)
 	}
 }
 
@@ -322,13 +324,15 @@ func TestRateLimiter_UsesCustomStore(t *testing.T) {
 // --- Start tests ---
 
 func TestRateLimiter_Start(t *testing.T) {
-	// Just verify Start doesn't block and launches goroutine.
-	// Use a short maxAge so cleanup ticker fires quickly.
+	ctx, cancel := context.WithCancel(context.Background())
 	rl := NewRateLimiter(rate.Limit(10), 5, 10*time.Millisecond)
-	rl.Start()
-	// Give the goroutine time to run a few ticks.
-	time.Sleep(30 * time.Millisecond)
-	// No assertion needed — just ensure no panic/block.
+	done := rl.Start(ctx)
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("rate limiter cleanup did not stop")
+	}
 }
 
 // --- Concurrency test ---

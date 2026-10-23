@@ -2,6 +2,9 @@ package ticket
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/google/uuid"
@@ -36,11 +39,17 @@ type SLAPolicyFetcher interface {
 // Filter holds query parameters for listing tickets.
 type Filter struct {
 	Status     string
+	Category   string
 	Priority   string
 	AssignedTo string
 	Search     string
 	Limit      int
 	Offset     int
+}
+
+// IdempotentCreator reserves a logical create and persists its result atomically.
+type IdempotentCreator interface {
+	CreateIdempotent(ctx context.Context, t *domainTicket.Ticket, key uuid.UUID, digest []byte) (bool, error)
 }
 
 // Repository is the port for ticket persistence.
@@ -183,12 +192,13 @@ func (s *UserService) Get(ctx context.Context, id, tenantID uuid.UUID, role stri
 
 // CreateInput holds the data for creating a new ticket.
 type CreateInput struct {
-	TenantID    uuid.UUID
-	Title       string
-	Description string
-	Priority    string
-	Category    string
-	CreatedBy   uuid.UUID
+	TenantID       uuid.UUID
+	Title          string
+	Description    string
+	Priority       string
+	Category       string
+	CreatedBy      uuid.UUID
+	IdempotencyKey uuid.UUID
 }
 
 // Create creates a new ticket and broadcasts a real-time event.
@@ -225,26 +235,50 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 
 	// Fetch the SLA policy (read, outside the transaction) to calculate the
 	// resolution deadline.
-	var slaDeadline *time.Time
 	if s.slaFetcher != nil {
 		policy, err := s.slaFetcher.GetByPriority(ctx, input.TenantID, string(priority))
-		if err == nil && policy != nil && policy.ResolutionTimeMinutes > 0 {
-			d := t.CreatedAt.Add(time.Duration(policy.ResolutionTimeMinutes) * time.Minute)
-			slaDeadline = &d
+		if err != nil && !errors.Is(err, domainSLA.ErrNotFound) {
+			return nil, err
+		}
+		if policy != nil {
+			if policy.ResponseTimeMinutes <= 0 || policy.ResolutionTimeMinutes <= 0 || policy.EscalationMinutes < 0 {
+				return nil, domainTicket.ErrValidation
+			}
+			deadline := t.CreatedAt.Add(time.Duration(policy.ResolutionTimeMinutes) * time.Minute)
+			responseDeadline := t.CreatedAt.Add(time.Duration(policy.ResponseTimeMinutes) * time.Minute)
+			t.SLADeadline, t.ResponseDeadline = &deadline, &responseDeadline
+			if policy.EscalationMinutes > 0 {
+				d := t.CreatedAt.Add(time.Duration(policy.EscalationMinutes) * time.Minute)
+				t.EscalationDeadline = &d
+			}
 		}
 	}
 
 	// Persist the ticket (and SLA deadline) inside a transaction.
+	created := true
 	persist := func(ctx context.Context) error {
-		if err := s.repo.Create(ctx, t); err != nil {
-			return err
-		}
-		if slaDeadline != nil {
-			if err := s.repo.SetSLADeadline(ctx, t.ID, input.TenantID, *slaDeadline); err != nil {
+		if input.IdempotencyKey != uuid.Nil {
+			repo, ok := s.repo.(IdempotentCreator)
+			if !ok {
+				return errors.New("ticket repository does not support idempotency")
+			}
+			payload, _ := json.Marshal([]string{input.Title, input.Description, input.Priority, input.Category})
+			digest := sha256.Sum256(payload)
+			var err error
+			created, err = repo.CreateIdempotent(ctx, t, input.IdempotencyKey, digest[:])
+			if err != nil {
 				return err
 			}
+		} else if err := s.repo.Create(ctx, t); err != nil {
+			return err
 		}
-		return nil
+		if !created {
+			return nil
+		}
+		if err := s.createNotificationSafe(ctx, input.TenantID, input.CreatedBy, "Ticket created: "+t.Title, "Your ticket has been created successfully.", "ticket_created", &t.ID, "ticket"); err != nil {
+			return err
+		}
+		return s.notifyByEmailSafe(ctx, input.TenantID, input.CreatedBy, "ticket_created", t.ID.String(), t.Title, t.Description, string(t.Priority), string(t.Status))
 	}
 
 	if s.tx != nil {
@@ -257,21 +291,13 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 		}
 	}
 
-	if slaDeadline != nil {
-		t.SLADeadline = slaDeadline
+	if !created {
+		return t, nil
 	}
 
 	if s.hub != nil {
 		s.hub.BroadcastEvent(input.TenantID, "TICKET_CREATED", t)
 	}
-
-	// Create a persistent notification for the ticket creator.
-	if s.notifSvc != nil {
-		title := "Ticket created: " + t.Title
-		body := "Your ticket has been created successfully."
-		s.createNotificationSafe(context.Background(), input.TenantID, input.CreatedBy, title, body, "ticket_created", &t.ID, "ticket")
-	}
-	s.notifyByEmailSafe(context.Background(), input.TenantID, input.CreatedBy, "ticket_created", t.ID.String(), t.Title, t.Description, string(t.Priority), string(t.Status))
 
 	// Fire automation rules for ticket creation.
 	s.evaluateAutomation(input.TenantID, appAuto.Event{
@@ -286,7 +312,7 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 }
 
 // ChangeStatus transitions a ticket to a new status with authorization checks.
-func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uuid.UUID, role, newStatus string) error {
+func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uuid.UUID, role, newStatus string, expectedVersion ...int) error {
 	status, err := domainTicket.ParseStatus(newStatus)
 	if err != nil {
 		return domainTicket.ErrValidation
@@ -303,6 +329,12 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uui
 
 	oldStatus := string(t.Status)
 	version := t.Version
+	if len(expectedVersion) > 0 && expectedVersion[0] != version {
+		return domainTicket.ErrConcurrentModification
+	}
+	if t.Status == status {
+		return nil
+	}
 
 	if err := t.ChangeStatus(status); err != nil {
 		return err
@@ -311,7 +343,16 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uui
 	// Persist the status update (and history insertion) inside a transaction.
 	persist := func(ctx context.Context) error {
 		_, err := s.repo.UpdateStatus(ctx, id, tenantID, version, status, userID)
-		return err
+		if err != nil {
+			return err
+		}
+		if t.CreatedBy == userID {
+			return nil
+		}
+		if err := s.createNotificationSafe(ctx, tenantID, t.CreatedBy, "Ticket updated: status changed to "+string(status), "The status of your ticket has been updated.", "ticket_updated", &id, "ticket"); err != nil {
+			return err
+		}
+		return s.notifyByEmailSafe(ctx, tenantID, t.CreatedBy, "ticket_updated", id.String(), t.Title, t.Description, string(t.Priority), string(t.Status))
 	}
 
 	if s.tx != nil {
@@ -329,16 +370,6 @@ func (s *UserService) ChangeStatus(ctx context.Context, id, tenantID, userID uui
 			"ticket_id": id,
 			"status":    string(status),
 		})
-	}
-
-	// Notify the ticket creator about the status change (if they're not the one changing it).
-	if creatorID, err := s.repo.GetCreator(ctx, id, tenantID); err == nil && creatorID != userID {
-		if s.notifSvc != nil {
-			title := "Ticket updated: status changed to " + string(status)
-			body := "The status of your ticket has been updated."
-			s.createNotificationSafe(context.Background(), tenantID, creatorID, title, body, "ticket_updated", &id, "ticket")
-		}
-		s.notifyByEmailSafe(context.Background(), tenantID, creatorID, "ticket_updated", id.String(), t.Title, t.Description, string(t.Priority), string(t.Status))
 	}
 
 	// Fire automation rules for status changes.
@@ -410,26 +441,29 @@ func (s *UserService) AddComment(ctx context.Context, input AddCommentInput) (*d
 		CreatedAt:  time.Now(),
 	}
 
-	if err := s.comments.Create(ctx, c); err != nil {
+	persist := func(ctx context.Context) error {
+		if err := s.comments.Create(ctx, c); err != nil {
+			return err
+		}
+		if input.IsInternal || t.CreatedBy == input.UserID {
+			return nil
+		}
+		if err := s.createNotificationSafe(ctx, input.TenantID, t.CreatedBy, "New comment on your ticket", "Someone commented on your ticket.", "new_comment", &input.TicketID, "ticket"); err != nil {
+			return err
+		}
+		return s.notifyByEmailSafe(ctx, input.TenantID, t.CreatedBy, "ticket_updated", input.TicketID.String(), t.Title, input.Content, string(t.Priority), string(t.Status))
+	}
+	if s.tx != nil {
+		err = s.tx.RunInTx(ctx, persist)
+	} else {
+		err = persist(ctx)
+	}
+	if err != nil {
 		return nil, err
 	}
 
 	if s.hub != nil {
 		s.hub.BroadcastEvent(input.TenantID, "NEW_COMMENT", c)
-	}
-
-	// Notify the ticket creator about the new comment (if they're not the commenter).
-	if creatorID, err := s.repo.GetCreator(ctx, input.TicketID, input.TenantID); err == nil && creatorID != input.UserID {
-		if s.notifSvc != nil {
-			title := "New comment on your ticket"
-			body := "Someone commented on your ticket."
-			s.createNotificationSafe(context.Background(), input.TenantID, creatorID, title, body, "new_comment", &input.TicketID, "ticket")
-		}
-		// Internal notes are agent/admin-only — never email them to the
-		// creator, who is typically the customer.
-		if !input.IsInternal {
-			s.notifyByEmailSafe(context.Background(), input.TenantID, creatorID, "ticket_updated", input.TicketID.String(), t.Title, input.Content, string(t.Priority), string(t.Status))
-		}
 	}
 
 	return c, nil
@@ -450,36 +484,37 @@ func (s *UserService) ListHistory(ctx context.Context, ticketID, tenantID uuid.U
 
 // createNotificationSafe creates a notification and broadcasts it via WebSocket.
 // Errors are silently ignored to avoid failing the main operation.
-func (s *UserService) createNotificationSafe(ctx context.Context, tenantID, userID uuid.UUID, title, body, notifType string, refID *uuid.UUID, refType string) {
+func (s *UserService) createNotificationSafe(ctx context.Context, tenantID, userID uuid.UUID, title, body, notifType string, refID *uuid.UUID, refType string) error {
 	if s.notifSvc == nil {
-		return
+		return nil
 	}
-	n, err := s.notifSvc.CreateForUser(ctx, tenantID, userID, title, body, notifType, refID, refType)
-	if err != nil {
-		return
-	}
-	// Broadcast the notification in real-time via WebSocket.
-	if s.hub != nil {
-		s.hub.BroadcastEvent(tenantID, "NOTIFICATION", n)
-	}
+	_, err := s.notifSvc.CreateForUser(ctx, tenantID, userID, title, body, notifType, refID, refType)
+	// Ticket events are emitted after commit and refresh the recipient's notifications.
+	return err
 }
 
 // notifyByEmailSafe renders and sends a ticket-event email. Best-effort, same
 // as createNotificationSafe: a missing dependency or a failed lookup/send
 // never fails the calling operation, it just means no email goes out.
-func (s *UserService) notifyByEmailSafe(ctx context.Context, tenantID, userID uuid.UUID, templateName, ticketID, title, description, priority, status string) {
+func (s *UserService) notifyByEmailSafe(ctx context.Context, tenantID, userID uuid.UUID, templateName, ticketID, title, description, priority, status string) error {
 	if s.email == nil || s.emailFetcher == nil || s.emailRenderer == nil {
-		return
+		return nil
 	}
-	go func() {
-		to, err := s.emailFetcher.GetEmail(ctx, tenantID, userID)
-		if err != nil || to == "" {
-			return
-		}
-		body, err := s.emailRenderer.RenderTicketEmail(templateName, ticketID, title, description, priority, status)
-		if err != nil {
-			return
-		}
-		_ = s.email.Send(to, "Trickreport: "+title, body)
-	}()
+	to, err := s.emailFetcher.GetEmail(ctx, tenantID, userID)
+	if err != nil {
+		return err
+	}
+	if to == "" {
+		return nil
+	}
+	body, err := s.emailRenderer.RenderTicketEmail(templateName, ticketID, title, description, priority, status)
+	if err != nil {
+		return err
+	}
+	if sender, ok := s.email.(interface {
+		SendContext(context.Context, string, string, string) error
+	}); ok {
+		return sender.SendContext(ctx, to, "Trickreport: "+title, body)
+	}
+	return s.email.Send(to, "Trickreport: "+title, body)
 }

@@ -1,19 +1,19 @@
 ---
 import Layout from '../../../layouts/Layout.astro';
 import { ArticleEditor } from '../../../components/articles/ArticleEditor';
-import { getMe, getArticle, ApiAuthError } from '../../../lib/api';
+import { getArticle, ApiAuthError } from '../../../lib/api';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
 const { id } = Astro.params;
 
-let user;
+const user = Astro.locals.user!;
 let article;
 try {
-  [user, article] = await Promise.all([getMe(token), getArticle(id!, token)]);
+  article = await getArticle(id!, token);
 } catch (err) {
   if (err instanceof ApiAuthError) return Astro.redirect('/login');
   // A missing or invisible article is indistinguishable from here.
@@ -39,7 +39,7 @@ if (user.role !== 'admin' && user.role !== 'agent') {
     </div>
 
     <div class="rounded-xl border bg-card p-6">
-      <ArticleEditor article={article} client:load />
+      <ArticleEditor article={article} role={user.role} client:load />
     </div>
   </div>
 </Layout>

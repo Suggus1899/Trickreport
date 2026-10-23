@@ -2,6 +2,7 @@ package config
 
 import (
 	"log"
+	"net/url"
 	"os"
 	"strings"
 
@@ -16,6 +17,7 @@ type Config struct {
 	JWTExpHours  int    `mapstructure:"JWT_EXP_HOURS"`
 	SecureCookie bool   `mapstructure:"COOKIE_SECURE"`
 	CORSOrigins  string `mapstructure:"CORS_ORIGINS"`
+	AppPublicURL string `mapstructure:"APP_PUBLIC_URL"`
 
 	// Bootstrap admin (created on first startup if no users exist)
 	AdminEmail    string `mapstructure:"ADMIN_EMAIL"`
@@ -76,7 +78,7 @@ func Load() *Config {
 	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	// AutomaticEnv does not expose unset-file keys to Unmarshal.
 	for _, key := range []string{
-		"PORT", "ENV", "DATABASE_URL", "JWT_SECRET", "JWT_EXP_HOURS", "COOKIE_SECURE", "CORS_ORIGINS",
+		"PORT", "ENV", "DATABASE_URL", "JWT_SECRET", "JWT_EXP_HOURS", "COOKIE_SECURE", "CORS_ORIGINS", "APP_PUBLIC_URL",
 		"ADMIN_EMAIL", "ADMIN_PASSWORD", "LDAP_ENABLED", "LDAP_HOST", "LDAP_PORT", "LDAP_USE_TLS",
 		"LDAP_BIND_DN", "LDAP_BIND_PW", "LDAP_BASE_DN", "LDAP_UID_ATTR", "SMTP_HOST", "SMTP_PORT",
 		"SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_USE_TLS",
@@ -92,7 +94,8 @@ func Load() *Config {
 	viper.SetDefault("JWT_EXP_HOURS", 8)
 	// Default to true in production, false in dev — resolved after load
 	viper.SetDefault("COOKIE_SECURE", false)
-	viper.SetDefault("CORS_ORIGINS", "http://localhost:4321")
+	viper.SetDefault("CORS_ORIGINS", "http://localhost:3000")
+	viper.SetDefault("APP_PUBLIC_URL", "http://localhost:3000")
 	viper.SetDefault("LDAP_ENABLED", false)
 	viper.SetDefault("LDAP_PORT", 636)
 	viper.SetDefault("LDAP_USE_TLS", true)
@@ -117,6 +120,10 @@ func Load() *Config {
 
 	// Fail fast in production if JWT_SECRET is not set or is a placeholder
 	if deployed {
+		publicURL, err := url.Parse(cfg.AppPublicURL)
+		if err != nil || publicURL.Scheme != "https" || publicURL.Host == "" || publicURL.User != nil || publicURL.RawQuery != "" || publicURL.Fragment != "" {
+			log.Fatal("APP_PUBLIC_URL must be an absolute HTTPS origin in deployed environments")
+		}
 		if len(cfg.JWTSecret) < 32 || strings.Contains(strings.ToLower(cfg.JWTSecret), "change") {
 			log.Fatal("JWT_SECRET must contain at least 32 random bytes in deployed environments")
 		}

@@ -95,11 +95,11 @@ func (g *JWTGenerator) GenerateRefresh(userID, tenantID uuid.UUID, role string) 
 // claims. It verifies the signing method, issuer, and audience.
 func (g *JWTGenerator) Validate(token string) (*authapp.Claims, error) {
 	parsed, err := jwt.ParseWithClaims(token, &jwtClaims{}, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+		if t.Method != jwt.SigningMethodHS256 {
 			return nil, errors.New("unexpected signing method")
 		}
 		return []byte(g.secret), nil
-	}, jwt.WithIssuer(jwtIssuer), jwt.WithAudience(jwtAudience))
+	}, jwt.WithIssuer(jwtIssuer), jwt.WithAudience(jwtAudience), jwt.WithValidMethods([]string{"HS256"}), jwt.WithExpirationRequired(), jwt.WithIssuedAt())
 	if err != nil {
 		return nil, err
 	}
@@ -116,6 +116,9 @@ func (g *JWTGenerator) Validate(token string) (*authapp.Claims, error) {
 	tenantID, err := uuid.Parse(claims.TenantID)
 	if err != nil {
 		return nil, errors.New("invalid tenant id in token claims")
+	}
+	if userID == uuid.Nil || tenantID == uuid.Nil || claims.ID == "" || (claims.TokenType != "access" && claims.TokenType != "refresh" && claims.TokenType != "mfa") {
+		return nil, errors.New("incomplete token claims")
 	}
 
 	result := &authapp.Claims{

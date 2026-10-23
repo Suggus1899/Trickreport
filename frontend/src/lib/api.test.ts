@@ -13,7 +13,7 @@ vi.mock('./config', () => ({
 const fetchMock = vi.fn();
 (globalThis as any).fetch = fetchMock;
 
-import { api, login, updateTicketStatus, assignTicket } from './api';
+import { api, login, updateTicketStatus, assignTicket, createTicket, upsertSLAPolicy, logout } from './api';
 
 function jsonResponse(status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
@@ -110,6 +110,11 @@ describe('api client - error handling', () => {
 });
 
 describe('api client - ticket routes', () => {
+  it('sends the displayed ticket version to detect concurrent status edits', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { status: 'resolved', version: 4 }));
+    await updateTicketStatus('1', 'resolved', 't', 3);
+    expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual({ status: 'resolved', version: 3 });
+  });
   it('updateTicketStatus PATCHes /tickets/{id}/status', async () => {
     fetchMock.mockResolvedValue(jsonResponse(200, { id: '1', status: 'resolved' }));
     await updateTicketStatus('1', 'resolved', 't');
@@ -168,5 +173,39 @@ describe('api client - response parsing', () => {
     fetchMock.mockResolvedValue(new Response(null, { status: 204 }));
     const result = await api<void>('/notifications/1/read', { token: 't', method: 'POST' });
     expect(result).toBeUndefined();
+  });
+});
+
+describe('SSR mutations and idempotency', () => {
+  it('forwards only the explicit CSRF cookie and header alongside the Bearer session', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(201, { id: '1' }));
+    await createTicket(
+      { title: 'Printer', description: 'Paper is stuck', priority: 'high', category: 'hardware' },
+      'session',
+      { csrfToken: 'csrf-value', idempotencyKey: 'a1045a83-6d38-4c52-a435-91709dad4381' },
+    );
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init.headers).toMatchObject({
+      Authorization: 'Bearer session',
+      'X-CSRF-Token': 'csrf-value',
+      Cookie: 'trickreport_csrf=csrf-value',
+      'Idempotency-Key': 'a1045a83-6d38-4c52-a435-91709dad4381',
+    });
+  });
+
+  it('carries explicit CSRF for SLA changes and server logout', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(new Response(null, { status: 204 })));
+    await upsertSLAPolicy('high', { response_time_minutes: 30, resolution_time_minutes: 60, escalation_minutes: 10 }, 'session', { csrfToken: 'csrf' });
+    await logout('session', { csrfToken: 'csrf' });
+    expect(fetchMock.mock.calls.map(([, init]) => [init.method, init.headers.Cookie, init.headers['X-CSRF-Token']])).toEqual([
+      ['PUT', 'trickreport_csrf=csrf', 'csrf'],
+      ['POST', 'trickreport_csrf=csrf', 'csrf'],
+    ]);
+  });
+
+  it('does not repeat a non-idempotent mutation after a server failure', async () => {
+    fetchMock.mockImplementation(() => Promise.resolve(jsonResponse(503, { error: 'Unavailable' })));
+    await expect(api('/articles', { method: 'POST', body: '{}' })).rejects.toThrow('Unavailable');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

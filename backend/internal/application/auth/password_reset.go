@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"time"
@@ -22,18 +23,22 @@ type PasswordResetRepository interface {
 	CreateToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) error
 	FindValidToken(ctx context.Context, token string) (userID uuid.UUID, expiresAt time.Time, err error)
 	MarkUsed(ctx context.Context, token string) error
+	ConsumeAndUpdatePassword(ctx context.Context, token, passwordHash string) error
 }
 
 // PasswordResetService handles the password reset flow: requesting a reset
 // (generating a token and sending an email) and confirming the reset
 // (validating the token and updating the password).
 type PasswordResetService struct {
-	users     UserRepository
-	tokens    PasswordResetRepository
-	updater   PasswordUpdater
-	hasher    PasswordHasherFull
-	sender    email.Sender
-	cfg       PasswordResetConfig
+	users   UserRepository
+	tokens  PasswordResetRepository
+	updater PasswordUpdater
+	hasher  PasswordHasherFull
+	sender  email.Sender
+	cfg     PasswordResetConfig
+	tx      interface {
+		RunInTx(context.Context, func(context.Context) error) error
+	}
 }
 
 // NewPasswordResetService creates a new PasswordResetService.
@@ -71,31 +76,51 @@ var ErrPasswordResetTokenUsed = errors.New("password reset token has already bee
 // another organization.
 func (s *PasswordResetService) RequestReset(ctx context.Context, tenantID uuid.UUID, emailAddr string) error {
 	u, err := s.users.GetByEmail(ctx, tenantID, emailAddr)
-	if err != nil {
+	if err != nil || u == nil {
 		// Don't leak whether the email exists
 		return nil
 	}
 
 	token := uuid.NewString()
 	expiresAt := time.Now().Add(s.cfg.TokenExpiry)
+	persist := func(ctx context.Context) error {
 
-	if err := s.tokens.CreateToken(ctx, u.ID, token, expiresAt); err != nil {
-		return fmt.Errorf("password reset: create token: %w", err)
+		if err := s.tokens.CreateToken(ctx, u.ID, resetTokenDigest(token), expiresAt); err != nil {
+			return fmt.Errorf("password reset: create token: %w", err)
+		}
+
+		if s.sender != nil {
+			resetLink := fmt.Sprintf("%s?token=%s", s.cfg.ResetURL, token)
+			body := fmt.Sprintf(
+				"Hello %s,\n\nYou requested a password reset for your Trickreport account.\n"+
+					"Click the link below to reset your password (valid for %s):\n\n%s\n\n"+
+					"If you did not request this reset, you can safely ignore this email.",
+				u.Name, s.cfg.TokenExpiry, resetLink,
+			)
+			var err error
+			if sender, ok := s.sender.(interface {
+				SendContext(context.Context, string, string, string) error
+			}); ok {
+				err = sender.SendContext(ctx, u.Email, "Password Reset - Trickreport", body)
+			} else {
+				err = s.sender.Send(u.Email, "Password Reset - Trickreport", body)
+			}
+			if err != nil {
+				return fmt.Errorf("password reset: enqueue email: %w", err)
+			}
+		}
+
+		return nil
 	}
-
-	if s.sender != nil {
-		resetLink := fmt.Sprintf("%s?token=%s", s.cfg.ResetURL, token)
-		body := fmt.Sprintf(
-			"Hello %s,\n\nYou requested a password reset for your Trickreport account.\n"+
-				"Click the link below to reset your password (valid for %s):\n\n%s\n\n"+
-				"If you did not request this reset, you can safely ignore this email.",
-			u.Name, s.cfg.TokenExpiry, resetLink,
-		)
-		_ = s.sender.Send(u.Email, "Password Reset - Trickreport", body)
+	if s.tx != nil {
+		return s.tx.RunInTx(ctx, persist)
 	}
-
-	return nil
+	return persist(ctx)
 }
+
+func (s *PasswordResetService) SetTxManager(tx interface {
+	RunInTx(context.Context, func(context.Context) error) error
+}) { s.tx = tx }
 
 // ConfirmReset validates the reset token and updates the user's password.
 // The new password is validated for complexity before being stored.
@@ -104,7 +129,7 @@ func (s *PasswordResetService) ConfirmReset(ctx context.Context, token, newPassw
 		return err
 	}
 
-	userID, expiresAt, err := s.tokens.FindValidToken(ctx, token)
+	_, expiresAt, err := s.tokens.FindValidToken(ctx, resetTokenDigest(token))
 	if err != nil {
 		return ErrPasswordResetTokenInvalid
 	}
@@ -118,14 +143,7 @@ func (s *PasswordResetService) ConfirmReset(ctx context.Context, token, newPassw
 		return fmt.Errorf("password reset: hash: %w", err)
 	}
 
-	if err := s.updater.UpdatePassword(ctx, userID, hash); err != nil {
-		return fmt.Errorf("password reset: update password: %w", err)
-	}
-
-	if err := s.tokens.MarkUsed(ctx, token); err != nil {
-		// Password was already updated; log but don't fail
-		return nil
-	}
-
-	return nil
+	return s.tokens.ConsumeAndUpdatePassword(ctx, resetTokenDigest(token), hash)
 }
+
+func resetTokenDigest(token string) string { return fmt.Sprintf("%x", sha256.Sum256([]byte(token))) }

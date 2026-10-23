@@ -77,15 +77,15 @@ func TestService_Create_Success(t *testing.T) {
 	svc := NewService(repo)
 
 	conditions := map[string]any{"priority": "high"}
-	actions := []any{"notify"}
+	actions := []any{map[string]any{"type": "set_priority", "priority": "high"}}
 	r, err := svc.Create(context.Background(), CreateInput{
 		TenantID: tenant, Name: "Auto-assign", Description: "desc",
-		TriggerType: "on_create", Conditions: conditions, Actions: actions, IsActive: true,
+		TriggerType: "ticket_created", Conditions: conditions, Actions: actions, IsActive: true,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if r.Name != "Auto-assign" || r.TriggerType != "on_create" || !r.IsActive {
+	if r.Name != "Auto-assign" || r.TriggerType != "ticket_created" || !r.IsActive {
 		t.Errorf("rule = %+v", r)
 	}
 	if r.TenantID != tenant {
@@ -130,7 +130,7 @@ func TestService_Update_Success(t *testing.T) {
 	svc := NewService(repo)
 
 	r, err := svc.Update(context.Background(), UpdateInput{
-		ID: id, TenantID: tenant, Name: "Updated", TriggerType: "on_update", IsActive: false,
+		ID: id, TenantID: tenant, Name: "Updated", TriggerType: "status_changed", IsActive: false,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

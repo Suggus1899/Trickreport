@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { confirmPasswordReset, ApiNetworkError, ApiValidationError } from '@/lib/api';
 
-const MIN_PASSWORD_LENGTH = 6;
+const MIN_PASSWORD_LENGTH = 12;
 
 export function PasswordResetConfirmForm({ token }: { token: string }) {
   const [password, setPassword] = useState('');
@@ -76,7 +76,7 @@ export function PasswordResetConfirmForm({ token }: { token: string }) {
           minLength={MIN_PASSWORD_LENGTH}
           autoFocus
         />
-        <p className="text-xs text-muted-foreground">At least {MIN_PASSWORD_LENGTH} characters.</p>
+        <p className="text-xs text-muted-foreground">At least {MIN_PASSWORD_LENGTH} characters, with uppercase, lowercase, a number and a symbol.</p>
       </div>
       <div className="flex flex-col gap-2">
         <Label htmlFor="confirmation">Confirm new password</Label>

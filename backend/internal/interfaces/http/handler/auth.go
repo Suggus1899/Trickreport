@@ -139,7 +139,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 
 // refreshReq is the request body for the refresh endpoint.
 type refreshReq struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refresh_token"`
 }
 
 // refreshResp is the response body for the refresh endpoint.
@@ -155,16 +155,15 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if err := validator.Validate.Struct(req); err != nil {
-		response.JSON(w, http.StatusBadRequest, map[string]any{"error": "validation failed", "details": validator.ValidationError(err)})
-		return
-	}
-
-	// Fall back to cookie if not in body
+	// Browser clients keep refresh credentials in the HttpOnly cookie.
 	if req.RefreshToken == "" {
 		if c, err := r.Cookie("trickreport_refresh"); err == nil {
 			req.RefreshToken = c.Value
 		}
+	}
+	if req.RefreshToken == "" {
+		response.Error(w, http.StatusBadRequest, "refresh token required")
+		return
 	}
 
 	result, err := h.svc.Refresh(r.Context(), appAuth.RefreshInput{
@@ -183,6 +182,14 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
+	http.SetCookie(w, &http.Cookie{
+		Name: "trickreport_token", Value: result.Token, Path: "/", HttpOnly: true,
+		Secure: result.SecureCookie, SameSite: http.SameSiteStrictMode, Expires: result.ExpiresAt,
+	})
+	http.SetCookie(w, &http.Cookie{
+		Name: "trickreport_refresh", Value: result.RefreshToken, Path: "/", HttpOnly: true,
+		Secure: result.SecureCookie, SameSite: http.SameSiteStrictMode, Expires: result.RefreshExpiresAt,
+	})
 
 	response.JSON(w, http.StatusOK, refreshResp{
 		Token:        result.Token,

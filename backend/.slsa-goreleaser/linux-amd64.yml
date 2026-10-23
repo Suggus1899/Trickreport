@@ -14,7 +14,7 @@ goos: linux
 goarch: amd64
 
 dir: ./backend
-main: ./backend/cmd/api
+main: ./cmd/api
 
 binary: trickreport-backend-linux-amd64
 

@@ -78,13 +78,13 @@ func (m *mockRepo) GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid
 }
 
 type mockCommentRepo struct {
-	comments     []domainTicket.Comment
-	comment      *domainTicket.Comment
-	err          error
-	createErr    error
-	gotRole      string
-	createCalls  int
-	gotComment   *domainTicket.Comment
+	comments    []domainTicket.Comment
+	comment     *domainTicket.Comment
+	err         error
+	createErr   error
+	gotRole     string
+	createCalls int
+	gotComment  *domainTicket.Comment
 }
 
 func (m *mockCommentRepo) List(ctx context.Context, ticketID uuid.UUID, role string) ([]domainTicket.Comment, error) {
@@ -122,6 +122,7 @@ func (m *mockHub) BroadcastEvent(tenantID uuid.UUID, eventType string, data any)
 }
 
 type mockEmail struct {
+	done    chan struct{}
 	sent    int
 	gotTo   string
 	gotSubj string
@@ -134,6 +135,9 @@ func (m *mockEmail) Send(to, subject, body string) error {
 	m.gotTo = to
 	m.gotSubj = subject
 	m.gotBody = body
+	if m.done != nil {
+		m.done <- struct{}{}
+	}
 	return m.err
 }
 
@@ -640,6 +644,7 @@ func TestService_ListHistory_NotFound(t *testing.T) {
 // --- SetEngine and evaluateAutomation tests ---
 
 type mockEngine struct {
+	done      chan struct{}
 	evaluated bool
 	tenantID  uuid.UUID
 	err       error
@@ -648,6 +653,9 @@ type mockEngine struct {
 func (m *mockEngine) Evaluate(ctx context.Context, tenantID uuid.UUID, event appAuto.Event) error {
 	m.evaluated = true
 	m.tenantID = tenantID
+	if m.done != nil {
+		m.done <- struct{}{}
+	}
 	return m.err
 }
 
@@ -662,7 +670,7 @@ func TestService_SetEngine(t *testing.T) {
 func TestService_EvaluateAutomation_WithEngine(t *testing.T) {
 	repo := &mockRepo{}
 	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, nil)
-	engine := &mockEngine{}
+	engine := &mockEngine{done: make(chan struct{}, 1)}
 	svc.SetEngine(engine)
 
 	tenantID := uuid.New()
@@ -677,7 +685,7 @@ func TestService_EvaluateAutomation_WithEngine(t *testing.T) {
 	})
 
 	// Wait for the goroutine to complete
-	time.Sleep(50 * time.Millisecond)
+	waitCompletion(t, engine.done)
 	if !engine.evaluated {
 		t.Error("expected engine.Evaluate to be called")
 	}
@@ -702,7 +710,7 @@ func TestService_EvaluateAutomation_NoEngine(t *testing.T) {
 
 func TestService_Create_SendsEmailToCreator(t *testing.T) {
 	repo := &mockRepo{}
-	mail := &mockEmail{}
+	mail := &mockEmail{done: make(chan struct{}, 1)}
 	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, mail)
 	svc.SetUserEmailFetcher(&mockEmailFetcher{email: "creator@example.com"})
 	svc.SetEmailRenderer(&mockEmailRenderer{})
@@ -718,7 +726,7 @@ func TestService_Create_SendsEmailToCreator(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	time.Sleep(50 * time.Millisecond) // wait for the async send
+	waitCompletion(t, mail.done)
 	if mail.sent != 1 {
 		t.Fatalf("expected 1 email sent, got %d", mail.sent)
 	}
@@ -731,7 +739,7 @@ func TestService_ChangeStatus_EmailsCreator_ButNotTheActor(t *testing.T) {
 	creator := uuid.New()
 	tk := ownedTicket(creator)
 	repo := &mockRepo{ticket: tk, creatorID: creator}
-	mail := &mockEmail{}
+	mail := &mockEmail{done: make(chan struct{}, 1)}
 	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, mail)
 	svc.SetUserEmailFetcher(&mockEmailFetcher{email: "creator@example.com"})
 	svc.SetEmailRenderer(&mockEmailRenderer{})
@@ -740,7 +748,7 @@ func TestService_ChangeStatus_EmailsCreator_ButNotTheActor(t *testing.T) {
 	if err := svc.ChangeStatus(context.Background(), tk.ID, tk.TenantID, uuid.New(), "agent", "in_progress"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	time.Sleep(50 * time.Millisecond) // wait for the async send
+	waitCompletion(t, mail.done)
 	if mail.sent != 1 {
 		t.Fatalf("expected 1 email sent, got %d", mail.sent)
 	}
@@ -751,7 +759,6 @@ func TestService_ChangeStatus_EmailsCreator_ButNotTheActor(t *testing.T) {
 	if err := svc.ChangeStatus(context.Background(), tk.ID, tk.TenantID, creator, "agent", "in_progress"); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	time.Sleep(50 * time.Millisecond) // wait to make sure no async send happens
 	if mail.sent != 0 {
 		t.Errorf("expected no self-email, got %d sends", mail.sent)
 	}
@@ -786,7 +793,7 @@ func TestService_AddComment_EmailsCreator_ForPublicComment(t *testing.T) {
 	creator := uuid.New()
 	tk := ownedTicket(creator)
 	repo := &mockRepo{ticket: tk, creatorID: creator}
-	mail := &mockEmail{}
+	mail := &mockEmail{done: make(chan struct{}, 1)}
 	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, mail)
 	svc.SetUserEmailFetcher(&mockEmailFetcher{email: "creator@example.com"})
 	svc.SetEmailRenderer(&mockEmailRenderer{})
@@ -802,9 +809,18 @@ func TestService_AddComment_EmailsCreator_ForPublicComment(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	time.Sleep(50 * time.Millisecond) // wait for the async send
+	waitCompletion(t, mail.done)
 	if mail.sent != 1 {
 		t.Errorf("expected 1 email sent for a public comment, got %d", mail.sent)
+	}
+}
+
+func waitCompletion(t *testing.T, done <-chan struct{}) {
+	t.Helper()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("asynchronous mock did not complete")
 	}
 }
 

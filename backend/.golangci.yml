@@ -1,10 +1,11 @@
+version: "2"
 run:
   timeout: 5m
-  go: "1.25"
+  go: "1.26"
 linters:
+  default: none
   enable:
     - errcheck
-    - gosimple
     - govet
     - ineffassign
     - staticcheck
@@ -13,9 +14,9 @@ linters:
     - gocyclo
     - misspell
     - revive
-linters-settings:
-  gocyclo:
-    min-complexity: 20
-  gosec:
-    excludes:
-      - G104
+  settings:
+    gocyclo:
+      min-complexity: 20
+    gosec:
+      excludes:
+        - G104

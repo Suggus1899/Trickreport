@@ -27,7 +27,14 @@ func NewPasswordResetRepo(db *pgxpool.Pool) *PasswordResetRepo {
 // CreateToken stores a new password reset token.
 func (r *PasswordResetRepo) CreateToken(ctx context.Context, userID uuid.UUID, token string, expiresAt time.Time) error {
 	const q = `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, $3)`
-	_, err := r.db.Exec(ctx, q, userID, token, expiresAt)
+	err := withTx(ctx, r.db, func(ctx context.Context) error {
+		tx, _ := TxFromContext(ctx)
+		if _, err := tx.Exec(ctx, `UPDATE password_reset_tokens SET used=TRUE WHERE user_id=$1 AND NOT used`, userID); err != nil {
+			return err
+		}
+		_, err := tx.Exec(ctx, q, userID, token, expiresAt)
+		return err
+	})
 	if err != nil {
 		return fmt.Errorf("password_reset_repo.CreateToken: %w", err)
 	}

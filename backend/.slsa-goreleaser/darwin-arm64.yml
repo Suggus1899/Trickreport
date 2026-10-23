@@ -14,7 +14,7 @@ goos: darwin
 goarch: arm64
 
 dir: ./backend
-main: ./backend/cmd/api
+main: ./cmd/api
 
 binary: trickreport-backend-darwin-arm64
 

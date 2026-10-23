@@ -3,6 +3,7 @@ package middleware
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"io"
 	"net/http"
 	"strings"
 
@@ -21,9 +22,8 @@ const (
 // generateCSRFToken generates a cryptographically random hex token.
 func generateCSRFToken() string {
 	b := make([]byte, csrfTokenLength)
-	if _, err := rand.Read(b); err != nil {
-		// Fallback — should not happen in practice
-		return "csrf-fallback-token"
+	if _, err := io.ReadFull(rand.Reader, b); err != nil {
+		return ""
 	}
 	return hex.EncodeToString(b)
 }
@@ -59,16 +59,27 @@ func CSRF(secure bool) func(http.Handler) http.Handler {
 
 			switch r.Method {
 			case http.MethodGet, http.MethodHead, http.MethodOptions:
-				// Generate or refresh the CSRF token cookie on safe methods
-				token := generateCSRFToken()
-				http.SetCookie(w, &http.Cookie{
-					Name:     csrfCookieName,
-					Value:    token,
-					Path:     "/",
-					HttpOnly: false, // Must be readable by JavaScript
-					Secure:   secure,
-					SameSite: http.SameSiteStrictMode,
-				})
+				token := ""
+				if cookie, err := r.Cookie(csrfCookieName); err == nil {
+					if decoded, err := hex.DecodeString(cookie.Value); err == nil && len(decoded) == csrfTokenLength {
+						token = cookie.Value
+					}
+				}
+				if token == "" {
+					token = generateCSRFToken()
+					if token == "" {
+						response.Error(w, http.StatusServiceUnavailable, "CSRF initialization unavailable")
+						return
+					}
+					http.SetCookie(w, &http.Cookie{
+						Name:     csrfCookieName,
+						Value:    token,
+						Path:     "/",
+						HttpOnly: false, // Must be readable by JavaScript
+						Secure:   secure,
+						SameSite: http.SameSiteStrictMode,
+					})
+				}
 				// Also expose in header for convenience
 				w.Header().Set("X-CSRF-Token", token)
 				next.ServeHTTP(w, r)

@@ -69,16 +69,19 @@ type SessionRepository interface {
 	CreateSession(ctx context.Context, input SessionInput) error
 	RevokeSession(ctx context.Context, jti string) error
 	RevokeByRefreshJTI(ctx context.Context, refreshJTI string) error
+	FindActiveByAccessJTI(ctx context.Context, jti string) (*SessionInput, error)
+	RotateSession(ctx context.Context, oldRefreshJTI string, replacement SessionInput) (bool, error)
+	RevokeAllForUser(ctx context.Context, userID uuid.UUID) error
 }
 
 // SessionInput holds the data for creating a session record.
 type SessionInput struct {
-	UserID      uuid.UUID
-	JTI         string
-	RefreshJTI  string
-	IPAddress   string
-	UserAgent   string
-	ExpiresAt   time.Time
+	UserID     uuid.UUID
+	JTI        string
+	RefreshJTI string
+	IPAddress  string
+	UserAgent  string
+	ExpiresAt  time.Time
 }
 
 // MFARepository is the port for MFA/TOTP secret persistence.
@@ -104,31 +107,33 @@ type Config struct {
 	JWTSecret    string
 	JWTExpHours  int
 	SecureCookie bool
+	PublicURL    string
 }
 
 // Account lockout constants.
 const (
-	maxFailedAttempts  = 5
-	lockoutDuration    = 15 * time.Minute
+	maxFailedAttempts = 5
+	lockoutDuration   = 15 * time.Minute
 )
 
 // Service is the application service for authentication.
 type Service struct {
-	users   UserRepository
-	hasher  PasswordHasher
-	ldap    LDAPAuthenticator
-	tokens  TokenGenerator
-	cfg     Config
+	users  UserRepository
+	hasher PasswordHasher
+	ldap   LDAPAuthenticator
+	tokens TokenGenerator
+	cfg    Config
 
 	// Optional dependencies — wired via setters. When nil, the corresponding
 	// features are disabled (graceful degradation).
 	// TODO: Wire in wire.go after the auth middleware
-	tokenStore   TokenStore
-	sessions     SessionRepository
-	lockoutRepo  AccountLockoutRepository
-	hasherFull   PasswordHasherFull
-	mfaRepo      MFARepository
-	creator      UserCreator
+	tokenStore    TokenStore
+	sessions      SessionRepository
+	lockoutRepo   AccountLockoutRepository
+	hasherFull    PasswordHasherFull
+	mfaRepo       MFARepository
+	creator       UserCreator
+	mfaChallenges MFAChallengeRepository
 }
 
 // NewService creates a new auth application service.
@@ -209,7 +214,7 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (*LoginResult, er
 	}
 
 	u, err := s.users.GetByEmail(ctx, input.TenantID, input.Email)
-	if err != nil {
+	if err != nil || u == nil {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -245,8 +250,21 @@ func (s *Service) Login(ctx context.Context, input LoginInput) (*LoginResult, er
 
 	// If MFA is enabled, return a temporary MFA token instead of full tokens
 	if u.MFAEnabled {
-		mfaToken, err := s.tokens.Generate(u.ID, u.TenantID, string(u.Role))
+		generator, ok := s.tokens.(interface {
+			GenerateMFA(uuid.UUID, uuid.UUID, string) (string, error)
+		})
+		if !ok || s.mfaChallenges == nil {
+			return nil, ErrAuthUnavailable
+		}
+		mfaToken, err := generator.GenerateMFA(u.ID, u.TenantID, string(u.Role))
 		if err != nil {
+			return nil, err
+		}
+		claims, err := s.tokens.Validate(mfaToken)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.mfaChallenges.CreateChallenge(ctx, claims.JTI, u.ID, claims.ExpiresAt); err != nil {
 			return nil, err
 		}
 		return &LoginResult{
@@ -286,6 +304,20 @@ func (s *Service) issueTokens(ctx context.Context, u *user.User) (*LoginResult, 
 	}
 
 	expiresAt := time.Now().Add(time.Duration(s.cfg.JWTExpHours) * time.Hour)
+	if s.sessions != nil {
+		accessClaims, err := s.tokens.Validate(token)
+		if err != nil || accessClaims == nil {
+			return nil, ErrAuthUnavailable
+		}
+		refreshClaims, err := s.tokens.Validate(refreshToken)
+		if err != nil || refreshClaims == nil {
+			return nil, ErrAuthUnavailable
+		}
+		if err := s.sessions.CreateSession(ctx, SessionInput{UserID: u.ID, JTI: accessClaims.JTI, RefreshJTI: refreshClaims.JTI, ExpiresAt: refreshClaims.ExpiresAt}); err != nil {
+			return nil, err
+		}
+		expiresAt = accessClaims.ExpiresAt
+	}
 
 	return &LoginResult{
 		Token:        token,
@@ -305,9 +337,11 @@ type RefreshInput struct {
 
 // RefreshResult holds the new tokens after a refresh.
 type RefreshResult struct {
-	Token        string
-	RefreshToken string
-	ExpiresAt    time.Time
+	Token            string
+	RefreshToken     string
+	ExpiresAt        time.Time
+	RefreshExpiresAt time.Time
+	SecureCookie     bool
 }
 
 // Refresh validates a refresh token, checks the blacklist, generates new
@@ -317,55 +351,45 @@ func (s *Service) Refresh(ctx context.Context, input RefreshInput) (*RefreshResu
 	if err != nil {
 		return nil, ErrInvalidRefreshToken
 	}
-	if claims.TokenType != "refresh" {
+	if claims == nil || claims.TokenType != "refresh" || s.sessions == nil {
+		return nil, ErrInvalidRefreshToken
+	}
+	u, err := s.currentUser(ctx, claims)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := s.tokens.Generate(u.ID, u.TenantID, string(u.Role))
+	if err != nil {
+		return nil, err
+	}
+	newRefresh, err := s.tokens.GenerateRefresh(u.ID, u.TenantID, string(u.Role))
+	if err != nil {
+		return nil, err
+	}
+
+	accessClaims, err := s.tokens.Validate(token)
+	if err != nil || accessClaims == nil {
+		return nil, ErrAuthUnavailable
+	}
+	refreshClaims, err := s.tokens.Validate(newRefresh)
+	if err != nil || refreshClaims == nil {
+		return nil, ErrAuthUnavailable
+	}
+	rotated, err := s.sessions.RotateSession(ctx, claims.JTI, SessionInput{UserID: u.ID, JTI: accessClaims.JTI, RefreshJTI: refreshClaims.JTI, IPAddress: input.IPAddress, UserAgent: input.UserAgent, ExpiresAt: refreshClaims.ExpiresAt})
+	if err != nil {
+		return nil, ErrAuthUnavailable
+	}
+	if !rotated {
 		return nil, ErrInvalidRefreshToken
 	}
 
-	// Check blacklist
-	if s.tokenStore != nil && s.tokenStore.IsBlacklisted(claims.JTI) {
-		return nil, ErrTokenBlacklisted
-	}
-
-	// Blacklist the old refresh token (rotation)
-	if s.tokenStore != nil {
-		s.tokenStore.Blacklist(claims.JTI, claims.ExpiresAt)
-	}
-
-	// Revoke old session and create new one
-	if s.sessions != nil {
-		_ = s.sessions.RevokeByRefreshJTI(ctx, claims.JTI)
-	}
-
-	token, err := s.tokens.Generate(claims.UserID, claims.TenantID, claims.Role)
-	if err != nil {
-		return nil, err
-	}
-	newRefresh, err := s.tokens.GenerateRefresh(claims.UserID, claims.TenantID, claims.Role)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create new session record
-	if s.sessions != nil {
-		newClaims, _ := s.tokens.Validate(newRefresh)
-		var newJTI string
-		if newClaims != nil {
-			newJTI = newClaims.JTI
-		}
-		_ = s.sessions.CreateSession(ctx, SessionInput{
-			UserID:     claims.UserID,
-			JTI:        newJTI,
-			RefreshJTI: newJTI,
-			IPAddress:  input.IPAddress,
-			UserAgent:  input.UserAgent,
-			ExpiresAt:  time.Now().Add(7 * 24 * time.Hour),
-		})
-	}
-
 	return &RefreshResult{
-		Token:        token,
-		RefreshToken: newRefresh,
-		ExpiresAt:    time.Now().Add(time.Duration(s.cfg.JWTExpHours) * time.Hour),
+		Token:            token,
+		RefreshToken:     newRefresh,
+		ExpiresAt:        accessClaims.ExpiresAt,
+		RefreshExpiresAt: refreshClaims.ExpiresAt,
+		SecureCookie:     s.cfg.SecureCookie,
 	}, nil
 }
 
@@ -380,7 +404,7 @@ func (s *Service) Logout(ctx context.Context, accessToken string) error {
 		s.tokenStore.Blacklist(claims.JTI, claims.ExpiresAt)
 	}
 	if s.sessions != nil {
-		_ = s.sessions.RevokeSession(ctx, claims.JTI)
+		return s.sessions.RevokeSession(ctx, claims.JTI)
 	}
 	return nil
 }
@@ -395,11 +419,11 @@ type MFALoginInput struct {
 // temporary MFA token, verifies the TOTP code, and issues full tokens.
 func (s *Service) MFALogin(ctx context.Context, input MFALoginInput) (*LoginResult, error) {
 	claims, err := s.tokens.Validate(input.MFAToken)
-	if err != nil {
+	if err != nil || claims == nil || claims.TokenType != "mfa" || s.mfaChallenges == nil {
 		return nil, ErrInvalidCredentials
 	}
 
-	u, err := s.users.GetByIDNoTenant(ctx, claims.UserID)
+	u, err := s.currentUser(ctx, claims)
 	if err != nil {
 		return nil, ErrInvalidCredentials
 	}
@@ -417,7 +441,12 @@ func (s *Service) MFALogin(ctx context.Context, input MFALoginInput) (*LoginResu
 		return nil, ErrInvalidCredentials
 	}
 
-	if !validateTOTP(secret, input.Code) {
+	valid := validateTOTP(secret, input.Code)
+	consumed, err := s.mfaChallenges.ConsumeChallenge(ctx, claims.JTI, u.ID, valid)
+	if err != nil {
+		return nil, ErrAuthUnavailable
+	}
+	if !valid || !consumed {
 		return nil, ErrInvalidCredentials
 	}
 
@@ -445,12 +474,11 @@ func (s *Service) Register(ctx context.Context, input RegisterInput) (*LoginResu
 	if input.Name == "" || input.Email == "" || input.Password == "" {
 		return nil, ErrInvalidCredentials
 	}
-	if len(input.Password) < 6 {
-		return nil, ErrInvalidCredentials
-	}
-
 	if input.TenantID == uuid.Nil {
 		return nil, ErrInvalidCredentials
+	}
+	if err := user.ValidatePasswordComplexity(input.Password); err != nil {
+		return nil, err
 	}
 
 	// Check if the email is already in use *within this tenant*. The same

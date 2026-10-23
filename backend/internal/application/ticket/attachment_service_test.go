@@ -12,14 +12,14 @@ import (
 // --- Mocks ---
 
 type mockAttachmentRepo struct {
-	attachment *domainTicket.Attachment
-	data       []byte
+	attachment  *domainTicket.Attachment
+	data        []byte
 	attachments []domainTicket.Attachment
-	err        error
-	createErr  error
-	gotInput   AttachmentUploadInput
-	gotID      uuid.UUID
-	gotTicket  uuid.UUID
+	err         error
+	createErr   error
+	gotInput    AttachmentUploadInput
+	gotID       uuid.UUID
+	gotTicket   uuid.UUID
 	createCalls int
 }
 
@@ -57,10 +57,11 @@ func TestAttachmentService_Upload_Success(t *testing.T) {
 	ticketRepo := &mockRepo{ticket: tk}
 	attRepo := &mockAttachmentRepo{attachment: &domainTicket.Attachment{ID: uuid.New(), Filename: "file.png"}}
 	svc := newAttachmentSvc(attRepo, ticketRepo)
+	data := pngFixture(t)
 
 	att, err := svc.Upload(context.Background(), UploadInput{
 		TenantID: tk.TenantID, TicketID: tk.ID, UserID: creator, Role: "end_user",
-		Filename: "file.png", ContentType: "image/png", FileData: []byte("data"),
+		Filename: "file.png", ContentType: "image/png", FileData: data,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -71,8 +72,8 @@ func TestAttachmentService_Upload_Success(t *testing.T) {
 	if attRepo.createCalls != 1 {
 		t.Errorf("create calls = %d", attRepo.createCalls)
 	}
-	if attRepo.gotInput.FileSize != 4 {
-		t.Errorf("file size = %d, want 4", attRepo.gotInput.FileSize)
+	if attRepo.gotInput.FileSize != int64(len(data)) {
+		t.Errorf("file size = %d, want %d", attRepo.gotInput.FileSize, len(data))
 	}
 	if attRepo.gotInput.ContentType != "image/png" {
 		t.Errorf("content type = %q", attRepo.gotInput.ContentType)

@@ -2,6 +2,7 @@ package automation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -107,6 +108,7 @@ func (e *Engine) Evaluate(ctx context.Context, tenantID uuid.UUID, event Event) 
 		}
 	}
 
+	var failures []error
 	for _, rule := range rules {
 		if !rule.IsActive || rule.TriggerType != trigger {
 			continue
@@ -117,6 +119,7 @@ func (e *Engine) Evaluate(ctx context.Context, tenantID uuid.UUID, event Event) 
 		}
 
 		if err := e.executeActions(ctx, tenantID, rule, event, snapshot); err != nil {
+			failures = append(failures, err)
 			e.logger.Error().Err(err).
 				Str("rule_id", rule.ID.String()).
 				Str("rule_name", rule.Name).
@@ -124,18 +127,19 @@ func (e *Engine) Evaluate(ctx context.Context, tenantID uuid.UUID, event Event) 
 		}
 	}
 
-	return nil
+	return errors.Join(failures...)
 }
 
 // matchConditions evaluates simple equality conditions against the ticket snapshot.
 // Conditions is a map of field name -> expected value (e.g. {"priority": "high"}).
 func (e *Engine) matchConditions(conditions map[string]any, snapshot *TicketSnapshot, event Event) bool {
-	if len(conditions) == 0 {
-		return true
+	canonical, err := domainautomation.NormalizeConditions(conditions)
+	if err != nil {
+		return false
 	}
-
-	for field, expected := range conditions {
-		expectedStr := fmt.Sprintf("%v", expected)
+	for _, raw := range canonical["conditions"].([]any) {
+		clause := raw.(map[string]any)
+		field, expectedStr := clause["field"].(string), clause["value"].(string)
 		var actual string
 
 		switch strings.ToLower(field) {
@@ -164,8 +168,22 @@ func (e *Engine) matchConditions(conditions map[string]any, snapshot *TicketSnap
 			return false
 		}
 
-		if !strings.EqualFold(actual, expectedStr) {
+		if snapshot == nil && field != "old_value" && field != "new_value" {
 			return false
+		}
+		switch clause["op"] {
+		case "equals":
+			if !strings.EqualFold(actual, expectedStr) {
+				return false
+			}
+		case "not_equals":
+			if strings.EqualFold(actual, expectedStr) {
+				return false
+			}
+		case "contains":
+			if !strings.Contains(strings.ToLower(actual), strings.ToLower(expectedStr)) {
+				return false
+			}
 		}
 	}
 	return true
@@ -174,20 +192,31 @@ func (e *Engine) matchConditions(conditions map[string]any, snapshot *TicketSnap
 // executeActions runs all actions defined in a rule.
 // Each action is a map[string]any with an "type" key and action-specific fields.
 func (e *Engine) executeActions(ctx context.Context, tenantID uuid.UUID, rule domainautomation.Rule, event Event, snapshot *TicketSnapshot) error {
+	if executor, ok := e.tickets.(interface {
+		RunInTx(context.Context, func(context.Context) error) error
+	}); ok {
+		return executor.RunInTx(ctx, func(ctx context.Context) error { return e.runActions(ctx, tenantID, rule, event, snapshot) })
+	}
+	return e.runActions(ctx, tenantID, rule, event, snapshot)
+}
+
+func (e *Engine) runActions(ctx context.Context, tenantID uuid.UUID, rule domainautomation.Rule, event Event, snapshot *TicketSnapshot) error {
+	var failures []error
 	for _, raw := range rule.Actions {
 		action, ok := raw.(map[string]any)
 		if !ok {
-			e.logger.Warn().Str("rule_id", rule.ID.String()).Msg("automation engine: skipping non-map action")
+			failures = append(failures, domainautomation.ErrValidation)
 			continue
 		}
 
 		actionType, _ := action["type"].(string)
 		if actionType == "" {
-			e.logger.Warn().Str("rule_id", rule.ID.String()).Msg("automation engine: skipping action without type")
+			failures = append(failures, domainautomation.ErrValidation)
 			continue
 		}
 
 		if err := e.executeAction(ctx, tenantID, actionType, action, event, snapshot); err != nil {
+			failures = append(failures, err)
 			e.logger.Error().Err(err).
 				Str("action", actionType).
 				Str("rule_id", rule.ID.String()).
@@ -195,7 +224,7 @@ func (e *Engine) executeActions(ctx context.Context, tenantID uuid.UUID, rule do
 			// Continue executing remaining actions.
 		}
 	}
-	return nil
+	return errors.Join(failures...)
 }
 
 func (e *Engine) executeAction(ctx context.Context, tenantID uuid.UUID, actionType string, action map[string]any, event Event, snapshot *TicketSnapshot) error {
@@ -246,14 +275,7 @@ func (e *Engine) executeAction(ctx context.Context, tenantID uuid.UUID, actionTy
 		return e.tickets.AddComment(ctx, tenantID, event.TicketID, content, isInternal)
 
 	case "add_tag":
-		tag, _ := action["tag"].(string)
-		if tag == "" {
-			tag, _ = action["value"].(string)
-		}
-		if tag == "" {
-			return fmt.Errorf("add_tag: missing 'tag' field")
-		}
-		return e.tickets.AddTag(ctx, tenantID, event.TicketID, tag)
+		return fmt.Errorf("%w: add_tag is not supported", domainautomation.ErrValidation)
 
 	case "send_email":
 		to, _ := action["to"].(string)
@@ -261,8 +283,7 @@ func (e *Engine) executeAction(ctx context.Context, tenantID uuid.UUID, actionTy
 			return fmt.Errorf("send_email: missing 'to' field")
 		}
 		if e.emailSender == nil {
-			e.logger.Warn().Msg("automation engine: send_email skipped, no email sender configured")
-			return nil
+			return fmt.Errorf("send_email: no email sender configured")
 		}
 		subject, _ := action["subject"].(string)
 		if subject == "" {
@@ -272,10 +293,14 @@ func (e *Engine) executeAction(ctx context.Context, tenantID uuid.UUID, actionTy
 		if snapshot != nil {
 			body = fmt.Sprintf("Ticket: %s\nStatus: %s\nPriority: %s", snapshot.Title, snapshot.Status, snapshot.Priority)
 		}
+		if sender, ok := e.emailSender.(interface {
+			SendContext(context.Context, string, string, string) error
+		}); ok {
+			return sender.SendContext(ctx, to, subject, body)
+		}
 		return e.emailSender.Send(to, subject, body)
 
 	default:
-		e.logger.Warn().Str("action", actionType).Msg("automation engine: unknown action type")
-		return nil
+		return fmt.Errorf("%w: unknown action %q", domainautomation.ErrValidation, actionType)
 	}
 }

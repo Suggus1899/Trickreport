@@ -22,4 +22,6 @@ type Message struct {
 type BroadcastPayload struct {
 	TenantID uuid.UUID
 	Message  []byte
+	UserIDs  []uuid.UUID
+	Scoped   bool
 }

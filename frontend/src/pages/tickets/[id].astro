@@ -3,7 +3,6 @@ import Layout from '../../layouts/Layout.astro';
 import { TicketActions } from '../../components/tickets/TicketActions';
 import { ArrowLeft, RefreshCw, UserCheck, Flag, Pencil } from 'lucide-react';
 import {
-  getMe,
   getTicket,
   getTicketComments,
   getTicketHistory,
@@ -13,12 +12,12 @@ import {
 import type { Ticket, Comment, HistoryEntry, Attachment, User } from '../../lib/api';
 
 const { id } = Astro.params;
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token || !id) {
   return Astro.redirect('/login');
 }
 
-let user: User | undefined;
+const user = Astro.locals.user!;
 let ticket: Ticket | null = null;
 let comments: Comment[] = [];
 let history: HistoryEntry[] = [];
@@ -27,7 +26,6 @@ let users: User[] = [];
 let error = '';
 
 try {
-  user = await getMe(token);
   ticket = await getTicket(id, token);
   [comments, history, attachments] = await Promise.all([
     getTicketComments(id, token).catch(() => [] as Comment[]),

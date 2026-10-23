@@ -3,15 +3,15 @@ import Layout from '../../layouts/Layout.astro';
 import { buttonVariants } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import Pagination from '../../components/Pagination.astro';
-import { getMe, getArticles } from '../../lib/api';
+import { getArticles } from '../../lib/api';
 import { BookX } from 'lucide-react';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
-let user;
+const user = Astro.locals.user!;
 let articles;
 let error = '';
 
@@ -21,7 +21,6 @@ const currentPage = isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
 const perPage = 10;
 
 try {
-  user = await getMe(token);
   articles = await getArticles(query, token);
 } catch (err) {
   error = err instanceof Error ? err.message : 'Failed to load articles';

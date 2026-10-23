@@ -1,24 +1,18 @@
 ---
 import Layout from '../../layouts/Layout.astro';
 import { OfflineTicketForm } from '../../components/tickets/OfflineTicketForm';
-import { getMe } from '../../lib/api';
 
-const token = Astro.cookies.get('trickreport_token')?.value;
+const token = Astro.locals.token;
 if (!token) {
   return Astro.redirect('/login');
 }
 
-let me;
-try {
-  me = await getMe(token);
-} catch {
-  return Astro.redirect('/login');
-}
+const me = Astro.locals.user!;
 ---
 
 <Layout title="New Ticket (Offline) - Trickreport" user={me ? { name: me.name, role: me.role } : undefined}>
   <div class="max-w-4xl mx-auto py-8">
     <h1 class="text-2xl font-bold mb-6">New Ticket</h1>
-    <OfflineTicketForm client:load />
+    <OfflineTicketForm identity={{ userId: me.id, tenantId: me.tenant_id }} client:load />
   </div>
 </Layout>

@@ -1,23 +1,13 @@
-# Alertmanager configuration for Trickreport.
-#
-# Basic routing for service-down and high-error-rate alerts.
-# Replace the placeholder receiver with your real notification channel
-# (Slack, PagerDuty, email, etc.).
-
 global:
   resolve_timeout: 5m
-
 route:
-  group_by: ["alertname", "service", "env"]
+  group_by: [alertname, service, env]
   group_wait: 30s
   group_interval: 5m
   repeat_interval: 4h
-  receiver: "default"
-
+  receiver: operations
 receivers:
-  - name: "default"
-    # TODO: wire a real notification integration (Slack webhook, email, etc.).
-    # Example (Slack):
-    # webhook_configs:
-    #   - url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
-    #     send_resolved: true
+  - name: operations
+    webhook_configs:
+      - url_file: /run/secrets/alert_webhook_url
+        send_resolved: true

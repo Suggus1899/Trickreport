@@ -1,0 +1,89 @@
+rule_files:
+  - rules.yml
+evaluation_interval: 1m
+tests:
+  - name: backend down and recovery
+    interval: 1m
+    input_series:
+      - series: up{job="trickreport-backend",instance="app:8080"}
+        values: '0 0 0 1 1'
+    alert_rule_test:
+      - eval_time: 2m
+        alertname: TrickreportBackendDown
+        exp_alerts:
+          - exp_labels:
+              job: trickreport-backend
+              instance: app:8080
+              service: backend
+              severity: critical
+            exp_annotations:
+              summary: Trickreport backend is down
+              description: The backend metrics scrape has failed or disappeared for more than one minute.
+      - eval_time: 4m
+        alertname: TrickreportBackendDown
+        exp_alerts: []
+  - name: elevated errors and zero traffic
+    interval: 1m
+    input_series:
+      - series: http_requests_total{job="trickreport-backend",status="200"}
+        values: '0+90x20'
+      - series: http_requests_total{job="trickreport-backend",status="500"}
+        values: '0+10x20'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: TrickreportHighErrorRate
+        exp_alerts:
+          - exp_labels:
+              service: backend
+              severity: warning
+            exp_annotations:
+              summary: High error rate on Trickreport backend
+              description: More than 5% of requests returned 5xx responses for five minutes.
+  - name: idle service is not an HTTP failure
+    interval: 1m
+    input_series:
+      - series: http_requests_total{job="trickreport-backend",status="200"}
+        values: '0+0x15'
+    alert_rule_test:
+      - eval_time: 10m
+        alertname: TrickreportHighErrorRate
+        exp_alerts: []
+  - name: stale worker and recovery
+    interval: 1m
+    input_series:
+      - series: worker_last_success_timestamp_seconds{job="trickreport-backend",worker="sla"}
+        values: '0+0x8 540 600'
+    alert_rule_test:
+      - eval_time: 8m
+        alertname: TrickreportWorkerStale
+        exp_alerts:
+          - exp_labels:
+              job: trickreport-backend
+              worker: sla
+              service: backend
+              severity: warning
+            exp_annotations:
+              summary: Trickreport worker stopped progressing
+              description: A worker has not completed a successful poll for more than three minutes.
+      - eval_time: 10m
+        alertname: TrickreportWorkerStale
+        exp_alerts: []
+  - name: failed email jobs and recovery
+    interval: 1m
+    input_series:
+      - series: outbox_failed_total{job="trickreport-backend"}
+        values: '2+0x7 0 0'
+    alert_rule_test:
+      - eval_time: 6m
+        alertname: TrickreportOutboxFailed
+        exp_alerts:
+          - exp_labels:
+              job: trickreport-backend
+              service: backend
+              severity: warning
+            exp_annotations:
+              summary: Email outbox has failed messages
+              description: Inspect failed email jobs and SMTP configuration before retrying.
+      - eval_time: 9m
+        alertname: TrickreportOutboxFailed
+        exp_alerts: []

@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -39,6 +40,9 @@ func DefaultPoolConfig() PoolConfig {
 // NewPool creates and validates a pgx connection pool configured with the
 // provided PoolConfig.
 func NewPool(ctx context.Context, databaseURL string, config PoolConfig) (*pgxpool.Pool, error) {
+	if config.MaxConns > math.MaxInt32 || config.MinConns > math.MaxInt32 {
+		return nil, fmt.Errorf("connection counts exceed the supported int32 range")
+	}
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse database DSN: %w", err)

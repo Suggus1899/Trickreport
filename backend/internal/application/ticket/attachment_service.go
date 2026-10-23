@@ -51,17 +51,17 @@ var (
 
 // allowedContentTypes is the whitelist of accepted MIME types for uploads.
 var allowedContentTypes = map[string]bool{
-	"image/jpeg":      true,
-	"image/png":       true,
-	"image/gif":       true,
-	"image/webp":      true,
-	"image/bmp":       true,
-	"application/pdf": true,
-	"text/plain":      true,
-	"text/csv":        true,
-	"application/msword":                                                        true,
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":   true,
-	"application/vnd.ms-excel":                                                  true,
+	"image/jpeg":         true,
+	"image/png":          true,
+	"image/gif":          true,
+	"image/webp":         true,
+	"image/bmp":          true,
+	"application/pdf":    true,
+	"text/plain":         true,
+	"text/csv":           true,
+	"application/msword": true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+	"application/vnd.ms-excel": true,
 	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         true,
 	"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
 	"application/zip": true,
@@ -163,11 +163,6 @@ func (s *AttachmentService) Upload(ctx context.Context, input UploadInput) (*dom
 		return nil, err
 	}
 
-	// Validate content type against whitelist
-	if !validateContentType(input.ContentType) {
-		return nil, fmt.Errorf("%w: %s", ErrInvalidContent, input.ContentType)
-	}
-
 	// Sanitize filename
 	safeFilename := sanitizeFilename(input.Filename)
 
@@ -179,12 +174,16 @@ func (s *AttachmentService) Upload(ctx context.Context, input UploadInput) (*dom
 	if !t.CanBeViewedBy(input.UserID, input.Role) {
 		return nil, domainTicket.ErrForbidden
 	}
+	contentType, err := validateAttachmentContent(input.ContentType, input.FileData)
+	if err != nil {
+		return nil, err
+	}
 
 	return s.attachments.Create(ctx, AttachmentUploadInput{
 		TicketID:    input.TicketID,
 		UserID:      input.UserID,
 		Filename:    safeFilename,
-		ContentType: input.ContentType,
+		ContentType: contentType,
 		FileSize:    int64(len(input.FileData)),
 		FileData:    input.FileData,
 	})

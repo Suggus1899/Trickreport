@@ -1,37 +1,41 @@
 # Trickreport — Root Makefile for local development (no Docker)
 # Local development ALWAYS runs without Docker.
 
-.PHONY: dev backend frontend build test lint fmt install setup clean
+.PHONY: dev backend frontend build build-backend build-frontend test test-backend test-frontend lint lint-backend lint-frontend check fmt fmt-backend fmt-frontend install setup clean
 
 ## dev: start backend + frontend concurrently (local, no Docker)
 dev:
 	@echo "Starting Trickreport dev environment (local, no Docker)..."
-	@bash ./scripts/dev.sh 2>/dev/null || powershell -ExecutionPolicy Bypass -File ./scripts/dev.ps1
+ifeq ($(OS),Windows_NT)
+	@powershell -ExecutionPolicy Bypass -File ./scripts/dev.ps1
+else
+	@bash ./scripts/dev.sh
+endif
 
 ## backend: start only the backend
 backend:
-	cd backend && go run cmd/api/main.go
+	cd backend && go run ./cmd/api
 
-## frontend: start only the frontend
+## frontend: start the IT Next.js frontend
 frontend:
-	cd frontend && npm run dev
+	npm run dev:it
 
 ## setup: copy .env files from examples (edit credentials before running)
 setup:
 	@if [ ! -f backend/.env ]; then cp backend/.env.example backend/.env; echo "Created backend/.env — edit DATABASE_URL with your credentials"; fi
-	@if [ ! -f frontend/.env.local ]; then cp frontend/.env.example frontend/.env.local; echo "Created frontend/.env.local"; fi
-	@cd frontend && npm install
+	@if [ ! -f apps/it/.env.local ]; then cp apps/it/.env.example apps/it/.env.local; echo "Created apps/it/.env.local"; fi
+	@npm ci
 
 ## build: build both backend and frontend
 build: build-backend build-frontend
 
 ## build-backend: compile the backend binary
 build-backend:
-	cd backend && go build -o dist/trickreport-api cmd/api/main.go
+	cd backend && go build -o dist/trickreport-api ./cmd/api
 
 ## build-frontend: build the frontend for production
 build-frontend:
-	cd frontend && npm run build
+	npm run build
 
 ## test: run all tests (backend + frontend)
 test: test-backend test-frontend
@@ -42,7 +46,11 @@ test-backend:
 
 ## test-frontend: run frontend tests
 test-frontend:
-	cd frontend && npx vitest run
+	npm test
+
+## check: type-check the frontend
+check:
+	npm run check
 
 ## lint: lint both backend and frontend
 lint: lint-backend lint-frontend
@@ -53,7 +61,7 @@ lint-backend:
 
 ## lint-frontend: lint the frontend with eslint
 lint-frontend:
-	cd frontend && npm run lint
+	npm run lint
 
 ## fmt: format both backend and frontend
 fmt: fmt-backend fmt-frontend
@@ -68,8 +76,8 @@ fmt-frontend:
 
 ## install: install frontend dependencies
 install:
-	cd frontend && npm install
+	npm ci
 
 ## clean: remove build artifacts
 clean:
-	rm -rf backend/dist frontend/dist
+	rm -rf backend/dist apps/it/.next apps/msp/.next apps/customer-service/.next
