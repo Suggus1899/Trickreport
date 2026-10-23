@@ -11,6 +11,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/rs/zerolog/log"
 	"golang.org/x/crypto/bcrypt"
+
+	domainUser "github.com/trickreport/backend/internal/domain/user"
 )
 
 var (
@@ -59,6 +61,12 @@ func EnsureAdmin(ctx context.Context, pool *pgxpool.Pool, adminEmail, adminPassw
 	if adminEmail == "" || adminPassword == "" {
 		log.Warn().Msg("ADMIN_EMAIL/ADMIN_PASSWORD not set — skipping admin bootstrap")
 		return nil
+	}
+
+	// The bootstrap password becomes the most privileged credential in the
+	// system; it must satisfy the same domain policy as any local password.
+	if err := domainUser.ValidatePasswordComplexity(adminPassword); err != nil {
+		return fmt.Errorf("bootstrap: ADMIN_PASSWORD does not meet the password policy: %w", err)
 	}
 
 	var userCount int

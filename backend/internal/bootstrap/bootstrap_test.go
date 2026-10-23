@@ -2,8 +2,34 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"testing"
+
+	domainUser "github.com/trickreport/backend/internal/domain/user"
 )
+
+func TestEnsureAdmin_WeakPasswordRejected(t *testing.T) {
+	// A bootstrap password that violates the domain policy must be rejected
+	// before any database access (nil pool proves the pool is never touched).
+	cases := []struct {
+		name     string
+		password string
+		want     error
+	}{
+		{"too short", "Ab1!xyz", domainUser.ErrPasswordTooShort},
+		{"no symbol", "Abcdefgh1234", domainUser.ErrPasswordNoSymbol},
+		{"no uppercase", "abcdefgh1234!", domainUser.ErrPasswordNoUppercase},
+		{"no number", "Abcdefghijk!", domainUser.ErrPasswordNoNumber},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := EnsureAdmin(context.Background(), nil, "admin@example.com", tc.password)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("EnsureAdmin password %q: error = %v, want %v", tc.password, err, tc.want)
+			}
+		})
+	}
+}
 
 func TestEnsureAdmin_EmptyCredentials(t *testing.T) {
 	// With empty credentials, EnsureAdmin should return nil without touching the pool.
