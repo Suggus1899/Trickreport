@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/google/uuid"
 	chiMiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/google/uuid"
 )
 
 const requestIDKey contextKey = "request_id"

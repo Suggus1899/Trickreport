@@ -50,12 +50,12 @@ func TestParseRole(t *testing.T) {
 
 func TestRole_Permissions(t *testing.T) {
 	tests := []struct {
-		name       string
-		role       Role
-		manage     bool
-		writeArt   bool
-		assign     bool
-		viewAll    bool
+		name     string
+		role     Role
+		manage   bool
+		writeArt bool
+		assign   bool
+		viewAll  bool
 	}{
 		{"admin", RoleAdmin, true, true, true, true},
 		{"agent", RoleAgent, false, true, true, true},

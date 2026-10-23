@@ -86,8 +86,8 @@ func (m *mockDBTX) QueryRow(ctx context.Context, sql string, args ...any) pgx.Ro
 
 // mockRows implements pgx.Rows for testing List queries.
 type mockRows struct {
-	rows  [][]any
-	idx   int
+	rows   [][]any
+	idx    int
 	closed bool
 }
 
@@ -150,13 +150,13 @@ func (m *mockRows) Scan(dest ...any) error {
 	return nil
 }
 
-func (m *mockRows) Close() { m.closed = true }
-func (m *mockRows) Err() error { return nil }
-func (m *mockRows) CommandTag() pgconn.CommandTag { return pgconn.NewCommandTag("") }
+func (m *mockRows) Close()                                       { m.closed = true }
+func (m *mockRows) Err() error                                   { return nil }
+func (m *mockRows) CommandTag() pgconn.CommandTag                { return pgconn.NewCommandTag("") }
 func (m *mockRows) FieldDescriptions() []pgconn.FieldDescription { return nil }
-func (m *mockRows) Values() ([]any, error) { return nil, nil }
-func (m *mockRows) RawValues() [][]byte { return nil }
-func (m *mockRows) Conn() *pgx.Conn { return nil }
+func (m *mockRows) Values() ([]any, error)                       { return nil, nil }
+func (m *mockRows) RawValues() [][]byte                          { return nil }
+func (m *mockRows) Conn() *pgx.Conn                              { return nil }
 
 // ---------------------------------------------------------------------------
 // Test entity builders — for creating domain objects in tests.

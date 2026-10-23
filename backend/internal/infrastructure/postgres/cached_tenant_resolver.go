@@ -10,7 +10,7 @@ import (
 
 // cacheEntry holds a resolved tenant ID and its expiration time.
 type cacheEntry struct {
-	tenantID uuid.UUID
+	tenantID  uuid.UUID
 	expiresAt time.Time
 }
 

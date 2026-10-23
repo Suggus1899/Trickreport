@@ -7,7 +7,7 @@ import (
 
 func TestIsProduction(t *testing.T) {
 	tests := []struct {
-		env string
+		env  string
 		want bool
 	}{
 		{"production", true},

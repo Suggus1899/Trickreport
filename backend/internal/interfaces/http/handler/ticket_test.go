@@ -21,12 +21,12 @@ import (
 // --- Mocks for ticket service dependencies ---
 
 type tMockRepo struct {
-	tickets   []domainTicket.Ticket
-	ticket    *domainTicket.Ticket
-	err       error
-	updateErr error
-	assignErr error
-	gotFilter appTicket.Filter
+	tickets     []domainTicket.Ticket
+	ticket      *domainTicket.Ticket
+	err         error
+	updateErr   error
+	assignErr   error
+	gotFilter   appTicket.Filter
 	createCalls int
 }
 

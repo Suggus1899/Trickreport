@@ -16,6 +16,7 @@ import (
 //   - Upload  -> s3.PutObject with the provided content type
 //   - Download-> s3.GetObject, returning Body as the ReadCloser
 //   - Delete  -> s3.DeleteObject (treat NoSuchKey as success)
+//
 // Do NOT add the dependency in this stub; wire it in a follow-up change.
 type S3Storage struct {
 	// Bucket is the target S3 bucket name.

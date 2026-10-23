@@ -18,13 +18,13 @@ import (
 // --- Mocks ---
 
 type aMockRepo struct {
-	articles   []article.Article
-	article    *article.Article
-	err        error
-	createErr  error
-	updateErr  error
-	deleteErr  error
-	gotRole    string
+	articles    []article.Article
+	article     *article.Article
+	err         error
+	createErr   error
+	updateErr   error
+	deleteErr   error
+	gotRole     string
 	createCalls int
 }
 

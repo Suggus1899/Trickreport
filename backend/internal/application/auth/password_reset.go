@@ -120,7 +120,9 @@ func (s *PasswordResetService) RequestReset(ctx context.Context, tenantID uuid.U
 
 func (s *PasswordResetService) SetTxManager(tx interface {
 	RunInTx(context.Context, func(context.Context) error) error
-}) { s.tx = tx }
+}) {
+	s.tx = tx
+}
 
 // ConfirmReset validates the reset token and updates the user's password.
 // The new password is validated for complexity before being stored.

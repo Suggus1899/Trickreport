@@ -24,16 +24,16 @@ func NewAutomationHandler(svc *appAuto.Service) *AutomationHandler {
 }
 
 type RuleDTO struct {
-	ID          uuid.UUID       `json:"id"`
-	TenantID    uuid.UUID       `json:"tenant_id"`
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	TriggerType string          `json:"trigger_type"`
-	Conditions  map[string]any  `json:"conditions"`
-	Actions     []any           `json:"actions"`
-	IsActive    bool            `json:"is_active"`
-	CreatedAt   time.Time       `json:"created_at"`
-	UpdatedAt   time.Time       `json:"updated_at"`
+	ID          uuid.UUID      `json:"id"`
+	TenantID    uuid.UUID      `json:"tenant_id"`
+	Name        string         `json:"name"`
+	Description string         `json:"description"`
+	TriggerType string         `json:"trigger_type"`
+	Conditions  map[string]any `json:"conditions"`
+	Actions     []any          `json:"actions"`
+	IsActive    bool           `json:"is_active"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
 }
 
 type createRuleReq struct {

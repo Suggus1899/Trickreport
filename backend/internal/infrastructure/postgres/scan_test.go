@@ -13,8 +13,8 @@ import (
 
 // mockRow implements pgx.Row for testing scan functions.
 type mockRow struct {
-	err  error
-	set  func(dest []any)
+	err error
+	set func(dest []any)
 }
 
 func (m *mockRow) Scan(dest ...any) error {

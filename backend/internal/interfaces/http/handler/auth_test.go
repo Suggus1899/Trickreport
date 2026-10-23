@@ -18,9 +18,9 @@ import (
 // --- Mocks for auth service dependencies ---
 
 type authMockUserRepo struct {
-	u      *user.User
-	err    error
-	gotID  uuid.UUID
+	u     *user.User
+	err   error
+	gotID uuid.UUID
 }
 
 func (m *authMockUserRepo) GetByEmail(ctx context.Context, tenantID uuid.UUID, email string) (*user.User, error) {

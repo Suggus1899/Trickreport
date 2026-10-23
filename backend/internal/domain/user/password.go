@@ -9,11 +9,11 @@ const (
 
 // Password complexity errors.
 var (
-	ErrPasswordTooShort       = errors.New("password must be at least 12 characters long")
-	ErrPasswordNoUppercase    = errors.New("password must contain at least one uppercase letter")
-	ErrPasswordNoLowercase    = errors.New("password must contain at least one lowercase letter")
-	ErrPasswordNoNumber       = errors.New("password must contain at least one number")
-	ErrPasswordNoSymbol       = errors.New("password must contain at least one symbol")
+	ErrPasswordTooShort    = errors.New("password must be at least 12 characters long")
+	ErrPasswordNoUppercase = errors.New("password must contain at least one uppercase letter")
+	ErrPasswordNoLowercase = errors.New("password must contain at least one lowercase letter")
+	ErrPasswordNoNumber    = errors.New("password must contain at least one number")
+	ErrPasswordNoSymbol    = errors.New("password must contain at least one symbol")
 )
 
 // ValidatePasswordComplexity checks that a password meets the minimum
@@ -26,10 +26,10 @@ func ValidatePasswordComplexity(password string) error {
 	}
 
 	var (
-		hasUpper   bool
-		hasLower   bool
-		hasNumber  bool
-		hasSymbol  bool
+		hasUpper  bool
+		hasLower  bool
+		hasNumber bool
+		hasSymbol bool
 	)
 	for _, r := range password {
 		switch {
