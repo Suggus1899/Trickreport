@@ -40,6 +40,8 @@ func TestAttachment_ContentMatchesDeclaration(t *testing.T) {
 		{"forged PDF", "application/pdf", []byte("plain text"), false}, {"truncated PDF", "application/pdf", []byte("%PDF-1.4"), false},
 		{"zip", "application/zip", zipBytes.Bytes(), true}, {"not a docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", zipBytes.Bytes(), false},
 		{"forged OLE", "application/msword", []byte("not a binary office document"), false},
+		{"svg with script", "image/svg+xml", []byte(`<svg xmlns="http://www.w3.org/2000/svg"><script>alert(1)</script></svg>`), false},
+		{"svg declared as png", "image/png", []byte(`<svg xmlns="http://www.w3.org/2000/svg"></svg>`), false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			repo := &mockAttachmentRepo{}

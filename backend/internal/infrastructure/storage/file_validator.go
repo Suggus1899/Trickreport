@@ -8,26 +8,29 @@ import (
 // allowedContentTypes is the whitelist of accepted MIME content types for
 // file uploads. Images, PDFs, plain text, and common document formats are
 // allowed.
+//
+// SVG is deliberately NOT allowed: it is an XML document that can carry
+// scripts, so serving an uploaded SVG inline enables stored XSS. This
+// mirrors the effective upload whitelist in application/ticket.
 var allowedContentTypes = map[string]bool{
 	// Images
-	"image/jpeg":             true,
-	"image/png":              true,
-	"image/gif":              true,
-	"image/webp":             true,
-	"image/svg+xml":          true,
-	"image/bmp":              true,
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/gif":  true,
+	"image/webp": true,
+	"image/bmp":  true,
 	// PDF
 	"application/pdf": true,
 	// Text
 	"text/plain": true,
 	"text/csv":   true,
 	// Documents
-	"application/msword":                                                          true,
-	"application/vnd.openxmlformats-officedocument.wordprocessingml.document":     true,
-	"application/vnd.ms-excel":                                                    true,
-	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":           true,
-	"application/vnd.openxmlformats-officedocument.presentationml.presentation":   true,
-	"application/vnd.oasis.opendocument.text":                                     true,
+	"application/msword": true,
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document": true,
+	"application/vnd.ms-excel": true,
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":         true,
+	"application/vnd.openxmlformats-officedocument.presentationml.presentation": true,
+	"application/vnd.oasis.opendocument.text":                                   true,
 	// Archives (for support bundles)
 	"application/zip": true,
 }
