@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 268 64" role="img" aria-labelledby="title">
+  <title id="title">Trickreport</title>
+  <rect width="64" height="64" rx="15" fill="#0B1220"/>
+  <path d="M12 14h40v9H36v27h-9V23H12z" fill="#818CF8"/>
+  <path d="m39 39 5 5 10-12" fill="none" stroke="#34D399" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"/>
+  <text x="78" y="42" font-family="Public Sans, system-ui, sans-serif" font-size="27" font-weight="600" letter-spacing="-0.5" fill="#E5E7EB">trickreport</text>
+</svg>
