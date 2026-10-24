@@ -1,0 +1,118 @@
+# Pila Swarm de la capa de aplicación — Soporte TI (referencia HA).
+#
+# PostgreSQL NO vive en esta pila: lo gobierna Patroni en los nodos de
+# datos (ver patroni/patroni.yml) y la API lo alcanza vía HAProxy
+# (puerto 5000 del ingreso de datos). Sustituye VERSION por la etiqueta
+# de la entrega; API y frontend comparten versión por despliegue.
+# Las variables marcadas con :? las aporta quien despliega desde su
+# gestión de secretos al ejecutar `docker stack deploy` (la API lee su
+# configuración de variables de entorno, igual que en Compose).
+version: "3.9"
+
+x-api-environment: &api-environment
+  PORT: "8080"
+  ENV: production
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must point to the Patroni HAProxy primary endpoint (port 5000)}
+  JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required (at least 32 bytes)}
+  JWT_EXP_HOURS: "8"
+  ADMIN_EMAIL: ${ADMIN_EMAIL:?ADMIN_EMAIL is required}
+  ADMIN_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+  COOKIE_SECURE: "true"
+  CORS_ORIGINS: ${APP_PUBLIC_URL:?APP_PUBLIC_URL must be the HTTPS public origin}
+  APP_PUBLIC_URL: ${APP_PUBLIC_URL:?APP_PUBLIC_URL is required}
+  LDAP_ENABLED: ${LDAP_ENABLED:-false}
+  LDAP_HOST: ${LDAP_HOST:-}
+  LDAP_PORT: ${LDAP_PORT:-636}
+  LDAP_USE_TLS: ${LDAP_USE_TLS:-true}
+  LDAP_BIND_DN: ${LDAP_BIND_DN:-}
+  LDAP_BIND_PW: ${LDAP_BIND_PW:-}
+  LDAP_BASE_DN: ${LDAP_BASE_DN:-}
+  LDAP_UID_ATTR: ${LDAP_UID_ATTR:-uid}
+  SMTP_HOST: ${SMTP_HOST:-}
+  SMTP_PORT: ${SMTP_PORT:-587}
+  SMTP_USERNAME: ${SMTP_USERNAME:-}
+  SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+  SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
+  SMTP_USE_TLS: ${SMTP_USE_TLS:-true}
+
+services:
+  it-api:
+    image: trickreport/backend:VERSION
+    environment:
+      <<: *api-environment
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    deploy:
+      replicas: 2
+      placement:
+        constraints: [node.role == manager]
+        max_replicas_per_node: 1
+      update_config:
+        parallelism: 1
+        delay: 20s
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        parallelism: 1
+        delay: 20s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    networks: [app]
+
+  it-frontend:
+    image: trickreport/it-frontend:VERSION
+    environment:
+      API_URL: http://it-api:8080
+      APP_PUBLIC_URL: ${APP_PUBLIC_URL:?APP_PUBLIC_URL is required}
+      NODE_ENV: production
+      HOSTNAME: 0.0.0.0
+      PORT: "3000"
+      NEXT_TELEMETRY_DISABLED: "1"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/login"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    ports:
+      - target: 3000
+        published: 3000
+        protocol: tcp
+        mode: ingress
+    deploy:
+      replicas: 2
+      placement:
+        constraints: [node.role == manager]
+        max_replicas_per_node: 1
+      update_config:
+        parallelism: 1
+        delay: 20s
+        failure_action: rollback
+        monitor: 30s
+      rollback_config:
+        parallelism: 1
+        delay: 20s
+      restart_policy:
+        condition: on-failure
+        delay: 5s
+        max_attempts: 5
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+    networks: [app]
+
+networks:
+  app:
+    driver: overlay
+    attachable: true

@@ -1,0 +1,66 @@
+# Patroni — PostgreSQL 16 en los nodos de datos (referencia HA).
+#
+# Una copia por nodo de datos, cambiando name/data_dir/connect_address.
+# Replicación síncrona estricta: al menos una réplica confirma cada
+# escritura antes de responder al cliente (plan maestro §3).
+# Los valores entre <> se sustituyen al instalar; las contraseñas se
+# inyectan por variables de entorno o archivos con permisos 0600,
+# nunca se versionan rellenas.
+scope: trickreport-it
+name: <data-node-name>            # data-a | data-b | data-c
+log:
+  level: INFO
+  dir: /var/log/patroni
+
+restapi:
+  listen: 0.0.0.0:8008
+  connect_address: <data-node-ip>:8008
+
+etcd3:
+  hosts: <data-a-ip>:2379,<data-b-ip>:2379,<data-c-ip>:2379
+
+bootstrap:
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    synchronous_mode: true
+    synchronous_mode_strict: true
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        wal_level: replica
+        hot_standby: "on"
+        max_wal_senders: 10
+        max_replication_slots: 10
+        wal_keep_size: 512MB
+  initdb:
+    - encoding: UTF8
+    - data-checksums
+  pg_hba:
+    - host replication replicator 0.0.0.0/0 scram-sha-256
+    - host all all 0.0.0.0/0 scram-sha-256
+
+postgresql:
+  listen: 0.0.0.0:5432
+  connect_address: <data-node-ip>:5432
+  data_dir: /var/lib/postgresql/data
+  bin_dir: /usr/lib/postgresql/16/bin
+  authentication:
+    superuser:
+      username: postgres
+      password: <from-secret-store>
+    replication:
+      username: replicator
+      password: <from-secret-store>
+  parameters:
+    synchronous_commit: "on"
+    max_connections: 200
+
+tags:
+  nofailover: false
+  noloadbalance: false
+  clonefrom: false
+  nosync: false
