@@ -4,13 +4,14 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { BarChart3, BookOpen, Clock3, LayoutDashboard, LogOut, Menu, Moon, Sun, Ticket, Users, Workflow, X, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, BarChart3, BookOpen, CheckSquare, Clock3, Layers, LayoutDashboard, LogOut, Menu, Moon, Repeat, Server, Sun, Ticket, Users, Workflow, X, type LucideIcon } from 'lucide-react';
 import type { Locale, Product, User } from './contracts';
 import { Analytics, Automations, SLAPolicies, Users as UserManagement } from './admin';
 import { AuthPage, Profile } from './auth';
 import { ArticleForm, ArticlePage, Knowledge } from './knowledge';
 import { api } from './api';
 import { Notifications } from './notifications';
+import { Approvals, Assets, Catalog, Changes, ITSMReportView, Problems } from './itsm';
 import { Dashboard, Drafts, NewTicket, TicketDetail, TicketList } from './tickets';
 import { Button, Empty, Feedback, Language, Notice, useText } from './ui';
 
@@ -41,11 +42,17 @@ const productLabels: Record<Product, [string, string]> = {
 const navigation: NavigationItem[] = [
   { href: '/dashboard', label: ['Inicio', 'Overview'], icon: LayoutDashboard },
   { href: '/tickets', label: ['Solicitudes', 'Requests'], icon: Ticket },
+  { href: '/catalog', label: ['Catálogo', 'Catalog'], icon: Layers },
+  { href: '/approvals', label: ['Aprobaciones', 'Approvals'], icon: CheckSquare },
+  { href: '/assets', label: ['Activos', 'Assets'], icon: Server },
+  { href: '/problems', label: ['Problemas', 'Problems'], icon: AlertTriangle },
+  { href: '/changes', label: ['Cambios', 'Changes'], icon: Repeat },
   { href: '/articles', label: ['Conocimiento', 'Knowledge'], icon: BookOpen },
   { href: '/admin/users', label: ['Personas', 'People'], icon: Users, admin: true },
   { href: '/admin/sla', label: ['Acuerdos SLA', 'Service targets'], icon: Clock3, admin: true },
   { href: '/admin/automations', label: ['Automatizaciones', 'Automations'], icon: Workflow, admin: true },
   { href: '/admin/analytics', label: ['Informes', 'Reports'], icon: BarChart3, admin: true },
+  { href: '/admin/itsm', label: ['Informes ITSM', 'ITSM reports'], icon: BarChart3, admin: true },
 ];
 
 function PageContent({ product, route, user }: Required<Pick<WorkspaceProps, 'product' | 'route'>> & { user: User }) {
@@ -55,6 +62,11 @@ function PageContent({ product, route, user }: Required<Pick<WorkspaceProps, 'pr
   if (route === '/tickets/new') return <NewTicket user={user} product={product} />;
   if (route === '/tickets/drafts') return <Drafts user={user} product={product} />;
   if (route.startsWith('/tickets/')) return <TicketDetail id={route.slice('/tickets/'.length)} user={user} />;
+  if (route === '/catalog') return <Catalog user={user} />;
+  if (route === '/approvals') return <Approvals user={user} />;
+  if (route === '/assets') return <Assets user={user} />;
+  if (route === '/problems') return <Problems user={user} />;
+  if (route === '/changes') return <Changes user={user} />;
   if (route === '/articles') return <Knowledge user={user} />;
   if (route === '/articles/new') return user.role === 'end_user' ? <AccessDenied /> : <ArticleForm />;
   if (route.startsWith('/articles/')) {
@@ -67,6 +79,7 @@ function PageContent({ product, route, user }: Required<Pick<WorkspaceProps, 'pr
   if (route === '/admin/sla') return user.role === 'admin' ? <SLAPolicies /> : <AccessDenied />;
   if (route === '/admin/automations') return user.role === 'admin' ? <Automations /> : <AccessDenied />;
   if (route === '/admin/analytics') return user.role === 'admin' ? <Analytics /> : <AccessDenied />;
+  if (route === '/admin/itsm') return user.role === 'admin' ? <ITSMReportView /> : <AccessDenied />;
   return <section className="error-page"><Empty>{t('No encontramos esta página.','We could not find this page.')}</Empty></section>;
 }
 
