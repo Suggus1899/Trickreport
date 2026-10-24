@@ -9,7 +9,7 @@ export interface History { id: string; field: string; old_value?: string; new_va
 export interface Summary { total_tickets: number; open_tickets: number; resolved_tickets: number; sla_breached: number }
 export interface SLA { priority: string; response_time_minutes: number; resolution_time_minutes: number; escalation_minutes: number }
 export interface Automation { id?: string; name: string; description: string; trigger_type: string; conditions: Record<string, unknown>; actions: unknown[]; is_active: boolean }
-export interface Notification { id: string; title: string; body: string; read: boolean; ref_id?: string; ref_type?: string; created_at: string }
+export interface Notification { id: string; title: string; body: string; type?: string; read: boolean; ref_id?: string; ref_type?: string; created_at: string }
 export interface Charts { volume: { date: string; count: number }[]; status_distribution: { status: string; count: number }[]; resolution_time: { priority: string; avg_hours: number }[]; sla_compliance: { total: number; breached: number; compliant: number } }
 export const transitions: Record<string, string[]> = { open: ['in_progress', 'waiting_client', 'resolved', 'closed'], in_progress: ['waiting_client', 'resolved', 'closed'], waiting_client: ['in_progress', 'resolved', 'closed'], resolved: ['closed', 'in_progress'], closed: ['in_progress'] };
 export const priorities = ['low', 'medium', 'high', 'critical'] as const;
