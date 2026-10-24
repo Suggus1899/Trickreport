@@ -10,11 +10,27 @@ import { Analytics, Automations, SLAPolicies, Users as UserManagement } from './
 import { AuthPage, Profile } from './auth';
 import { ArticleForm, ArticlePage, Knowledge } from './knowledge';
 import { api } from './api';
+import { Notifications } from './notifications';
 import { Dashboard, Drafts, NewTicket, TicketDetail, TicketList } from './tickets';
 import { Button, Empty, Feedback, Language, Notice, useText } from './ui';
 
 type WorkspaceProps = { product: Product; route: string; user: User | null; unavailable: boolean };
 type NavigationItem = { href: string; label: [string, string]; icon: LucideIcon; admin?: boolean };
+
+const LOCALE_COOKIE = 'trickreport_locale';
+const THEME_COOKIE = 'trickreport_theme';
+
+function readPreference(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const cookie = document.cookie.split('; ').find(value => value.startsWith(`${name}=`))?.slice(name.length + 1);
+  if (cookie) return cookie;
+  try { return window.localStorage.getItem(name); } catch { return null; }
+}
+
+function writePreference(name: string, value: string) {
+  try { window.localStorage.setItem(name, value); } catch { /* storage unavailable */ }
+  document.cookie = `${name}=${value}; path=/; max-age=31536000; samesite=lax`;
+}
 
 const productLabels: Record<Product, [string, string]> = {
   it: ['Soporte TI', 'IT support'],
@@ -60,8 +76,8 @@ function AccessDenied() {
 }
 
 export function Workspace({ product, route, user, unavailable }: WorkspaceProps) {
-  const [locale, setLocale] = useState<Locale>('es');
-  const [dark, setDark] = useState(false);
+  const [locale, setLocale] = useState<Locale>(() => readPreference(LOCALE_COOKIE) === 'en' ? 'en' : 'es');
+  const [dark, setDark] = useState(() => readPreference(THEME_COOKIE) === 'dark' || (typeof document !== 'undefined' && document.documentElement.classList.contains('dark')));
   const [menuState, setMenuState] = useState({ route, open: false });
   const [logoutError, setLogoutError] = useState('');
   const router = useRouter();
@@ -70,13 +86,16 @@ export function Workspace({ product, route, user, unavailable }: WorkspaceProps)
   const setMenuOpen = (open: boolean) => setMenuState({ route, open });
 
   useEffect(() => { document.documentElement.classList.toggle('dark', dark); }, [dark]);
+  useEffect(() => { document.documentElement.lang = locale; }, [locale]);
 
   function changeLocale(value: Locale) {
     setLocale(value);
+    writePreference(LOCALE_COOKIE, value);
   }
   function changeTheme() {
     const next = !dark;
     setDark(next);
+    writePreference(THEME_COOKIE, next ? 'dark' : 'light');
   }
   async function logout() {
     setLogoutError('');
@@ -115,7 +134,7 @@ export function Workspace({ product, route, user, unavailable }: WorkspaceProps)
       </aside>
       <div className="main-area">
         <header className="topbar"><div className="topbar-label"><span>{locale === 'es' ? 'Organización' : 'Organization'}</span><span>{user.tenant_id}</span></div>
-          <div className="topbar-tools"><Button variant="tertiary" className="icon-button mobile-menu" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="primary-navigation" onPress={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={18}/> : <Menu size={18}/>}</Button><LocalePicker locale={locale} changeLocale={changeLocale}/><Button variant="tertiary" className="icon-button" onPress={changeTheme} aria-label={locale === 'es' ? (dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro') : (dark ? 'Switch to light theme' : 'Switch to dark theme')}>{dark ? <Sun size={17}/> : <Moon size={17}/>}</Button><span className="avatar" aria-hidden="true">{user.name.trim().slice(0, 1).toUpperCase()}</span></div>
+          <div className="topbar-tools"><Button variant="tertiary" className="icon-button mobile-menu" aria-label={menuOpen ? 'Close navigation' : 'Open navigation'} aria-expanded={menuOpen} aria-controls="primary-navigation" onPress={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X size={18}/> : <Menu size={18}/>}</Button><Notifications tenant={user.tenant_id}/><LocalePicker locale={locale} changeLocale={changeLocale}/><Button variant="tertiary" className="icon-button" onPress={changeTheme} aria-label={locale === 'es' ? (dark ? 'Cambiar a tema claro' : 'Cambiar a tema oscuro') : (dark ? 'Switch to light theme' : 'Switch to dark theme')}>{dark ? <Sun size={17}/> : <Moon size={17}/>}</Button><span className="avatar" aria-hidden="true">{user.name.trim().slice(0, 1).toUpperCase()}</span></div>
         </header>
         <main id="main" className="content"><PageContent product={product} route={route} user={user}/></main>
       </div>
