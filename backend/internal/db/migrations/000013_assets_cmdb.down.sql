@@ -1,0 +1,4 @@
+DROP TABLE IF EXISTS ticket_assets;
+DROP TABLE IF EXISTS ci_relationships;
+DROP TABLE IF EXISTS assets;
+DROP TABLE IF EXISTS ci_types;
