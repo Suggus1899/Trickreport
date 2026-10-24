@@ -107,6 +107,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	analyticsHandler := handlers.Analytics
 	attachmentHandler := handlers.Attachment
 	notificationHandler := handlers.Notification
+	itsmHandler := handlers.ITSM
 
 	// ── Router ────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -277,6 +278,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 					r.Get("/status-distribution", analyticsHandler.GetStatusDistribution)
 					r.Get("/resolution-time", analyticsHandler.GetResolutionTime)
 					r.Get("/charts", analyticsHandler.GetCharts)
+					r.Get("/itsm", itsmHandler.Report)
 				})
 			})
 
@@ -322,6 +324,73 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 				r.Get("/unread-count", notificationHandler.UnreadCount)
 				r.Post("/{id}/read", notificationHandler.MarkRead)
 				r.Post("/read-all", notificationHandler.MarkAllRead)
+			})
+
+			// ITSM (Stage 3): catalog, approvals, assets/CMDB, problems,
+			// changes. Reads are open to any authenticated user of the
+			// tenant; writes are staff-only except requesting a catalog
+			// service and deciding an approval, whose per-record rule
+			// lives in the application service.
+			r.Route("/catalog", func(r chi.Router) {
+				r.Get("/categories", itsmHandler.ListCategories)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/categories", itsmHandler.CreateCategory)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/categories/{id}", itsmHandler.UpdateCategory)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/categories/{id}", itsmHandler.DeleteCategory)
+
+				r.Get("/services", itsmHandler.ListServices)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/services", itsmHandler.CreateService)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/services/{id}", itsmHandler.UpdateService)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/services/{id}", itsmHandler.DeleteService)
+				r.Post("/services/{id}/request", itsmHandler.RequestService)
+			})
+
+			r.Route("/approvals", func(r chi.Router) {
+				r.Get("/", itsmHandler.ListApprovals)
+				r.Get("/{id}/history", itsmHandler.ApprovalHistory)
+				r.Post("/{id}/decide", itsmHandler.DecideApproval)
+			})
+
+			r.Route("/ci-types", func(r chi.Router) {
+				r.Get("/", itsmHandler.ListCITypes)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", itsmHandler.CreateCIType)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}", itsmHandler.DeleteCIType)
+			})
+
+			r.Route("/assets", func(r chi.Router) {
+				r.Get("/", itsmHandler.ListAssets)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", itsmHandler.CreateAsset)
+				r.Get("/{id}", itsmHandler.GetAsset)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", itsmHandler.UpdateAsset)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}", itsmHandler.DeleteAsset)
+				r.Get("/{id}/relationships", itsmHandler.ListRelationships)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/relationships", itsmHandler.CreateRelationship)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/relationships/{id}", itsmHandler.DeleteRelationship)
+			})
+
+			r.Route("/ticket-assets", func(r chi.Router) {
+				r.Get("/{ticketId}", itsmHandler.AssetsForTicket)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", itsmHandler.LinkTicketAsset)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{ticketId}/{assetId}", itsmHandler.UnlinkTicketAsset)
+			})
+
+			r.Route("/problems", func(r chi.Router) {
+				r.Get("/", itsmHandler.ListProblems)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", itsmHandler.CreateProblem)
+				r.Get("/{id}", itsmHandler.GetProblem)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Patch("/{id}", itsmHandler.UpdateProblem)
+				r.Get("/{id}/incidents", itsmHandler.IncidentsForProblem)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/incidents", itsmHandler.LinkIncident)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}/incidents/{ticketId}", itsmHandler.UnlinkIncident)
+			})
+
+			r.Route("/changes", func(r chi.Router) {
+				r.Get("/", itsmHandler.ListChanges)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", itsmHandler.CreateChange)
+				r.Get("/{id}", itsmHandler.GetChange)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Patch("/{id}/status", itsmHandler.UpdateChangeStatus)
+				r.Get("/{id}/tickets", itsmHandler.TicketsForChange)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/tickets", itsmHandler.LinkChangeTicket)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}/tickets/{ticketId}", itsmHandler.UnlinkChangeTicket)
 			})
 		})
 	})

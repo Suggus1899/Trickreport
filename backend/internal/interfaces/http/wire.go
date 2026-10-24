@@ -12,6 +12,7 @@ import (
 	appArticle "github.com/trickreport/backend/internal/application/article"
 	appAuth "github.com/trickreport/backend/internal/application/auth"
 	appAuto "github.com/trickreport/backend/internal/application/automation"
+	appITSM "github.com/trickreport/backend/internal/application/itsm"
 	appSLA "github.com/trickreport/backend/internal/application/sla"
 	appTicket "github.com/trickreport/backend/internal/application/ticket"
 	appUser "github.com/trickreport/backend/internal/application/user"
@@ -33,6 +34,7 @@ type Repos struct {
 	SLA            *postgres.SLARepo
 	Automation     *postgres.AutomationRepo
 	Analytics      *postgres.AnalyticsRepo
+	ITSM           *postgres.ITSMRepo
 	TenantResolver *postgres.TenantResolver
 	Attachment     *postgres.AttachmentRepo
 	PasswordReset  *postgres.PasswordResetRepo
@@ -53,6 +55,7 @@ func NewRepos(pool *pgxpool.Pool) *Repos {
 		SLA:            postgres.NewSLARepo(pool),
 		Automation:     postgres.NewAutomationRepo(pool),
 		Analytics:      postgres.NewAnalyticsRepo(pool),
+		ITSM:           postgres.NewITSMRepo(pool),
 		TenantResolver: postgres.NewTenantResolver(pool),
 		Attachment:     postgres.NewAttachmentRepo(pool),
 		PasswordReset:  postgres.NewPasswordResetRepo(pool),
@@ -72,6 +75,7 @@ type Services struct {
 	SLA           *appSLA.Service
 	Automation    *appAuto.Service
 	Analytics     *appAnalytics.Service
+	ITSM          *appITSM.Service
 	Engine        *appAuto.Engine
 	Attachment    *appTicket.AttachmentService
 	MFA           *appAuth.MFAService
@@ -150,6 +154,7 @@ func NewServices(
 		SLA:           appSLA.NewService(repos.SLA),
 		Automation:    appAuto.NewService(repos.Automation),
 		Analytics:     appAnalytics.NewService(repos.Analytics),
+		ITSM:          appITSM.NewService(repos.ITSM),
 		Auth:          authSvc,
 		Engine:        engine,
 		Attachment:    appTicket.NewAttachmentService(repos.Attachment, repos.Ticket),
@@ -172,6 +177,7 @@ type Handlers struct {
 	Analytics    *handler.AnalyticsHandler
 	Attachment   *handler.AttachmentHandler
 	Notification *handler.NotificationHandler
+	ITSM         *handler.ITSMHandler
 }
 
 // NewHandlers creates all HTTP handlers from services.
@@ -190,5 +196,6 @@ func NewHandlers(services *Services) *Handlers {
 		Analytics:    handler.NewAnalyticsHandler(services.Analytics),
 		Attachment:   handler.NewAttachmentHandler(services.Attachment),
 		Notification: handler.NewNotificationHandler(services.Notification),
+		ITSM:         handler.NewITSMHandler(services.ITSM),
 	}
 }
