@@ -69,10 +69,40 @@ export function ClientFilter({ clients, value, onChange }: { clients: MSPClient[
 
 function clientQuery(clientId: string) { return clientId ? `?client_id=${clientId}` : ''; }
 
-function toISO(local: FormDataEntryValue | null): string {
+// datetime-local values are wall-clock time in the user's zone; the API stores
+// UTC instants. These two functions are the only conversion pair.
+export function toISO(local: FormDataEntryValue | null): string {
   if (!local) return new Date().toISOString();
   const d = new Date(String(local));
   return Number.isNaN(d.getTime()) ? new Date().toISOString() : d.toISOString();
+}
+
+export function toLocalInput(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+// The contract form shows only part of the stored contract. A PUT replaces the
+// whole row, so fields the form does not show are carried over from the stored
+// contract instead of being filled with defaults.
+export function contractPayload(form: { get(name: string): FormDataEntryValue | null }, editing?: MSPContract | null) {
+  return {
+    client_id: form.get('client'),
+    name: form.get('name'),
+    status: form.get('status'),
+    starts_at: toISO(form.get('starts')),
+    ends_at: form.get('ends') ? toISO(form.get('ends')) : null,
+    coverage: editing?.coverage ?? '',
+    currency: editing?.currency || 'EUR',
+    monthly_fee_cents: Math.round(Number(form.get('fee') || 0) * 100),
+    hourly_rate_cents: Math.round(Number(form.get('rate') || 0) * 100),
+    included_hours_monthly: Number(form.get('included') || 0),
+    sla_response_minutes: Number(form.get('resp') || 240),
+    sla_resolution_minutes: Number(form.get('res') || 1440),
+    sla_overrides: editing?.sla_overrides ?? {},
+  };
 }
 
 // ── Clientes y contactos ────────────────────────────────────────────
@@ -122,8 +152,8 @@ export function MSPContracts({ user }: { user: User }) {
     <Feedback {...m} />
     <section className="panel"><div className="form-grid"><ClientFilter clients={clients.data || []} value={clientId} onChange={change} /></div></section>
     {staff && editing !== undefined && <section className="panel"><h2>{editing ? t('Editar contrato', 'Edit contract') : t('Nuevo contrato', 'New contract')}</h2>
-      <form key={editing?.id || 'new'} action={form => m.run(async () => { await api(editing ? `/msp/contracts/${editing.id}` : '/msp/contracts', json(editing ? 'PUT' : 'POST', { client_id: form.get('client'), name: form.get('name'), status: form.get('status'), starts_at: toISO(form.get('starts')), ends_at: form.get('ends') ? toISO(form.get('ends')) : null, coverage: form.get('coverage'), currency: form.get('currency') || 'EUR', monthly_fee_cents: Math.round(Number(form.get('fee') || 0) * 100), hourly_rate_cents: Math.round(Number(form.get('rate') || 0) * 100), included_hours_monthly: Number(form.get('included') || 0), sla_response_minutes: Number(form.get('resp') || 240), sla_resolution_minutes: Number(form.get('res') || 1440), sla_overrides: {} })); setEditing(undefined); contracts.reload(); }, t('Contrato guardado.', 'Contract saved.'))}>
-        <div className="form-grid"><Select label={t('Cliente', 'Client')} name="client" required defaultValue={editing?.client_id || clientId}>{(clients.data || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Field label={t('Nombre', 'Name')} name="name" required defaultValue={editing?.name} /><Select label={t('Estado', 'Status')} name="status" defaultValue={editing?.status || 'draft'}><option value="draft">{t('Borrador', 'Draft')}</option><option value="active">{t('Activo', 'Active')}</option><option value="suspended">{t('Suspendido', 'Suspended')}</option><option value="expired">{t('Vencido', 'Expired')}</option><option value="cancelled">{t('Cancelado', 'Cancelled')}</option></Select><Field label={t('Inicio', 'Start')} name="starts" type="datetime-local" required defaultValue={editing ? editing.starts_at.slice(0, 16) : ''} /><Field label={t('Fin', 'End')} name="ends" type="datetime-local" defaultValue={editing?.ends_at ? editing.ends_at.slice(0, 16) : ''} /><Field label={t('Cuota mensual (€)', 'Monthly fee (€)')} name="fee" type="number" step="0.01" min="0" defaultValue={editing ? editing.monthly_fee_cents / 100 : ''} /><Field label={t('Tarifa horaria (€)', 'Hourly rate (€)')} name="rate" type="number" step="0.01" min="0" defaultValue={editing ? editing.hourly_rate_cents / 100 : ''} /><Field label={t('Horas incluidas / mes', 'Included hours / month')} name="included" type="number" step="0.5" min="0" defaultValue={editing?.included_hours_monthly} /><Field label={t('SLA respuesta (min)', 'SLA response (min)')} name="resp" type="number" min="0" defaultValue={editing?.sla_response_minutes ?? 240} /><Field label={t('SLA resolución (min)', 'SLA resolution (min)')} name="res" type="number" min="0" defaultValue={editing?.sla_resolution_minutes ?? 1440} /></div>
+      <form key={editing?.id || 'new'} action={form => m.run(async () => { await api(editing ? `/msp/contracts/${editing.id}` : '/msp/contracts', json(editing ? 'PUT' : 'POST', contractPayload(form, editing))); setEditing(undefined); contracts.reload(); }, t('Contrato guardado.', 'Contract saved.'))}>
+        <div className="form-grid"><Select label={t('Cliente', 'Client')} name="client" required defaultValue={editing?.client_id || clientId}>{(clients.data || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}</Select><Field label={t('Nombre', 'Name')} name="name" required defaultValue={editing?.name} /><Select label={t('Estado', 'Status')} name="status" defaultValue={editing?.status || 'draft'}><option value="draft">{t('Borrador', 'Draft')}</option><option value="active">{t('Activo', 'Active')}</option><option value="suspended">{t('Suspendido', 'Suspended')}</option><option value="expired">{t('Vencido', 'Expired')}</option><option value="cancelled">{t('Cancelado', 'Cancelled')}</option></Select><Field label={t('Inicio', 'Start')} name="starts" type="datetime-local" required defaultValue={editing ? toLocalInput(editing.starts_at) : ''} /><Field label={t('Fin', 'End')} name="ends" type="datetime-local" defaultValue={editing?.ends_at ? toLocalInput(editing.ends_at) : ''} /><Field label={t('Cuota mensual (€)', 'Monthly fee (€)')} name="fee" type="number" step="0.01" min="0" defaultValue={editing ? editing.monthly_fee_cents / 100 : ''} /><Field label={t('Tarifa horaria (€)', 'Hourly rate (€)')} name="rate" type="number" step="0.01" min="0" defaultValue={editing ? editing.hourly_rate_cents / 100 : ''} /><Field label={t('Horas incluidas / mes', 'Included hours / month')} name="included" type="number" step="0.5" min="0" defaultValue={editing?.included_hours_monthly} /><Field label={t('SLA respuesta (min)', 'SLA response (min)')} name="resp" type="number" min="0" defaultValue={editing?.sla_response_minutes ?? 240} /><Field label={t('SLA resolución (min)', 'SLA resolution (min)')} name="res" type="number" min="0" defaultValue={editing?.sla_resolution_minutes ?? 1440} /></div>
         <Textarea label={t('Cobertura', 'Coverage')} name="coverage" defaultValue={editing?.coverage} rows={3} />
         <div className="form-actions"><Button variant="secondary" onPress={() => setEditing(undefined)}>{t('Cancelar', 'Cancel')}</Button><Button type="submit" isDisabled={m.busy}>{t('Guardar', 'Save')}</Button></div>
       </form></section>}

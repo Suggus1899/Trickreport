@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activeContractForClient, formatCents, isActiveContract, projectProgressPct } from '../src/msp';
+import { activeContractForClient, contractPayload, formatCents, isActiveContract, projectProgressPct, toISO, toLocalInput } from '../src/msp';
 import { interventionTransitions, projectTransitions, taskTransitions } from '../src/contracts';
 import type { MSPContract } from '../src/contracts';
 
@@ -56,5 +56,39 @@ describe('MSP frontend helpers', () => {
     expect(isActiveContract({ ...base, ends_at: new Date(now.getTime() - 1000).toISOString() }, now)).toBe(false);
     expect(activeContractForClient([base, { ...base, id: 'c2', name: 'Viejo', starts_at: new Date(now.getTime() - 2 * 86400000).toISOString() }], 'cl', now)?.id).toBe('c1');
     expect(activeContractForClient([base], 'other', now)).toBeUndefined();
+  });
+});
+
+// Pin the zone: the datetime-local round trip only shows up when the local
+// offset is not zero. America/Caracas is UTC-4 with no DST since 2016.
+process.env.TZ = 'America/Caracas';
+
+describe('MSP contract form', () => {
+  const stored: MSPContract = {
+    id: 'c1', tenant_id: 't', client_id: 'cl', name: 'Anterior', status: 'active',
+    starts_at: '2026-10-25T12:00:00.000Z', ends_at: null, coverage: '24x7 remoto', currency: 'USD',
+    monthly_fee_cents: 10000, hourly_rate_cents: 5000, included_hours_monthly: 10,
+    sla_response_minutes: 60, sla_resolution_minutes: 480,
+    sla_overrides: { critical: { response_minutes: 15, resolution_minutes: 120 } },
+    created_at: '', updated_at: '',
+  };
+  const form = (values: Record<string, string>) => ({ get: (name: string) => values[name] ?? null });
+  const shown = { client: 'cl', name: 'Nuevo nombre', status: 'active', starts: '2026-10-25T08:00', fee: '150', rate: '60', included: '5', resp: '30', res: '240' };
+
+  it('an edit keeps the stored fields the form does not show', () => {
+    expect(contractPayload(form(shown), stored)).toMatchObject({
+      name: 'Nuevo nombre', coverage: '24x7 remoto', currency: 'USD', sla_overrides: stored.sla_overrides,
+    });
+  });
+
+  it('a new contract starts with the defaults the API expects', () => {
+    expect(contractPayload(form(shown))).toMatchObject({ coverage: '', currency: 'EUR', sla_overrides: {} });
+  });
+
+  it('a datetime-local value is local wall-clock time and is stored as the same instant', () => {
+    expect(toLocalInput(stored.starts_at)).toBe('2026-10-25T08:00');
+    expect(toISO('2026-10-25T08:00')).toBe(stored.starts_at);
+    expect(contractPayload(form(shown)).starts_at).toBe(stored.starts_at);
+    expect(contractPayload(form({ ...shown, ends: '' })).ends_at).toBeNull();
   });
 });
