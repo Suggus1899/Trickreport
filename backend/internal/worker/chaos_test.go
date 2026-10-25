@@ -15,7 +15,7 @@ func TestWorker_RetryLogic_SimulatesDBDisconnection(t *testing.T) {
 	w := New(nil, WithRetry(2))
 
 	var attempts int32
-	failFn := func(ctx context.Context) error {
+	failFn := func(_ context.Context) error {
 		atomic.AddInt32(&attempts, 1)
 		return errors.New("connection refused: db disconnected")
 	}
@@ -49,7 +49,7 @@ func TestWorker_RetryLogic_SucceedsOnRetry(t *testing.T) {
 	w := New(nil, WithRetry(3))
 
 	var attempts int32
-	recoverFn := func(ctx context.Context) error {
+	recoverFn := func(_ context.Context) error {
 		n := atomic.AddInt32(&attempts, 1)
 		if n < 2 {
 			return errors.New("transient error")
@@ -85,7 +85,7 @@ func TestWorker_RetryLogic_ContextCancellationDuringBackoff(t *testing.T) {
 	}()
 
 	start := time.Now()
-	w.runWithRetry(ctx, func(ctx context.Context) error {
+	w.runWithRetry(ctx, func(_ context.Context) error {
 		return errors.New("always fail")
 	})
 	elapsed := time.Since(start)

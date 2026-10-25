@@ -19,7 +19,7 @@ type mockTenantResolver struct {
 	got string
 }
 
-func (m *mockTenantResolver) Resolve(ctx context.Context, slugOrID string) (uuid.UUID, error) {
+func (m *mockTenantResolver) Resolve(_ context.Context, slugOrID string) (uuid.UUID, error) {
 	m.got = slugOrID
 	return m.id, m.err
 }
@@ -30,11 +30,11 @@ type mockTokenGen struct {
 	got    string
 }
 
-func (m *mockTokenGen) Generate(userID, tenantID uuid.UUID, role string) (string, error) {
+func (m *mockTokenGen) Generate(_, _ uuid.UUID, _ string) (string, error) {
 	return "token", nil
 }
 
-func (m *mockTokenGen) GenerateRefresh(userID, tenantID uuid.UUID, role string) (string, error) {
+func (m *mockTokenGen) GenerateRefresh(_, _ uuid.UUID, _ string) (string, error) {
 	return "refresh-token", nil
 }
 
@@ -43,13 +43,13 @@ func (m *mockTokenGen) Validate(token string) (*auth.Claims, error) {
 	return m.claims, m.err
 }
 
-func (m *mockTokenGen) AuthenticateAccess(ctx context.Context, token string) (*auth.Claims, error) {
+func (m *mockTokenGen) AuthenticateAccess(_ context.Context, token string) (*auth.Claims, error) {
 	return m.Validate(token)
 }
 
 // nextHandler returns a handler that sets a flag and writes 200.
 func nextHandler(called *bool) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		*called = true
 		w.WriteHeader(http.StatusOK)
 	})

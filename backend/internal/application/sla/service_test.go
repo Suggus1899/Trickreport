@@ -19,11 +19,11 @@ type mockRepo struct {
 	upsertCalls int
 }
 
-func (m *mockRepo) List(ctx context.Context, tenantID uuid.UUID) ([]sla.Policy, error) {
+func (m *mockRepo) List(_ context.Context, _ uuid.UUID) ([]sla.Policy, error) {
 	return m.policies, m.err
 }
 
-func (m *mockRepo) Upsert(ctx context.Context, p *sla.Policy) error {
+func (m *mockRepo) Upsert(_ context.Context, p *sla.Policy) error {
 	m.upsertCalls++
 	m.gotUpsert = p
 	return m.upsertErr

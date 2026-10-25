@@ -83,17 +83,17 @@ func startMockSMTP(t *testing.T) (string, func()) {
 		}
 	}()
 
-	return ln.Addr().String(), func() { ln.Close() }
+	return ln.Addr().String(), func() { _ = ln.Close() }
 }
 
 func handleMockSMTP(conn net.Conn) {
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 	w := bufio.NewWriter(conn)
 	r := bufio.NewReader(conn)
 
 	// Greeting
-	fmt.Fprintf(w, "220 mock.smtp ESMTP\r\n")
-	w.Flush()
+	_, _ = fmt.Fprintf(w, "220 mock.smtp ESMTP\r\n")
+	_ = w.Flush()
 
 	for {
 		line, err := r.ReadString('\n')
@@ -105,27 +105,27 @@ func handleMockSMTP(conn net.Conn) {
 		switch {
 		case strings.HasPrefix(line, "EHLO") || strings.HasPrefix(line, "HELO"):
 			// Multi-line EHLO response with extensions
-			fmt.Fprintf(w, "250-mock.smtp\r\n")
-			fmt.Fprintf(w, "250-AUTH PLAIN\r\n")
-			fmt.Fprintf(w, "250 OK\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "250-mock.smtp\r\n")
+			_, _ = fmt.Fprintf(w, "250-AUTH PLAIN\r\n")
+			_, _ = fmt.Fprintf(w, "250 OK\r\n")
+			_ = w.Flush()
 
 		case strings.HasPrefix(line, "AUTH"):
 			// Accept any AUTH
-			fmt.Fprintf(w, "235 Authentication successful\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "235 Authentication successful\r\n")
+			_ = w.Flush()
 
 		case strings.HasPrefix(line, "MAIL FROM"):
-			fmt.Fprintf(w, "250 OK\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "250 OK\r\n")
+			_ = w.Flush()
 
 		case strings.HasPrefix(line, "RCPT TO"):
-			fmt.Fprintf(w, "250 OK\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "250 OK\r\n")
+			_ = w.Flush()
 
 		case strings.HasPrefix(line, "DATA"):
-			fmt.Fprintf(w, "354 Start mail input\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "354 Start mail input\r\n")
+			_ = w.Flush()
 			// Read until ".\r\n"
 			for {
 				bodyLine, err := r.ReadString('\n')
@@ -136,25 +136,25 @@ func handleMockSMTP(conn net.Conn) {
 					break
 				}
 			}
-			fmt.Fprintf(w, "250 OK message accepted\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "250 OK message accepted\r\n")
+			_ = w.Flush()
 
 		case strings.HasPrefix(line, "QUIT"):
-			fmt.Fprintf(w, "221 Bye\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "221 Bye\r\n")
+			_ = w.Flush()
 			return
 
 		case strings.HasPrefix(line, "RSET"):
-			fmt.Fprintf(w, "250 OK\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "250 OK\r\n")
+			_ = w.Flush()
 
 		case strings.HasPrefix(line, "NOOP"):
-			fmt.Fprintf(w, "250 OK\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "250 OK\r\n")
+			_ = w.Flush()
 
 		default:
-			fmt.Fprintf(w, "250 OK\r\n")
-			w.Flush()
+			_, _ = fmt.Fprintf(w, "250 OK\r\n")
+			_ = w.Flush()
 		}
 	}
 }
@@ -165,7 +165,9 @@ func TestSMTPSender_Send_NoTLS_Success(t *testing.T) {
 
 	host, portStr, _ := net.SplitHostPort(addr)
 	port := 0
-	fmt.Sscanf(portStr, "%d", &port)
+	if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
+		t.Fatalf("parse port %q: %v", portStr, err)
+	}
 
 	s := NewSMTPSender(host, port, "", "", "noreply@localhost", false)
 	err := s.Send("to@example.com", "Test Subject", "Test Body")
@@ -180,7 +182,9 @@ func TestSMTPSender_Send_TLS_StartTLSError(t *testing.T) {
 
 	host, portStr, _ := net.SplitHostPort(addr)
 	port := 0
-	fmt.Sscanf(portStr, "%d", &port)
+	if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
+		t.Fatalf("parse port %q: %v", portStr, err)
+	}
 
 	// useTLS=true but the mock server doesn't support STARTTLS,
 	// so StartTLS should fail.
@@ -200,7 +204,9 @@ func TestSMTPSender_Send_NoTLS_WithAuth_Success(t *testing.T) {
 
 	host, portStr, _ := net.SplitHostPort(addr)
 	port := 0
-	fmt.Sscanf(portStr, "%d", &port)
+	if _, err := fmt.Sscanf(portStr, "%d", &port); err != nil {
+		t.Fatalf("parse port %q: %v", portStr, err)
+	}
 
 	s := NewSMTPSender(host, port, "user", "pass", "noreply@localhost", false)
 	err := s.Send("to@example.com", "Test Subject", "Test Body")

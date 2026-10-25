@@ -47,16 +47,16 @@ func NewS3Storage(bucket, region, endpoint string, forcePathStyle bool) (*S3Stor
 var ErrNotImplemented = errors.New("storage: s3 backend not implemented yet")
 
 // Upload is a stub. See the TODO on S3Storage.
-func (s *S3Storage) Upload(ctx context.Context, key string, reader io.Reader, contentType string) error {
+func (s *S3Storage) Upload(_ context.Context, _ string, _ io.Reader, _ string) error {
 	return ErrNotImplemented
 }
 
 // Download is a stub. See the TODO on S3Storage.
-func (s *S3Storage) Download(ctx context.Context, key string) (io.ReadCloser, error) {
+func (s *S3Storage) Download(_ context.Context, _ string) (io.ReadCloser, error) {
 	return nil, ErrNotImplemented
 }
 
 // Delete is a stub. See the TODO on S3Storage.
-func (s *S3Storage) Delete(ctx context.Context, key string) error {
+func (s *S3Storage) Delete(_ context.Context, _ string) error {
 	return ErrNotImplemented
 }

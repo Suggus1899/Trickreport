@@ -24,7 +24,7 @@ type mockUserRepo struct {
 	byIDCalls     int
 }
 
-func (m *mockUserRepo) GetByEmail(ctx context.Context, tenantID uuid.UUID, email string) (*user.User, error) {
+func (m *mockUserRepo) GetByEmail(_ context.Context, tenantID uuid.UUID, email string) (*user.User, error) {
 	m.gotTenantID = tenantID
 	m.gotEmail = email
 	m.byEmailCalls++
@@ -40,7 +40,7 @@ func (m *mockUserRepo) GetByEmail(ctx context.Context, tenantID uuid.UUID, email
 	return m.userByEmail, m.errByEmail
 }
 
-func (m *mockUserRepo) GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*user.User, error) {
+func (m *mockUserRepo) GetByIDNoTenant(_ context.Context, id uuid.UUID) (*user.User, error) {
 	m.gotID = id
 	m.byIDCalls++
 	return m.userByID, m.errByID
@@ -102,7 +102,7 @@ func (m *mockTokenGen) GenerateRefresh(userID, tenantID uuid.UUID, role string) 
 	return "refresh-" + m.token, m.refreshErr
 }
 
-func (m *mockTokenGen) Validate(token string) (*Claims, error) {
+func (m *mockTokenGen) Validate(_ string) (*Claims, error) {
 	return m.validateCl, m.validateEr
 }
 
@@ -294,7 +294,7 @@ type mockUserCreator struct {
 	err     error
 }
 
-func (m *mockUserCreator) Create(ctx context.Context, u *user.User, passwordHash string) error {
+func (m *mockUserCreator) Create(_ context.Context, u *user.User, _ string) error {
 	m.created = u
 	return m.err
 }
@@ -302,7 +302,7 @@ func (m *mockUserCreator) Create(ctx context.Context, u *user.User, passwordHash
 type mockFullHasher struct{ err error }
 
 func (m *mockFullHasher) Hash(password string) (string, error) { return "hashed-" + password, m.err }
-func (m *mockFullHasher) Compare(hash, password string) error  { return nil }
+func (m *mockFullHasher) Compare(_, _ string) error            { return nil }
 
 // TestService_Login_IsTenantScoped is the regression guard for the login
 // ambiguity: the schema allows the same address in several tenants

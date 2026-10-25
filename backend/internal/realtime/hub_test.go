@@ -176,7 +176,7 @@ func TestHub_Broadcast_FullSendChannel(t *testing.T) {
 	}
 }
 
-func TestHub_BroadcastEvent_MarshalError(t *testing.T) {
+func TestHub_BroadcastEvent_MarshalError(_ *testing.T) {
 	h := NewHub()
 	// Don't start Run — we're testing the error path, not the broadcast path.
 

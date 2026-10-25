@@ -23,7 +23,7 @@ type mockAttachmentRepo struct {
 	createCalls int
 }
 
-func (m *mockAttachmentRepo) Create(ctx context.Context, input AttachmentUploadInput) (*domainTicket.Attachment, error) {
+func (m *mockAttachmentRepo) Create(_ context.Context, input AttachmentUploadInput) (*domainTicket.Attachment, error) {
 	m.createCalls++
 	m.gotInput = input
 	if m.createErr != nil {
@@ -32,12 +32,12 @@ func (m *mockAttachmentRepo) Create(ctx context.Context, input AttachmentUploadI
 	return m.attachment, nil
 }
 
-func (m *mockAttachmentRepo) List(ctx context.Context, ticketID uuid.UUID) ([]domainTicket.Attachment, error) {
+func (m *mockAttachmentRepo) List(_ context.Context, ticketID uuid.UUID) ([]domainTicket.Attachment, error) {
 	m.gotTicket = ticketID
 	return m.attachments, m.err
 }
 
-func (m *mockAttachmentRepo) GetByID(ctx context.Context, id, ticketID uuid.UUID) (*domainTicket.Attachment, []byte, error) {
+func (m *mockAttachmentRepo) GetByID(_ context.Context, id, ticketID uuid.UUID) (*domainTicket.Attachment, []byte, error) {
 	m.gotID = id
 	m.gotTicket = ticketID
 	return m.attachment, m.data, m.err

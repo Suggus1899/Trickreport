@@ -17,7 +17,7 @@ import (
 func TestCompress_LargeResponse_DecodesCorrectly(t *testing.T) {
 	body := strings.Repeat("a", minCompressSize+500)
 
-	handler := Compress()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Compress()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(body))
@@ -36,7 +36,7 @@ func TestCompress_LargeResponse_DecodesCorrectly(t *testing.T) {
 	if err != nil {
 		t.Fatalf("response is not valid gzip: %v", err)
 	}
-	defer gz.Close()
+	defer func() { _ = gz.Close() }()
 	decoded, err := io.ReadAll(gz)
 	if err != nil {
 		t.Fatalf("failed to read gzip stream to completion (truncated stream): %v", err)
@@ -51,7 +51,7 @@ func TestCompress_LargeResponse_DecodesCorrectly(t *testing.T) {
 func TestCompress_SmallResponse_Uncompressed(t *testing.T) {
 	body := "short response"
 
-	handler := Compress()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Compress()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte(body))
 	}))
@@ -72,7 +72,7 @@ func TestCompress_SmallResponse_Uncompressed(t *testing.T) {
 // TestCompress_NoAcceptEncoding_PassesThrough verifies clients that don't
 // send Accept-Encoding: gzip get the handler's own status/body untouched.
 func TestCompress_NoAcceptEncoding_PassesThrough(t *testing.T) {
-	handler := Compress()(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	handler := Compress()(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte("hello"))
 	}))

@@ -55,7 +55,7 @@ func contractSetup(t *testing.T) *pgxpool.Pool {
 
 // contractTenant creates a fresh tenant + admin user with a known password and
 // returns the tenant ID, admin ID, and the plain-text password.
-func contractTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (uuid.UUID, uuid.UUID, string) {
+func contractTenant(ctx context.Context, t *testing.T, pool *pgxpool.Pool) (uuid.UUID, uuid.UUID, string) {
 	t.Helper()
 	tenantID := uuid.New()
 	_, err := pool.Exec(ctx,
@@ -88,7 +88,7 @@ func contractTenant(t *testing.T, ctx context.Context, pool *pgxpool.Pool) (uuid
 func buildContractServer(t *testing.T) (*httptest.Server, string, string, uuid.UUID) {
 	ctx := context.Background()
 	pool := contractSetup(t)
-	tenantID, _, password := contractTenant(t, ctx, pool)
+	tenantID, _, password := contractTenant(ctx, t, pool)
 	adminEmail := "contract-" + tenantID.String()[:8] + "@test.local"
 
 	// Wire using the same components as http.New.
@@ -158,7 +158,7 @@ func loginAndGetToken(t *testing.T, ts *httptest.Server, email, password string)
 	if err != nil {
 		t.Fatalf("login request: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		t.Fatalf("login status = %d, want %d; body=%s", resp.StatusCode, http.StatusOK, raw)
@@ -208,7 +208,7 @@ func TestContract_GetTickets_Returns200WithArray(t *testing.T) {
 	token := loginAndGetToken(t, ts, email, password)
 
 	resp := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/tickets", token, tenantID.String(), "")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		t.Fatalf("GET /tickets status = %d, want %d; body=%s", resp.StatusCode, http.StatusOK, raw)
@@ -225,7 +225,7 @@ func TestContract_CreateTicket_Returns201WithTicket(t *testing.T) {
 
 	body := `{"title":"Contract test ticket","description":"Created via contract test","priority":"high","category":"bug"}`
 	resp := authedRequest(t, http.MethodPost, ts.URL+"/api/v1/tickets", token, tenantID.String(), body)
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusCreated {
 		raw, _ := io.ReadAll(resp.Body)
 		t.Fatalf("POST /tickets status = %d, want %d; body=%s", resp.StatusCode, http.StatusCreated, raw)
@@ -244,7 +244,7 @@ func TestContract_GetArticles_Returns200WithArray(t *testing.T) {
 	token := loginAndGetToken(t, ts, email, password)
 
 	resp := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/articles", token, tenantID.String(), "")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		t.Fatalf("GET /articles status = %d, want %d; body=%s", resp.StatusCode, http.StatusOK, raw)
@@ -260,7 +260,7 @@ func TestContract_GetAnalyticsCharts_Returns200WithData(t *testing.T) {
 	token := loginAndGetToken(t, ts, email, password)
 
 	resp := authedRequest(t, http.MethodGet, ts.URL+"/api/v1/admin/analytics/charts?range=7d", token, tenantID.String(), "")
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		raw, _ := io.ReadAll(resp.Body)
 		t.Fatalf("GET /analytics/charts status = %d, want %d; body=%s", resp.StatusCode, http.StatusOK, raw)

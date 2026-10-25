@@ -45,7 +45,7 @@ func TestMemoryStore_Touch(t *testing.T) {
 	}
 }
 
-func TestMemoryStore_TouchMissingKey(t *testing.T) {
+func TestMemoryStore_TouchMissingKey(_ *testing.T) {
 	s := newMemoryStore()
 	// Should not panic on missing key
 	s.Touch("nonexistent")
@@ -284,7 +284,7 @@ func (m *mockStore) Touch(key string) {
 	m.touched = append(m.touched, key)
 }
 
-func (m *mockStore) Cleanup(maxAge time.Duration) {
+func (m *mockStore) Cleanup(_ time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cleanups++
@@ -342,7 +342,7 @@ func TestMemoryStore_ConcurrentAccess(t *testing.T) {
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
 		wg.Add(1)
-		go func(n int) {
+		go func(_ int) {
 			defer wg.Done()
 			s.GetOrCreate("concurrent-key", rate.Limit(100), 10)
 		}(i)

@@ -89,6 +89,7 @@ func CSRF(secure bool) func(http.Handler) http.Handler {
 						response.Error(w, http.StatusServiceUnavailable, "CSRF initialization unavailable")
 						return
 					}
+					//nolint:gosec // G124: HttpOnly is intentionally false; the double-submit token must be readable by the SPA
 					http.SetCookie(w, &http.Cookie{
 						Name:     csrfCookieName,
 						Value:    token,

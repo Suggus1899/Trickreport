@@ -124,19 +124,18 @@ func (w *Worker) runWithRetry(ctx context.Context, fn func(ctx context.Context) 
 	for attempt := 0; ; attempt++ {
 		if err := fn(ctx); err == nil {
 			return true
-		} else {
-			atomic.AddInt64(&w.metrics.Errors, 1)
-			if attempt >= w.maxRetries {
-				log.Error().Int("attempt", attempt+1).Msg("Worker check failed after max retries")
-				return false
-			}
-			backoff := backoffs[attempt%len(backoffs)]
-			log.Warn().Int("attempt", attempt+1).Dur("backoff", backoff).Msg("Worker check failed — retrying")
-			select {
-			case <-ctx.Done():
-				return false
-			case <-time.After(backoff):
-			}
+		}
+		atomic.AddInt64(&w.metrics.Errors, 1)
+		if attempt >= w.maxRetries {
+			log.Error().Int("attempt", attempt+1).Msg("Worker check failed after max retries")
+			return false
+		}
+		backoff := backoffs[attempt%len(backoffs)]
+		log.Warn().Int("attempt", attempt+1).Dur("backoff", backoff).Msg("Worker check failed — retrying")
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(backoff):
 		}
 	}
 }

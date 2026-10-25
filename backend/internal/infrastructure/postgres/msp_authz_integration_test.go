@@ -19,7 +19,7 @@ import (
 func TestIntegration_MSP_ContactIsScopedToOwnClient(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, adminID := seedTenantUser(t, ctx)
+	tenantID, adminID := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	contactID := uuid.New()

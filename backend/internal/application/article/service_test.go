@@ -27,30 +27,30 @@ type mockRepo struct {
 	deleteCalls int
 }
 
-func (m *mockRepo) List(ctx context.Context, tenantID uuid.UUID, filter Filter, role string) ([]article.Article, error) {
+func (m *mockRepo) List(_ context.Context, _ uuid.UUID, filter Filter, role string) ([]article.Article, error) {
 	m.gotFilter = filter
 	m.gotRole = role
 	return m.articles, m.err
 }
 
-func (m *mockRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID, role string) (*article.Article, error) {
+func (m *mockRepo) GetByID(_ context.Context, _, _ uuid.UUID, role string) (*article.Article, error) {
 	m.gotRole = role
 	return m.article, m.err
 }
 
-func (m *mockRepo) Create(ctx context.Context, a *article.Article) error {
+func (m *mockRepo) Create(_ context.Context, a *article.Article) error {
 	m.createCalls++
 	m.gotCreated = a
 	return m.createErr
 }
 
-func (m *mockRepo) Update(ctx context.Context, a *article.Article) error {
+func (m *mockRepo) Update(_ context.Context, a *article.Article) error {
 	m.updateCalls++
 	m.gotUpdated = a
 	return m.updateErr
 }
 
-func (m *mockRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
+func (m *mockRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 	m.deleteCalls++
 	return m.deleteErr
 }

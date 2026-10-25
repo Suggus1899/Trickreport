@@ -66,20 +66,17 @@ func TestAllowedOrigins_WithEmptyParts(t *testing.T) {
 }
 
 func TestIsProductionEnv(t *testing.T) {
-	orig := os.Getenv("ENV")
-	defer os.Setenv("ENV", orig)
-
-	os.Setenv("ENV", "production")
+	t.Setenv("ENV", "production")
 	if !IsProductionEnv() {
 		t.Error("IsProductionEnv() = false, want true for ENV=production")
 	}
 
-	os.Setenv("ENV", "development")
+	t.Setenv("ENV", "development")
 	if IsProductionEnv() {
 		t.Error("IsProductionEnv() = true, want false for ENV=development")
 	}
 
-	os.Setenv("ENV", "")
+	t.Setenv("ENV", "")
 	if IsProductionEnv() {
 		t.Error("IsProductionEnv() = true, want false for ENV=''")
 	}
@@ -87,10 +84,10 @@ func TestIsProductionEnv(t *testing.T) {
 
 func TestLoad_Defaults(t *testing.T) {
 	// Clear potentially problematic env vars so viper defaults apply.
-	os.Unsetenv("ENV")
-	os.Unsetenv("PORT")
-	os.Unsetenv("JWT_SECRET")
-	os.Unsetenv("ADMIN_PASSWORD")
+	clearEnv(t, "ENV")
+	clearEnv(t, "PORT")
+	clearEnv(t, "JWT_SECRET")
+	clearEnv(t, "ADMIN_PASSWORD")
 
 	cfg := Load()
 	if cfg.Port != "8080" {
@@ -104,5 +101,15 @@ func TestLoad_Defaults(t *testing.T) {
 	}
 	if cfg.SecureCookie {
 		t.Error("SecureCookie = true, want false in development")
+	}
+}
+
+// clearEnv unsets key for the duration of the test. t.Setenv records the previous
+// value and restores it on cleanup.
+func clearEnv(t *testing.T, key string) {
+	t.Helper()
+	t.Setenv(key, "")
+	if err := os.Unsetenv(key); err != nil {
+		t.Fatalf("unset %s: %v", key, err)
 	}
 }

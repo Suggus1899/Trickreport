@@ -84,7 +84,7 @@ func TestServeWs_AndBroadcast(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dial error: %v", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// Wait for client registration
 	time.Sleep(50 * time.Millisecond)
@@ -92,7 +92,7 @@ func TestServeWs_AndBroadcast(t *testing.T) {
 	// Broadcast a message — the client should receive it
 	h.BroadcastEvent(tenantID, EventTicketCreated, map[string]string{"id": "123"})
 
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second))
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("read error: %v", err)
@@ -105,7 +105,7 @@ func TestServeWs_AndBroadcast(t *testing.T) {
 	}
 }
 
-func TestServeWs_UpgradeError(t *testing.T) {
+func TestServeWs_UpgradeError(_ *testing.T) {
 	allowedOrigins = []string{}
 
 	h := NewHub()

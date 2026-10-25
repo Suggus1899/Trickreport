@@ -72,6 +72,7 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 
 	// Limit request body size.
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize+(1<<20))
+	//nolint:gosec // G120: request body is capped by http.MaxBytesReader above
 	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {
@@ -81,14 +82,14 @@ func (h *AttachmentHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "invalid multipart form")
 		return
 	}
-	defer r.MultipartForm.RemoveAll()
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		response.Error(w, http.StatusBadRequest, "missing 'file' field in multipart form")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	data, err := io.ReadAll(io.LimitReader(file, MaxUploadSize+1))
 	if err != nil {

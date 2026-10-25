@@ -28,22 +28,22 @@ type aMockRepo struct {
 	createCalls int
 }
 
-func (m *aMockRepo) List(ctx context.Context, tenantID uuid.UUID, filter appArticle.Filter, role string) ([]article.Article, error) {
+func (m *aMockRepo) List(_ context.Context, _ uuid.UUID, _ appArticle.Filter, role string) ([]article.Article, error) {
 	m.gotRole = role
 	return m.articles, m.err
 }
-func (m *aMockRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID, role string) (*article.Article, error) {
+func (m *aMockRepo) GetByID(_ context.Context, _, _ uuid.UUID, role string) (*article.Article, error) {
 	m.gotRole = role
 	return m.article, m.err
 }
-func (m *aMockRepo) Create(ctx context.Context, a *article.Article) error {
+func (m *aMockRepo) Create(_ context.Context, _ *article.Article) error {
 	m.createCalls++
 	return m.createErr
 }
-func (m *aMockRepo) Update(ctx context.Context, a *article.Article) error {
+func (m *aMockRepo) Update(_ context.Context, _ *article.Article) error {
 	return m.updateErr
 }
-func (m *aMockRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
+func (m *aMockRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 	return m.deleteErr
 }
 

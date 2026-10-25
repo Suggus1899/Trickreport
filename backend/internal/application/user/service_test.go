@@ -27,33 +27,33 @@ type mockRepo struct {
 	deactCalls  int
 }
 
-func (m *mockRepo) List(ctx context.Context, tenantID uuid.UUID) ([]domainUser.User, error) {
+func (m *mockRepo) List(_ context.Context, _ uuid.UUID) ([]domainUser.User, error) {
 	return m.users, m.err
 }
 
-func (m *mockRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainUser.User, error) {
+func (m *mockRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*domainUser.User, error) {
 	return m.user, m.err
 }
 
-func (m *mockRepo) GetByEmail(ctx context.Context, email string) (*domainUser.User, error) {
+func (m *mockRepo) GetByEmail(_ context.Context, email string) (*domainUser.User, error) {
 	m.gotEmail = email
 	return m.user, m.err
 }
 
-func (m *mockRepo) Create(ctx context.Context, u *domainUser.User, passwordHash string) error {
+func (m *mockRepo) Create(_ context.Context, u *domainUser.User, passwordHash string) error {
 	m.createCalls++
 	m.gotCreated = u
 	m.gotHash = passwordHash
 	return m.createErr
 }
 
-func (m *mockRepo) Update(ctx context.Context, id, tenantID uuid.UUID, fields UpdateFields) (*domainUser.User, error) {
+func (m *mockRepo) Update(_ context.Context, _, _ uuid.UUID, fields UpdateFields) (*domainUser.User, error) {
 	m.updateCalls++
 	m.gotFields = fields
 	return m.user, m.updateErr
 }
 
-func (m *mockRepo) Deactivate(ctx context.Context, id, tenantID uuid.UUID) error {
+func (m *mockRepo) Deactivate(_ context.Context, _, _ uuid.UUID) error {
 	m.deactCalls++
 	return m.deactErr
 }
@@ -70,7 +70,7 @@ func (m *mockHasher) Hash(password string) (string, error) {
 	return m.hash, m.hashErr
 }
 
-func (m *mockHasher) Compare(hash, password string) error {
+func (m *mockHasher) Compare(_, _ string) error {
 	return m.compareErr
 }
 

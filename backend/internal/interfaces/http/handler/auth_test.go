@@ -23,31 +23,31 @@ type authMockUserRepo struct {
 	gotID uuid.UUID
 }
 
-func (m *authMockUserRepo) GetByEmail(ctx context.Context, tenantID uuid.UUID, email string) (*user.User, error) {
+func (m *authMockUserRepo) GetByEmail(_ context.Context, _ uuid.UUID, _ string) (*user.User, error) {
 	return m.u, m.err
 }
 
-func (m *authMockUserRepo) GetByIDNoTenant(ctx context.Context, id uuid.UUID) (*user.User, error) {
+func (m *authMockUserRepo) GetByIDNoTenant(_ context.Context, id uuid.UUID) (*user.User, error) {
 	m.gotID = id
 	return m.u, m.err
 }
 
 type authMockHasher struct{ err error }
 
-func (m *authMockHasher) Compare(hash, password string) error { return m.err }
+func (m *authMockHasher) Compare(_, _ string) error { return m.err }
 
 type authMockTokenGen struct {
 	token string
 	err   error
 }
 
-func (m *authMockTokenGen) Generate(userID, tenantID uuid.UUID, role string) (string, error) {
+func (m *authMockTokenGen) Generate(_, _ uuid.UUID, _ string) (string, error) {
 	return m.token, m.err
 }
-func (m *authMockTokenGen) GenerateRefresh(userID, tenantID uuid.UUID, role string) (string, error) {
+func (m *authMockTokenGen) GenerateRefresh(_, _ uuid.UUID, _ string) (string, error) {
 	return "refresh-" + m.token, m.err
 }
-func (m *authMockTokenGen) Validate(token string) (*appAuth.Claims, error) {
+func (m *authMockTokenGen) Validate(_ string) (*appAuth.Claims, error) {
 	return nil, errors.New("invalid")
 }
 

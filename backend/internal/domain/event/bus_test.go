@@ -29,9 +29,9 @@ func TestMemoryEventBus_MultipleHandlers(t *testing.T) {
 	bus := NewMemoryEventBus()
 	var count int32
 
-	bus.Subscribe("evt", func(e Event) { atomic.AddInt32(&count, 1) })
-	bus.Subscribe("evt", func(e Event) { atomic.AddInt32(&count, 1) })
-	bus.Subscribe("evt", func(e Event) { atomic.AddInt32(&count, 1) })
+	bus.Subscribe("evt", func(_ Event) { atomic.AddInt32(&count, 1) })
+	bus.Subscribe("evt", func(_ Event) { atomic.AddInt32(&count, 1) })
+	bus.Subscribe("evt", func(_ Event) { atomic.AddInt32(&count, 1) })
 
 	bus.Publish(Event{Name: "evt"})
 
@@ -40,7 +40,7 @@ func TestMemoryEventBus_MultipleHandlers(t *testing.T) {
 	}
 }
 
-func TestMemoryEventBus_NoHandlers(t *testing.T) {
+func TestMemoryEventBus_NoHandlers(_ *testing.T) {
 	bus := NewMemoryEventBus()
 	// Publishing an event with no subscribers should not panic.
 	bus.Publish(Event{Name: "unhandled.event"})
@@ -50,8 +50,8 @@ func TestMemoryEventBus_HandlerIsolation(t *testing.T) {
 	bus := NewMemoryEventBus()
 	var aCalls, bCalls int32
 
-	bus.Subscribe("a", func(e Event) { atomic.AddInt32(&aCalls, 1) })
-	bus.Subscribe("b", func(e Event) { atomic.AddInt32(&bCalls, 1) })
+	bus.Subscribe("a", func(_ Event) { atomic.AddInt32(&aCalls, 1) })
+	bus.Subscribe("b", func(_ Event) { atomic.AddInt32(&bCalls, 1) })
 
 	bus.Publish(Event{Name: "a"})
 	bus.Publish(Event{Name: "b"})
@@ -95,7 +95,7 @@ func TestMemoryEventBus_ConcurrentSubscribe(t *testing.T) {
 
 	// Subscribe many handlers concurrently to verify the mutex works.
 	for i := 0; i < 100; i++ {
-		bus.Subscribe("concurrent", func(e Event) {
+		bus.Subscribe("concurrent", func(_ Event) {
 			atomic.AddInt32(&count, 1)
 		})
 	}

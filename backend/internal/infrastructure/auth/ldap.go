@@ -50,7 +50,7 @@ func (a *LDAPAuthenticator) Authenticate(username, password string) (string, err
 	if err != nil {
 		return "", fmt.Errorf("ldap dial failed: %w", err)
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	// For plaintext ldap://, attempt StartTLS upgrade if TLS is requested
 	// but the URL scheme was not ldaps:// (e.g. port 389 with StartTLS).

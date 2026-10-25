@@ -14,7 +14,7 @@ import (
 
 type resetCaptureSender struct{ body string }
 
-func (s *resetCaptureSender) Send(to, subject, body string) error { s.body = body; return nil }
+func (s *resetCaptureSender) Send(_, _, body string) error { s.body = body; return nil }
 
 func resetTestToken(t *testing.T) (*appAuth.PasswordResetService, *appAuth.Service, *appAuth.LoginResult, string) {
 	t.Helper()

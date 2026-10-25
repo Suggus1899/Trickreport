@@ -32,18 +32,18 @@ type mockRepo struct {
 	assignCalls int
 }
 
-func (m *mockRepo) List(ctx context.Context, tenantID uuid.UUID, filter Filter, role string, userID uuid.UUID) ([]domainTicket.Ticket, error) {
+func (m *mockRepo) List(_ context.Context, _ uuid.UUID, filter Filter, role string, userID uuid.UUID) ([]domainTicket.Ticket, error) {
 	m.gotFilter = filter
 	m.gotRole = role
 	m.gotUserID = userID
 	return m.tickets, m.err
 }
 
-func (m *mockRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainTicket.Ticket, error) {
+func (m *mockRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*domainTicket.Ticket, error) {
 	return m.ticket, m.err
 }
 
-func (m *mockRepo) Create(ctx context.Context, t *domainTicket.Ticket) error {
+func (m *mockRepo) Create(_ context.Context, _ *domainTicket.Ticket) error {
 	m.createCalls++
 	if m.err != nil && m.ticket == nil {
 		return m.err
@@ -51,7 +51,7 @@ func (m *mockRepo) Create(ctx context.Context, t *domainTicket.Ticket) error {
 	return m.err
 }
 
-func (m *mockRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, version int, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error) {
+func (m *mockRepo) UpdateStatus(_ context.Context, _, _ uuid.UUID, version int, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error) {
 	m.updateCalls++
 	m.gotStatus = status
 	m.gotUserID = userID
@@ -62,18 +62,18 @@ func (m *mockRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, ver
 	return m.ticket, nil
 }
 
-func (m *mockRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userID uuid.UUID) error {
+func (m *mockRepo) Assign(_ context.Context, _, _, assignedTo, userID uuid.UUID) error {
 	m.assignCalls++
 	m.gotAssigned = assignedTo
 	m.gotUserID = userID
 	return m.assignErr
 }
 
-func (m *mockRepo) SetSLADeadline(ctx context.Context, id, tenantID uuid.UUID, deadline time.Time) error {
+func (m *mockRepo) SetSLADeadline(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
 	return nil
 }
 
-func (m *mockRepo) GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid.UUID, error) {
+func (m *mockRepo) GetCreator(_ context.Context, _, _ uuid.UUID) (uuid.UUID, error) {
 	return m.creatorID, m.creatorErr
 }
 
@@ -86,12 +86,12 @@ type mockCommentRepo struct {
 	gotComment  *domainTicket.Comment
 }
 
-func (m *mockCommentRepo) List(ctx context.Context, ticketID uuid.UUID, role string) ([]domainTicket.Comment, error) {
+func (m *mockCommentRepo) List(_ context.Context, _ uuid.UUID, role string) ([]domainTicket.Comment, error) {
 	m.gotRole = role
 	return m.comments, m.err
 }
 
-func (m *mockCommentRepo) Create(ctx context.Context, c *domainTicket.Comment) error {
+func (m *mockCommentRepo) Create(_ context.Context, c *domainTicket.Comment) error {
 	m.createCalls++
 	m.gotComment = c
 	return m.createErr
@@ -102,7 +102,7 @@ type mockHistoryRepo struct {
 	err     error
 }
 
-func (m *mockHistoryRepo) List(ctx context.Context, ticketID uuid.UUID) ([]domainTicket.HistoryEntry, error) {
+func (m *mockHistoryRepo) List(_ context.Context, _ uuid.UUID) ([]domainTicket.HistoryEntry, error) {
 	return m.entries, m.err
 }
 
@@ -145,7 +145,7 @@ type mockEmailFetcher struct {
 	err   error
 }
 
-func (m *mockEmailFetcher) GetEmail(ctx context.Context, tenantID, userID uuid.UUID) (string, error) {
+func (m *mockEmailFetcher) GetEmail(_ context.Context, _, _ uuid.UUID) (string, error) {
 	return m.email, m.err
 }
 
@@ -154,7 +154,7 @@ type mockEmailRenderer struct {
 	gotTemplate string
 }
 
-func (m *mockEmailRenderer) RenderTicketEmail(templateName, ticketID, title, description, priority, status string) (string, error) {
+func (m *mockEmailRenderer) RenderTicketEmail(templateName, _, title, _, _, _ string) (string, error) {
 	m.gotTemplate = templateName
 	if m.err != nil {
 		return "", m.err
@@ -649,7 +649,7 @@ type mockEngine struct {
 	err       error
 }
 
-func (m *mockEngine) Evaluate(ctx context.Context, tenantID uuid.UUID, event appAuto.Event) error {
+func (m *mockEngine) Evaluate(_ context.Context, tenantID uuid.UUID, _ appAuto.Event) error {
 	m.evaluated = true
 	m.tenantID = tenantID
 	if m.done != nil {
@@ -658,7 +658,7 @@ func (m *mockEngine) Evaluate(ctx context.Context, tenantID uuid.UUID, event app
 	return m.err
 }
 
-func TestService_SetEngine(t *testing.T) {
+func TestService_SetEngine(_ *testing.T) {
 	svc := newSvc(&mockRepo{}, &mockCommentRepo{}, &mockHistoryRepo{}, nil, nil)
 	engine := &mockEngine{}
 	svc.SetEngine(engine)
@@ -690,7 +690,7 @@ func TestService_EvaluateAutomation_WithEngine(t *testing.T) {
 	}
 }
 
-func TestService_EvaluateAutomation_NoEngine(t *testing.T) {
+func TestService_EvaluateAutomation_NoEngine(_ *testing.T) {
 	repo := &mockRepo{}
 	svc := newSvc(repo, &mockCommentRepo{}, &mockHistoryRepo{}, nil, nil)
 	// No engine set — evaluateAutomation should be a no-op

@@ -55,7 +55,7 @@ func (h *Hub) Run(contexts ...context.Context) {
 				for client := range clients {
 					close(client.send)
 					if client.conn != nil {
-						client.conn.Close()
+						_ = client.conn.Close()
 					}
 				}
 			}

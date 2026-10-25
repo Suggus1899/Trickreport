@@ -771,6 +771,7 @@ func (h *CXHandler) WhatsAppWebhookVerify(w http.ResponseWriter, r *http.Request
 		return
 	}
 	w.Header().Set("Content-Type", "text/plain")
+	//nolint:gosec // G705: Meta webhook verification echoes hub.challenge as text/plain, never as HTML
 	_, _ = w.Write([]byte(q.Get("hub.challenge")))
 }
 

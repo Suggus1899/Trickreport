@@ -471,7 +471,7 @@ func (s *Service) ListMessages(ctx context.Context, tenantID, viewerID uuid.UUID
 // its thread, or opens a new one; the sender becomes (or is matched
 // to) a customer by email. A repeated external_message_id is a
 // no-op: ingestion is idempotent.
-func (s *Service) IngestEmail(ctx context.Context, tenantID uuid.UUID, accountID uuid.UUID, fromEmail, subject, body, threadID, externalMessageID string) (*domain.Conversation, error) {
+func (s *Service) IngestEmail(ctx context.Context, tenantID uuid.UUID, _ uuid.UUID, fromEmail, subject, body, threadID, externalMessageID string) (*domain.Conversation, error) {
 	if fromEmail == "" || body == "" {
 		return nil, domain.ErrValidation
 	}
@@ -505,7 +505,7 @@ func (s *Service) IngestEmail(ctx context.Context, tenantID uuid.UUID, accountID
 // phone number, the thread is the WhatsApp conversation id, and the
 // webhook verify token is checked by the handler against the stored
 // hash before this method is ever called.
-func (s *Service) IngestWhatsApp(ctx context.Context, tenantID uuid.UUID, accountID uuid.UUID, fromPhone, body, threadID, externalMessageID string) (*domain.Conversation, error) {
+func (s *Service) IngestWhatsApp(ctx context.Context, tenantID uuid.UUID, _ uuid.UUID, fromPhone, body, threadID, externalMessageID string) (*domain.Conversation, error) {
 	if fromPhone == "" || body == "" {
 		return nil, domain.ErrValidation
 	}

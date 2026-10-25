@@ -13,7 +13,7 @@ import (
 )
 
 // benchTenantUser creates a tenant + user for benchmark isolation.
-func benchTenantUser(b *testing.B, ctx context.Context) (uuid.UUID, uuid.UUID) {
+func benchTenantUser(ctx context.Context, b *testing.B) (uuid.UUID, uuid.UUID) {
 	b.Helper()
 	tenantID := uuid.New()
 	if _, err := testPool.Exec(ctx,
@@ -44,7 +44,7 @@ func skipBenchIfNoDB(b *testing.B) {
 func BenchmarkTicketRepo_Create(b *testing.B) {
 	skipBenchIfNoDB(b)
 	ctx := context.Background()
-	tenantID, userID := benchTenantUser(b, ctx)
+	tenantID, userID := benchTenantUser(ctx, b)
 	defer func() {
 		_, _ = testPool.Exec(ctx, `DELETE FROM tenants WHERE id = $1`, tenantID)
 	}()
@@ -73,7 +73,7 @@ func BenchmarkTicketRepo_Create(b *testing.B) {
 func BenchmarkTicketRepo_List(b *testing.B) {
 	skipBenchIfNoDB(b)
 	ctx := context.Background()
-	tenantID, userID := benchTenantUser(b, ctx)
+	tenantID, userID := benchTenantUser(ctx, b)
 	defer func() {
 		_, _ = testPool.Exec(ctx, `DELETE FROM tenants WHERE id = $1`, tenantID)
 	}()
@@ -107,7 +107,7 @@ func BenchmarkTicketRepo_List(b *testing.B) {
 func BenchmarkTicketRepo_UpdateStatus(b *testing.B) {
 	skipBenchIfNoDB(b)
 	ctx := context.Background()
-	tenantID, userID := benchTenantUser(b, ctx)
+	tenantID, userID := benchTenantUser(ctx, b)
 	defer func() {
 		_, _ = testPool.Exec(ctx, `DELETE FROM tenants WHERE id = $1`, tenantID)
 	}()
@@ -156,7 +156,7 @@ func BenchmarkTicketRepo_UpdateStatus(b *testing.B) {
 func BenchmarkUserRepo_List(b *testing.B) {
 	skipBenchIfNoDB(b)
 	ctx := context.Background()
-	tenantID, _ := benchTenantUser(b, ctx)
+	tenantID, _ := benchTenantUser(ctx, b)
 	defer func() {
 		_, _ = testPool.Exec(ctx, `DELETE FROM tenants WHERE id = $1`, tenantID)
 	}()

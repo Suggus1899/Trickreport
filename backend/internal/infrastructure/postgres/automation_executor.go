@@ -69,6 +69,6 @@ func (e *AutomationExecutor) AddComment(ctx context.Context, tenantID, ticketID 
 		return NewCommentRepo(e.db).Create(ctx, &domainTicket.Comment{TicketID: ticketID, UserID: e.systemUserID, Content: content, IsInternal: isInternal})
 	})
 }
-func (e *AutomationExecutor) AddTag(ctx context.Context, tenantID, ticketID uuid.UUID, tag string) error {
+func (e *AutomationExecutor) AddTag(_ context.Context, _, _ uuid.UUID, _ string) error {
 	return fmt.Errorf("%w: add_tag is not supported", domainAuto.ErrValidation)
 }

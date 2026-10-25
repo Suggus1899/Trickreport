@@ -246,6 +246,7 @@ func seedTickets(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]uui
 		status := seedStatuses[i%len(seedStatuses)]
 		priority := seedPriorities[i%len(seedPriorities)]
 		creator := creators[i%len(creators)]
+		//nolint:gosec // G404: demo seed data; timestamps need no cryptographic randomness
 		createdAt := now.Add(-time.Duration(rand.Intn(28*24)+1) * time.Hour)
 
 		var assignedTo *uuid.UUID
@@ -255,6 +256,7 @@ func seedTickets(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]uui
 			assignedTo = &a
 		}
 		if status == "resolved" || status == "closed" {
+			//nolint:gosec // G404: demo seed data; timestamps need no cryptographic randomness
 			updatedAt = createdAt.Add(time.Duration(rand.Intn(70)+2) * time.Hour)
 		}
 		slaBreached := priority == "critical" && i%3 == 0

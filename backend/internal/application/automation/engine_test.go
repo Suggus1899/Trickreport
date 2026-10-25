@@ -29,36 +29,36 @@ type mockExecutor struct {
 	calls          int
 }
 
-func (m *mockExecutor) GetTicket(ctx context.Context, tenantID, ticketID uuid.UUID) (*TicketSnapshot, error) {
+func (m *mockExecutor) GetTicket(_ context.Context, _, _ uuid.UUID) (*TicketSnapshot, error) {
 	return m.snapshot, m.snapshotErr
 }
 
-func (m *mockExecutor) SetPriority(ctx context.Context, tenantID, ticketID uuid.UUID, priority string) error {
+func (m *mockExecutor) SetPriority(_ context.Context, _, _ uuid.UUID, priority string) error {
 	m.calls++
 	m.gotPriority = priority
 	return m.setPriorityErr
 }
 
-func (m *mockExecutor) SetStatus(ctx context.Context, tenantID, ticketID uuid.UUID, status string) error {
+func (m *mockExecutor) SetStatus(_ context.Context, _, _ uuid.UUID, status string) error {
 	m.calls++
 	m.gotStatus = status
 	return m.setStatusErr
 }
 
-func (m *mockExecutor) AssignTo(ctx context.Context, tenantID, ticketID, userID uuid.UUID) error {
+func (m *mockExecutor) AssignTo(_ context.Context, _, _, userID uuid.UUID) error {
 	m.calls++
 	m.gotAssignee = userID
 	return m.assignErr
 }
 
-func (m *mockExecutor) AddComment(ctx context.Context, tenantID, ticketID uuid.UUID, content string, isInternal bool) error {
+func (m *mockExecutor) AddComment(_ context.Context, _, _ uuid.UUID, content string, isInternal bool) error {
 	m.calls++
 	m.gotComment = content
 	m.gotInternal = isInternal
 	return m.commentErr
 }
 
-func (m *mockExecutor) AddTag(ctx context.Context, tenantID, ticketID uuid.UUID, tag string) error {
+func (m *mockExecutor) AddTag(_ context.Context, _, _ uuid.UUID, tag string) error {
 	m.calls++
 	m.gotTag = tag
 	return m.tagErr

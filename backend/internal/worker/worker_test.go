@@ -132,7 +132,7 @@ func TestNew_DefaultMaxRetries(t *testing.T) {
 	}
 }
 
-func TestWorker_HealthCheck_NilDB(t *testing.T) {
+func TestWorker_HealthCheck_NilDB(_ *testing.T) {
 	// HealthCheck with a nil DB panics; verify the recover catches it so the
 	// test suite doesn't crash. The contract is that HealthCheck cannot
 	// succeed without a DB.

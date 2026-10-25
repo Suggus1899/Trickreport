@@ -9,7 +9,7 @@ import (
 
 func TestCSRFSafeReadsPreserveTokenForConcurrentWrites(t *testing.T) {
 	const token = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
-	h := CSRF(false)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+	h := CSRF(false)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
 	read := httptest.NewRequest(http.MethodGet, "/api/v1/auth/csrf", nil)
 	read.AddCookie(&http.Cookie{Name: csrfCookieName, Value: token})
 	w := httptest.NewRecorder()

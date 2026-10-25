@@ -99,7 +99,7 @@ func NewServices(
 	hasher *infraAuth.BcryptHasher,
 	tokenGen *infraAuth.JWTGenerator,
 	hubAdapter *infraRealtime.HubAdapter,
-	sender email.Sender,
+	_ email.Sender,
 	ldapAuth appAuth.LDAPAuthenticator,
 	authCfg appAuth.Config,
 ) *Services {

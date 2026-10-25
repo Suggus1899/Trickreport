@@ -195,7 +195,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 
 		// Public: auth (no tenant required)
 		r.Route("/auth", func(r chi.Router) {
-			r.With(globalLimiter.LimitByIP).Get("/csrf", func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusNoContent) })
+			r.With(globalLimiter.LimitByIP).Get("/csrf", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 			// Login rate limiting (per email+IP)
 			loginLimiter := httpMiddleware.NewLoginRateLimiter(rate.Limit(5), 10, 15)
 			srv.backgroundDone = append(srv.backgroundDone, loginLimiter.Start(ctx))

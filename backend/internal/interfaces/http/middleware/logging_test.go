@@ -102,7 +102,7 @@ func TestRequestLogger_DefaultStatus(t *testing.T) {
 	r := chi.NewRouter()
 	r.Use(RequestLogger)
 
-	r.Get("/test", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/test", func(w http.ResponseWriter, _ *http.Request) {
 		// Don't call WriteHeader; just write body.
 		_, _ = w.Write([]byte("ok"))
 	})

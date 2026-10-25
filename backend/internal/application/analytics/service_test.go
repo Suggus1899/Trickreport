@@ -21,19 +21,19 @@ type mockRepo struct {
 	resolutionErr error
 }
 
-func (m *mockRepo) GetSummary(ctx context.Context, tenantID uuid.UUID) (Summary, error) {
+func (m *mockRepo) GetSummary(_ context.Context, _ uuid.UUID) (Summary, error) {
 	return m.summary, m.summaryErr
 }
 
-func (m *mockRepo) GetVolume(ctx context.Context, tenantID uuid.UUID) ([]VolumePoint, error) {
+func (m *mockRepo) GetVolume(_ context.Context, _ uuid.UUID) ([]VolumePoint, error) {
 	return m.volume, m.volumeErr
 }
 
-func (m *mockRepo) GetStatusDistribution(ctx context.Context, tenantID uuid.UUID) ([]StatusDistribution, error) {
+func (m *mockRepo) GetStatusDistribution(_ context.Context, _ uuid.UUID) ([]StatusDistribution, error) {
 	return m.dist, m.distErr
 }
 
-func (m *mockRepo) GetResolutionTime(ctx context.Context, tenantID uuid.UUID) ([]ResolutionMetrics, error) {
+func (m *mockRepo) GetResolutionTime(_ context.Context, _ uuid.UUID) ([]ResolutionMetrics, error) {
 	return m.resolution, m.resolutionErr
 }
 

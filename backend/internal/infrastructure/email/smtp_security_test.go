@@ -29,7 +29,7 @@ func TestSMTPContextCancelsStalledGreeting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer listener.Close()
+	defer func() { _ = listener.Close() }()
 	host, port, _ := net.SplitHostPort(listener.Addr().String())
 	portNumber, _ := strconv.Atoi(port)
 	sender := NewSMTPSender(host, portNumber, "", "", "from@example.test", false)
@@ -48,7 +48,7 @@ func TestSMTPContextCancelsStalledGreeting(t *testing.T) {
 			close(closed)
 			return
 		}
-		defer conn.Close()
+		defer func() { _ = conn.Close() }()
 		close(accepted)
 		_, _ = conn.Read(make([]byte, 1))
 		close(closed)

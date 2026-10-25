@@ -103,6 +103,7 @@ const slaBreachTmpl = `<!DOCTYPE html>
 </body>
 </html>`
 
+//nolint:gosec // G101: HTML email template; the identifier names a flow, it holds no credential.
 const passwordResetTmpl = `<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="UTF-8"><title>Password Reset</title></head>

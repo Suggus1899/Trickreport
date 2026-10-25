@@ -27,16 +27,16 @@ type attMockRepo struct {
 	createErr   error
 }
 
-func (m *attMockRepo) Create(ctx context.Context, input appTicket.AttachmentUploadInput) (*domainTicket.Attachment, error) {
+func (m *attMockRepo) Create(_ context.Context, _ appTicket.AttachmentUploadInput) (*domainTicket.Attachment, error) {
 	if m.createErr != nil {
 		return nil, m.createErr
 	}
 	return m.attachment, nil
 }
-func (m *attMockRepo) List(ctx context.Context, ticketID uuid.UUID) ([]domainTicket.Attachment, error) {
+func (m *attMockRepo) List(_ context.Context, _ uuid.UUID) ([]domainTicket.Attachment, error) {
 	return m.attachments, m.err
 }
-func (m *attMockRepo) GetByID(ctx context.Context, id, ticketID uuid.UUID) (*domainTicket.Attachment, []byte, error) {
+func (m *attMockRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*domainTicket.Attachment, []byte, error) {
 	return m.attachment, m.data, m.err
 }
 
@@ -67,8 +67,8 @@ func multipartBody(t *testing.T, filename, contentType string) (*bytes.Buffer, s
 	if err != nil {
 		t.Fatalf("create form file: %v", err)
 	}
-	fw.Write([]byte("file-content"))
-	w.Close()
+	_, _ = fw.Write([]byte("file-content"))
+	_ = w.Close()
 	return &buf, w.FormDataContentType()
 }
 
@@ -149,8 +149,8 @@ func TestAttachmentHandler_Upload_MissingFileField(t *testing.T) {
 	var buf bytes.Buffer
 	w := multipart.NewWriter(&buf)
 	fw, _ := w.CreateFormFile("wrong_field", "test.txt")
-	fw.Write([]byte("x"))
-	w.Close()
+	_, _ = fw.Write([]byte("x"))
+	_ = w.Close()
 
 	req := httptest.NewRequest(http.MethodPost, "/api/tickets/"+tk.ID.String()+"/attachments", &buf)
 	req.Header.Set("X-Tenant-ID", "test-tenant")

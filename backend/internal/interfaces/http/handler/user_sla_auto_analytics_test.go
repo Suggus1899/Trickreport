@@ -31,29 +31,29 @@ type uMockRepo struct {
 	deactErr  error
 }
 
-func (m *uMockRepo) List(ctx context.Context, tenantID uuid.UUID) ([]domainUser.User, error) {
+func (m *uMockRepo) List(_ context.Context, _ uuid.UUID) ([]domainUser.User, error) {
 	return m.users, m.err
 }
-func (m *uMockRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainUser.User, error) {
+func (m *uMockRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*domainUser.User, error) {
 	return m.user, m.err
 }
-func (m *uMockRepo) GetByEmail(ctx context.Context, email string) (*domainUser.User, error) {
+func (m *uMockRepo) GetByEmail(_ context.Context, _ string) (*domainUser.User, error) {
 	return m.user, m.err
 }
-func (m *uMockRepo) Create(ctx context.Context, u *domainUser.User, passwordHash string) error {
+func (m *uMockRepo) Create(_ context.Context, _ *domainUser.User, _ string) error {
 	return m.createErr
 }
-func (m *uMockRepo) Update(ctx context.Context, id, tenantID uuid.UUID, fields appUser.UpdateFields) (*domainUser.User, error) {
+func (m *uMockRepo) Update(_ context.Context, _, _ uuid.UUID, _ appUser.UpdateFields) (*domainUser.User, error) {
 	return m.user, m.updateErr
 }
-func (m *uMockRepo) Deactivate(ctx context.Context, id, tenantID uuid.UUID) error {
+func (m *uMockRepo) Deactivate(_ context.Context, _, _ uuid.UUID) error {
 	return m.deactErr
 }
 
 type uMockHasher struct{}
 
-func (m *uMockHasher) Hash(password string) (string, error) { return "hashed", nil }
-func (m *uMockHasher) Compare(hash, password string) error  { return nil }
+func (m *uMockHasher) Hash(_ string) (string, error) { return "hashed", nil }
+func (m *uMockHasher) Compare(_, _ string) error     { return nil }
 
 func newUserHandler(repo appUser.Repository) *UserHandler {
 	return NewUserHandler(appUser.NewService(repo, &uMockHasher{}))
@@ -297,10 +297,10 @@ type slaMockRepo struct {
 	upsertErr error
 }
 
-func (m *slaMockRepo) List(ctx context.Context, tenantID uuid.UUID) ([]domainSLA.Policy, error) {
+func (m *slaMockRepo) List(_ context.Context, _ uuid.UUID) ([]domainSLA.Policy, error) {
 	return m.policies, m.err
 }
-func (m *slaMockRepo) Upsert(ctx context.Context, p *domainSLA.Policy) error {
+func (m *slaMockRepo) Upsert(_ context.Context, _ *domainSLA.Policy) error {
 	return m.upsertErr
 }
 
@@ -412,16 +412,16 @@ type autoMockRepo struct {
 	deleteErr error
 }
 
-func (m *autoMockRepo) List(ctx context.Context, tenantID uuid.UUID) ([]domainAuto.Rule, error) {
+func (m *autoMockRepo) List(_ context.Context, _ uuid.UUID) ([]domainAuto.Rule, error) {
 	return m.rules, m.err
 }
-func (m *autoMockRepo) Create(ctx context.Context, r *domainAuto.Rule) error {
+func (m *autoMockRepo) Create(_ context.Context, _ *domainAuto.Rule) error {
 	return m.createErr
 }
-func (m *autoMockRepo) Update(ctx context.Context, r *domainAuto.Rule) error {
+func (m *autoMockRepo) Update(_ context.Context, _ *domainAuto.Rule) error {
 	return m.updateErr
 }
-func (m *autoMockRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
+func (m *autoMockRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 	return m.deleteErr
 }
 
@@ -646,16 +646,16 @@ type anMockRepo struct {
 	resErr     error
 }
 
-func (m *anMockRepo) GetSummary(ctx context.Context, tenantID uuid.UUID) (appAnalytics.Summary, error) {
+func (m *anMockRepo) GetSummary(_ context.Context, _ uuid.UUID) (appAnalytics.Summary, error) {
 	return m.summary, m.summaryErr
 }
-func (m *anMockRepo) GetVolume(ctx context.Context, tenantID uuid.UUID) ([]appAnalytics.VolumePoint, error) {
+func (m *anMockRepo) GetVolume(_ context.Context, _ uuid.UUID) ([]appAnalytics.VolumePoint, error) {
 	return m.volume, m.volumeErr
 }
-func (m *anMockRepo) GetStatusDistribution(ctx context.Context, tenantID uuid.UUID) ([]appAnalytics.StatusDistribution, error) {
+func (m *anMockRepo) GetStatusDistribution(_ context.Context, _ uuid.UUID) ([]appAnalytics.StatusDistribution, error) {
 	return m.dist, m.distErr
 }
-func (m *anMockRepo) GetResolutionTime(ctx context.Context, tenantID uuid.UUID) ([]appAnalytics.ResolutionMetrics, error) {
+func (m *anMockRepo) GetResolutionTime(_ context.Context, _ uuid.UUID) ([]appAnalytics.ResolutionMetrics, error) {
 	return m.resolution, m.resErr
 }
 

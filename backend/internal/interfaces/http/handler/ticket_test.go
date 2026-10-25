@@ -30,30 +30,30 @@ type tMockRepo struct {
 	createCalls int
 }
 
-func (m *tMockRepo) List(ctx context.Context, tenantID uuid.UUID, filter appTicket.Filter, role string, userID uuid.UUID) ([]domainTicket.Ticket, error) {
+func (m *tMockRepo) List(_ context.Context, _ uuid.UUID, filter appTicket.Filter, _ string, _ uuid.UUID) ([]domainTicket.Ticket, error) {
 	m.gotFilter = filter
 	return m.tickets, m.err
 }
-func (m *tMockRepo) GetByID(ctx context.Context, id, tenantID uuid.UUID) (*domainTicket.Ticket, error) {
+func (m *tMockRepo) GetByID(_ context.Context, _, _ uuid.UUID) (*domainTicket.Ticket, error) {
 	return m.ticket, m.err
 }
-func (m *tMockRepo) Create(ctx context.Context, t *domainTicket.Ticket) error {
+func (m *tMockRepo) Create(_ context.Context, _ *domainTicket.Ticket) error {
 	m.createCalls++
 	return m.err
 }
-func (m *tMockRepo) UpdateStatus(ctx context.Context, id, tenantID uuid.UUID, version int, status domainTicket.Status, userID uuid.UUID) (*domainTicket.Ticket, error) {
+func (m *tMockRepo) UpdateStatus(_ context.Context, _, _ uuid.UUID, _ int, _ domainTicket.Status, _ uuid.UUID) (*domainTicket.Ticket, error) {
 	if m.updateErr != nil {
 		return nil, m.updateErr
 	}
 	return m.ticket, nil
 }
-func (m *tMockRepo) Assign(ctx context.Context, id, tenantID, assignedTo, userID uuid.UUID) error {
+func (m *tMockRepo) Assign(_ context.Context, _, _, _, _ uuid.UUID) error {
 	return m.assignErr
 }
-func (m *tMockRepo) SetSLADeadline(ctx context.Context, id, tenantID uuid.UUID, deadline time.Time) error {
+func (m *tMockRepo) SetSLADeadline(_ context.Context, _, _ uuid.UUID, _ time.Time) error {
 	return nil
 }
-func (m *tMockRepo) GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid.UUID, error) {
+func (m *tMockRepo) GetCreator(_ context.Context, _, _ uuid.UUID) (uuid.UUID, error) {
 	return uuid.Nil, nil
 }
 
@@ -63,10 +63,10 @@ type tMockCommentRepo struct {
 	createErr error
 }
 
-func (m *tMockCommentRepo) List(ctx context.Context, ticketID uuid.UUID, role string) ([]domainTicket.Comment, error) {
+func (m *tMockCommentRepo) List(_ context.Context, _ uuid.UUID, _ string) ([]domainTicket.Comment, error) {
 	return m.comments, m.err
 }
-func (m *tMockCommentRepo) Create(ctx context.Context, c *domainTicket.Comment) error {
+func (m *tMockCommentRepo) Create(_ context.Context, _ *domainTicket.Comment) error {
 	return m.createErr
 }
 
@@ -75,13 +75,13 @@ type tMockHistoryRepo struct {
 	err     error
 }
 
-func (m *tMockHistoryRepo) List(ctx context.Context, ticketID uuid.UUID) ([]domainTicket.HistoryEntry, error) {
+func (m *tMockHistoryRepo) List(_ context.Context, _ uuid.UUID) ([]domainTicket.HistoryEntry, error) {
 	return m.entries, m.err
 }
 
 type tMockHub struct{ broadcasts int }
 
-func (m *tMockHub) BroadcastEvent(tenantID uuid.UUID, eventType string, data any) {
+func (m *tMockHub) BroadcastEvent(_ uuid.UUID, _ string, _ any) {
 	m.broadcasts++
 }
 
@@ -101,7 +101,7 @@ type mockTenantResolver struct {
 	err error
 }
 
-func (m *mockTenantResolver) Resolve(ctx context.Context, slugOrID string) (uuid.UUID, error) {
+func (m *mockTenantResolver) Resolve(_ context.Context, _ string) (uuid.UUID, error) {
 	return m.id, m.err
 }
 

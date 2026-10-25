@@ -14,6 +14,7 @@ func TestServer_ForwardedHeadersDoNotRewritePeer(t *testing.T) {
 	defer cancel()
 	srv := New(ctx, &config.Config{Env: "development", JWTSecret: "test-secret", JWTExpHours: 8}, nil)
 	srv.router.Get("/test-peer", func(w http.ResponseWriter, r *http.Request) {
+		//nolint:gosec // G705: test fixture echoes RemoteAddr; no HTML context
 		_, _ = w.Write([]byte(r.RemoteAddr))
 	})
 	for _, header := range []string{"X-Forwarded-For", "X-Real-IP", "True-Client-IP"} {

@@ -72,15 +72,15 @@ type mockDBTX struct {
 	rows        pgx.Rows
 }
 
-func (m *mockDBTX) Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error) {
+func (m *mockDBTX) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
 	return m.execResult, m.execErr
 }
 
-func (m *mockDBTX) Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error) {
+func (m *mockDBTX) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
 	return m.rows, m.queryErr
 }
 
-func (m *mockDBTX) QueryRow(ctx context.Context, sql string, args ...any) pgx.Row {
+func (m *mockDBTX) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
 	return m.queryRowRow
 }
 

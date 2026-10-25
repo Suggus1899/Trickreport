@@ -21,13 +21,13 @@ const slaSlack = time.Second
 func TestIntegration_MSPTicketGetsContractDeadlines(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, adminID := seedTenantUser(t, ctx)
+	tenantID, adminID := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	repo := NewMSPRepo(testPool)
 	svc := appMSP.NewService(repo)
-	covered := seedSLAClient(t, ctx, repo, tenantID, "covered")
-	uncovered := seedSLAClient(t, ctx, repo, tenantID, "uncovered")
+	covered := seedSLAClient(ctx, t, repo, tenantID, "covered")
+	uncovered := seedSLAClient(ctx, t, repo, tenantID, "uncovered")
 
 	if _, err := svc.CreateContract(ctx, tenantID, &domain.Contract{
 		TenantID: tenantID, ClientID: covered.ID, Name: "Gold", Status: "active",
@@ -44,7 +44,7 @@ func TestIntegration_MSPTicketGetsContractDeadlines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateMSPTicket covered: %v", err)
 	}
-	got := readTicketDeadlines(t, ctx, ticketID)
+	got := readTicketDeadlines(ctx, t, ticketID)
 	assertDeadlineNear(t, "response", got.Response, before.Add(60*time.Minute), after.Add(60*time.Minute))
 	assertDeadlineNear(t, "resolution", got.Resolution, before.Add(240*time.Minute), after.Add(240*time.Minute))
 	if got.Escalation != nil {
@@ -56,7 +56,7 @@ func TestIntegration_MSPTicketGetsContractDeadlines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateMSPTicket uncovered: %v", err)
 	}
-	got = readTicketDeadlines(t, ctx, ticketID)
+	got = readTicketDeadlines(ctx, t, ticketID)
 	if got.Response != nil || got.Resolution != nil || got.Escalation != nil {
 		t.Fatalf("uncovered deadlines = %+v, want none", got)
 	}
@@ -68,7 +68,7 @@ func TestIntegration_MSPTicketGetsContractDeadlines(t *testing.T) {
 func TestIntegration_MSPTicketCreationIsAtomic(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, adminID := seedTenantUser(t, ctx)
+	tenantID, adminID := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	title := "orphan context " + tenantID.String()[:8]
@@ -96,7 +96,7 @@ func TestIntegration_MSPTicketCreationIsAtomic(t *testing.T) {
 func TestIntegration_ITSMCatalogTicketPersistsDeadlines(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, adminID := seedTenantUser(t, ctx)
+	tenantID, adminID := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	created := time.Now().UTC().Truncate(time.Second)
@@ -109,13 +109,13 @@ func TestIntegration_ITSMCatalogTicketPersistsDeadlines(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTicketFromService: %v", err)
 	}
-	got := readTicketDeadlines(t, ctx, ticketID)
+	got := readTicketDeadlines(ctx, t, ticketID)
 	assertSameDeadline(t, "response", got.Response, want.Response)
 	assertSameDeadline(t, "resolution", got.Resolution, want.Resolution)
 	assertSameDeadline(t, "escalation", got.Escalation, nil)
 }
 
-func seedSLAClient(t *testing.T, ctx context.Context, repo *MSPRepo, tenantID uuid.UUID, label string) *domain.Client {
+func seedSLAClient(ctx context.Context, t *testing.T, repo *MSPRepo, tenantID uuid.UUID, label string) *domain.Client {
 	t.Helper()
 	c := &domain.Client{
 		TenantID: tenantID, Name: label, Status: "active",
@@ -128,7 +128,7 @@ func seedSLAClient(t *testing.T, ctx context.Context, repo *MSPRepo, tenantID uu
 }
 
 // readTicketDeadlines loads the three SLA clocks stored on a ticket. NULL reads as nil.
-func readTicketDeadlines(t *testing.T, ctx context.Context, ticketID uuid.UUID) domainSLA.Deadlines {
+func readTicketDeadlines(ctx context.Context, t *testing.T, ticketID uuid.UUID) domainSLA.Deadlines {
 	t.Helper()
 	var dl domainSLA.Deadlines
 	if err := testPool.QueryRow(ctx,

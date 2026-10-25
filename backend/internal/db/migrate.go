@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/golang-migrate/migrate/v4"
+	// Registers the pgx5 driver used by the rewritten migrate URL in this package.
 	_ "github.com/golang-migrate/migrate/v4/database/pgx/v5"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 )
@@ -32,7 +33,8 @@ func RunMigrations(databaseURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
-	defer m.Close()
+	// Close errors are ignored; the migration result above is what callers act on.
+	defer func() { _, _ = m.Close() }()
 
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("failed to run migrations: %w", err)
@@ -54,7 +56,8 @@ func RollbackLastMigration(databaseURL string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create migrate instance: %w", err)
 	}
-	defer m.Close()
+	// Close errors are ignored; the migration result above is what callers act on.
+	defer func() { _, _ = m.Close() }()
 
 	if err := m.Steps(-1); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("failed to roll back migration: %w", err)

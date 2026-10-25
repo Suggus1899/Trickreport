@@ -24,23 +24,23 @@ type mockRepo struct {
 	deleteCalls int
 }
 
-func (m *mockRepo) List(ctx context.Context, tenantID uuid.UUID) ([]automation.Rule, error) {
+func (m *mockRepo) List(_ context.Context, _ uuid.UUID) ([]automation.Rule, error) {
 	return m.rules, m.err
 }
 
-func (m *mockRepo) Create(ctx context.Context, r *automation.Rule) error {
+func (m *mockRepo) Create(_ context.Context, r *automation.Rule) error {
 	m.createCalls++
 	m.gotCreated = r
 	return m.createErr
 }
 
-func (m *mockRepo) Update(ctx context.Context, r *automation.Rule) error {
+func (m *mockRepo) Update(_ context.Context, r *automation.Rule) error {
 	m.updateCalls++
 	m.gotUpdated = r
 	return m.updateErr
 }
 
-func (m *mockRepo) Delete(ctx context.Context, id, tenantID uuid.UUID) error {
+func (m *mockRepo) Delete(_ context.Context, _, _ uuid.UUID) error {
 	m.deleteCalls++
 	return m.deleteErr
 }

@@ -65,7 +65,7 @@ func skipIfNoDB(t *testing.T) {
 
 // seedTenantUser inserts a fresh tenant and admin user, returning their IDs.
 // Each test gets its own tenant so tests are isolated.
-func seedTenantUser(t *testing.T, ctx context.Context) (uuid.UUID, uuid.UUID) {
+func seedTenantUser(ctx context.Context, t *testing.T) (uuid.UUID, uuid.UUID) {
 	t.Helper()
 	tenantID := uuid.New()
 	_, err := testPool.Exec(ctx,
@@ -99,7 +99,7 @@ func cleanupTenant(ctx context.Context, tenantID uuid.UUID) {
 func TestIntegration_TicketRepo_CRUD(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, userID := seedTenantUser(t, ctx)
+	tenantID, userID := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	repo := NewTicketRepo(testPool)
@@ -168,7 +168,7 @@ func TestIntegration_TicketRepo_CRUD(t *testing.T) {
 func TestIntegration_UserRepo_CRUD(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, _ := seedTenantUser(t, ctx)
+	tenantID, _ := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	repo := NewUserRepo(testPool)
@@ -228,7 +228,7 @@ func TestIntegration_UserRepo_CRUD(t *testing.T) {
 func TestIntegration_ArticleRepo_CRUD(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, userID := seedTenantUser(t, ctx)
+	tenantID, userID := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	repo := NewArticleRepo(testPool)
@@ -294,7 +294,7 @@ func TestIntegration_ArticleRepo_CRUD(t *testing.T) {
 func TestIntegration_SLARepo_CRUD(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, _ := seedTenantUser(t, ctx)
+	tenantID, _ := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	repo := NewSLARepo(testPool)
@@ -344,7 +344,7 @@ func TestIntegration_SLARepo_CRUD(t *testing.T) {
 func TestIntegration_AutomationRepo_CRUD(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, _ := seedTenantUser(t, ctx)
+	tenantID, _ := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	repo := NewAutomationRepo(testPool)
@@ -398,7 +398,7 @@ func TestIntegration_AutomationRepo_CRUD(t *testing.T) {
 func TestIntegration_AttachmentRepo_CRUD(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, userID := seedTenantUser(t, ctx)
+	tenantID, userID := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenantID)
 
 	// Create a ticket to attach to.

@@ -27,7 +27,7 @@ import (
 	"github.com/trickreport/backend/internal/interfaces/http/middleware"
 )
 
-func businessTicket(t *testing.T, ctx context.Context, tenant, creator uuid.UUID) *domain.Ticket {
+func businessTicket(ctx context.Context, t *testing.T, tenant, creator uuid.UUID) *domain.Ticket {
 	t.Helper()
 	tk := &domain.Ticket{TenantID: tenant, CreatedBy: creator, Title: "business regression", Description: "regression test ticket", Priority: domain.PriorityHigh, Category: "general"}
 	if err := NewTicketRepo(testPool).Create(ctx, tk); err != nil {
@@ -39,7 +39,7 @@ func businessTicket(t *testing.T, ctx context.Context, tenant, creator uuid.UUID
 func TestIntegration_TicketSLATrackingPreservesContract(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenant, actor := seedTenantUser(t, ctx)
+	tenant, actor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenant)
 	slaRepo := NewSLARepo(testPool)
 	policy := &domainSLA.Policy{TenantID: tenant, Priority: "high", ResponseTimeMinutes: 10, ResolutionTimeMinutes: 60, EscalationMinutes: 0}
@@ -111,9 +111,9 @@ func TestIntegration_TicketSLATrackingPreservesContract(t *testing.T) {
 func TestIntegration_AutomationRuleRollsBackAllActions(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenant, actor := seedTenantUser(t, ctx)
+	tenant, actor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenant)
-	tk := businessTicket(t, ctx, tenant, actor)
+	tk := businessTicket(ctx, t, tenant, actor)
 	rules := NewAutomationRepo(testPool)
 	rule := &domainAutomation.Rule{TenantID: tenant, Name: "Atomic rule", TriggerType: "ticket_created", Conditions: map[string]any{}, Actions: []any{map[string]any{"type": "set_priority", "priority": "critical"}, map[string]any{"type": "assign_to", "user_id": uuid.New().String()}}, IsActive: true}
 	if err := rules.Create(ctx, rule); err != nil {
@@ -139,7 +139,7 @@ func TestIntegration_AutomationRuleRollsBackAllActions(t *testing.T) {
 func TestIntegration_AnalyticsUsesEventTimesAndViewerScope(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenant, actor := seedTenantUser(t, ctx)
+	tenant, actor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenant)
 	other := uuid.New()
 	if _, err := testPool.Exec(ctx, `INSERT INTO users(id,tenant_id,name,email,role)VALUES($1,$2,'Other',$3,'end_user')`, other, tenant, other.String()+"@test.local"); err != nil {
@@ -193,7 +193,7 @@ func TestIntegration_AnalyticsUsesEventTimesAndViewerScope(t *testing.T) {
 func TestCreateTicket_IdempotencySurvivesResponseLoss(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenant, actor := seedTenantUser(t, ctx)
+	tenant, actor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenant)
 	svc := appTicket.NewService(NewTicketRepo(testPool), NewCommentRepo(testPool), NewHistoryRepo(testPool), nil, nil)
 	svc.SetTxManager(NewTxManager(testPool))
@@ -283,9 +283,9 @@ func TestCreateTicket_IdempotencySurvivesResponseLoss(t *testing.T) {
 func TestIntegration_AttachmentUploadListDownloadScope(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenant, actor := seedTenantUser(t, ctx)
+	tenant, actor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenant)
-	tk := businessTicket(t, ctx, tenant, actor)
+	tk := businessTicket(ctx, t, tenant, actor)
 	h := handler.NewAttachmentHandler(appTicket.NewAttachmentService(NewAttachmentRepo(testPool), NewTicketRepo(testPool)))
 	router := chi.NewRouter()
 	router.Use(middleware.Tenant(NewTenantResolver(testPool)))
@@ -330,11 +330,11 @@ func TestIntegration_AttachmentUploadListDownloadScope(t *testing.T) {
 	if rec := request("GET", url+"/"+attachmentID, nil, "", tenant, actor); rec.Code != 200 || rec.Body.String() != "hello attachment" || rec.Header().Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("download%d %s", rec.Code, rec.Body)
 	}
-	otherTicket := businessTicket(t, ctx, tenant, actor)
+	otherTicket := businessTicket(ctx, t, tenant, actor)
 	if rec := request("GET", "/tickets/"+otherTicket.ID.String()+"/attachments/"+attachmentID, nil, "", tenant, actor); rec.Code != 404 {
 		t.Fatalf("other ticket status%d", rec.Code)
 	}
-	otherTenant, otherActor := seedTenantUser(t, ctx)
+	otherTenant, otherActor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, otherTenant)
 	if rec := request("GET", url+"/"+attachmentID, nil, "", otherTenant, otherActor); rec.Code != 404 {
 		t.Fatalf("other tenant status%d", rec.Code)
@@ -344,9 +344,9 @@ func TestIntegration_AttachmentUploadListDownloadScope(t *testing.T) {
 func TestIntegration_AssignmentNullAndEligibleAgent(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenant, actor := seedTenantUser(t, ctx)
+	tenant, actor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenant)
-	tk := businessTicket(t, ctx, tenant, actor)
+	tk := businessTicket(ctx, t, tenant, actor)
 	repo := NewTicketRepo(testPool)
 	if err := repo.Assign(ctx, tk.ID, tenant, actor, actor); err != nil {
 		t.Fatal(err)
@@ -361,7 +361,7 @@ func TestIntegration_AssignmentNullAndEligibleAgent(t *testing.T) {
 	if assigned != nil {
 		t.Errorf("unassigned=%v want NULL", assigned)
 	}
-	otherTenant, otherUser := seedTenantUser(t, ctx)
+	otherTenant, otherUser := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, otherTenant)
 	for _, user := range []struct {
 		id     uuid.UUID
@@ -383,9 +383,9 @@ func TestIntegration_AssignmentNullAndEligibleAgent(t *testing.T) {
 func TestIntegration_AutomationPreservesDomainAndVersion(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenant, actor := seedTenantUser(t, ctx)
+	tenant, actor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenant)
-	tk := businessTicket(t, ctx, tenant, actor)
+	tk := businessTicket(ctx, t, tenant, actor)
 	executor := NewAutomationExecutor(testPool).WithSystemUserID(actor)
 	if err := executor.SetStatus(ctx, tenant, tk.ID, "closed"); err != nil {
 		t.Fatal(err)
@@ -403,7 +403,7 @@ func TestIntegration_AutomationPreservesDomainAndVersion(t *testing.T) {
 	if got.Version != tk.Version+1 {
 		t.Errorf("version=%d want%d", got.Version, tk.Version+1)
 	}
-	other, otherUser := seedTenantUser(t, ctx)
+	other, otherUser := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, other)
 	if err := executor.AssignTo(ctx, tenant, tk.ID, otherUser); !errors.Is(err, domain.ErrValidation) {
 		t.Errorf("cross tenant automation assignment err=%v", err)
@@ -419,9 +419,9 @@ func TestIntegration_AutomationPreservesDomainAndVersion(t *testing.T) {
 func TestIntegration_StatusConflictAndHistory(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenant, actor := seedTenantUser(t, ctx)
+	tenant, actor := seedTenantUser(ctx, t)
 	defer cleanupTenant(ctx, tenant)
-	tk := businessTicket(t, ctx, tenant, actor)
+	tk := businessTicket(ctx, t, tenant, actor)
 	repo := NewTicketRepo(testPool)
 	if _, err := repo.UpdateStatus(ctx, tk.ID, tenant, tk.Version, domain.StatusInProgress, actor); err != nil {
 		t.Fatal(err)

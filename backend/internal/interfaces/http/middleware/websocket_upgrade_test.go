@@ -18,7 +18,7 @@ func TestResponseMiddlewarePreservesWebSocketUpgrade(t *testing.T) {
 			srv := httptest.NewServer(tc.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				c, err := u.Upgrade(w, r, nil)
 				if err == nil {
-					c.Close()
+					_ = c.Close()
 				}
 			})))
 			defer srv.Close()
@@ -27,11 +27,11 @@ func TestResponseMiddlewarePreservesWebSocketUpgrade(t *testing.T) {
 				status := 0
 				if resp != nil {
 					status = resp.StatusCode
-					resp.Body.Close()
+					_ = resp.Body.Close()
 				}
 				t.Fatalf("upgrade failed (status %d): %v", status, err)
 			}
-			c.Close()
+			_ = c.Close()
 		})
 	}
 }

@@ -15,7 +15,7 @@ func sessionTestService(t *testing.T) (*appAuth.Service, *infraAuth.JWTGenerator
 	t.Helper()
 	skipIfNoDB(t)
 	ctx := context.Background()
-	tenantID, userID := seedTenantUser(t, ctx)
+	tenantID, userID := seedTenantUser(ctx, t)
 	t.Cleanup(func() { cleanupTenant(ctx, tenantID) })
 	hasher := infraAuth.NewBcryptHasher()
 	hash, err := hasher.Hash("SessionPassword123!")

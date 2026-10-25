@@ -29,7 +29,11 @@ func TestLoadRejectsWeakDeployedSecret(t *testing.T) {
 	}
 	for _, env := range []string{"production", "staging"} {
 		t.Run(env, func(t *testing.T) {
-			cmd := exec.Command(os.Args[0], "-test.run=^TestLoadRejectsWeakDeployedSecret$")
+			exe, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			cmd := exec.Command(exe, "-test.run=^TestLoadRejectsWeakDeployedSecret$")
 			cmd.Dir = t.TempDir()
 			cmd.Env = append(os.Environ(), "TRICKREPORT_CONFIG_TEST_CHILD=1", "ENV="+env, "JWT_SECRET=short", "ADMIN_PASSWORD=TestAdminPassword123!")
 			out, err := cmd.CombinedOutput()
