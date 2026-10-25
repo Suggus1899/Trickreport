@@ -9,6 +9,14 @@ import (
 func TestOutboxSurvivesRestartAndRollsBackWithTransaction(t *testing.T) {
 	skipIfNoDB(t)
 	ctx := context.Background()
+	// The test database is shared by every package and Claim is FIFO by created_at.
+	// This test owns its recipients and pins its message to the head of the queue,
+	// so the assertions do not depend on rows left behind by other tests.
+	cleanup := func() {
+		_, _ = testPool.Exec(ctx, `DELETE FROM email_outbox WHERE recipient IN ('restart@example.test','rollback@example.test')`)
+	}
+	cleanup()
+	t.Cleanup(cleanup)
 	store := NewEmailOutboxRepo(testPool)
 	queue := infraEmail.NewEmailQueue(store)
 	tx, err := testPool.Begin(ctx)
@@ -31,6 +39,9 @@ func TestOutboxSurvivesRestartAndRollsBackWithTransaction(t *testing.T) {
 	if err := queue.Send("restart@example.test", "restart", "persistent body"); err != nil {
 		t.Fatal(err)
 	}
+	if _, err := testPool.Exec(ctx, `UPDATE email_outbox SET created_at='-infinity' WHERE recipient='restart@example.test'`); err != nil {
+		t.Fatal(err)
+	}
 	restarted := NewEmailOutboxRepo(testPool)
 	msg, err := restarted.Claim(ctx)
 	if err != nil {
@@ -48,7 +59,4 @@ func TestOutboxSurvivesRestartAndRollsBackWithTransaction(t *testing.T) {
 	if count != 1 {
 		t.Fatal("SMTP failure was not retained for retry")
 	}
-	t.Cleanup(func() {
-		_, _ = testPool.Exec(ctx, `DELETE FROM email_outbox WHERE recipient IN ('restart@example.test','rollback@example.test')`)
-	})
 }
