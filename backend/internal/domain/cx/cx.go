@@ -189,27 +189,27 @@ func CanAccessCustomer(viewerRole string, viewerCustomerIDs []uuid.UUID, custome
 // ── Conversations ───────────────────────────────────────────────────
 
 type Conversation struct {
-	ID                    uuid.UUID
-	TenantID              uuid.UUID
-	CustomerID            uuid.UUID
-	CustomerName          string // derived, for display
-	Channel               string
-	Subject               string
-	Status                string
-	Priority              string
-	AssignedTo            *uuid.UUID
-	AssigneeName          string // derived, for display
-	CreatedBy             *uuid.UUID
-	ExternalThreadID      string
-	SLAResponseMinutes    int
-	SLAResolutionMinutes  int
-	ResponseDueAt         *time.Time
-	ResolutionDueAt       *time.Time
-	FirstResponseAt       *time.Time
-	Escalated             bool
-	EscalatedAt           *time.Time
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
+	ID                   uuid.UUID
+	TenantID             uuid.UUID
+	CustomerID           uuid.UUID
+	CustomerName         string // derived, for display
+	Channel              string
+	Subject              string
+	Status               string
+	Priority             string
+	AssignedTo           *uuid.UUID
+	AssigneeName         string // derived, for display
+	CreatedBy            *uuid.UUID
+	ExternalThreadID     string
+	SLAResponseMinutes   int
+	SLAResolutionMinutes int
+	ResponseDueAt        *time.Time
+	ResolutionDueAt      *time.Time
+	FirstResponseAt      *time.Time
+	Escalated            bool
+	EscalatedAt          *time.Time
+	CreatedAt            time.Time
+	UpdatedAt            time.Time
 }
 
 func (c *Conversation) CanMoveTo(next string) bool {
@@ -386,16 +386,16 @@ func ValidateEmailAccount(a *EmailAccount) error {
 }
 
 type WhatsAppAccount struct {
-	ID                   uuid.UUID
-	TenantID             uuid.UUID
-	Name                 string
-	BusinessID           string
-	PhoneNumberID        string
-	DisplayName          string
+	ID                     uuid.UUID
+	TenantID               uuid.UUID
+	Name                   string
+	BusinessID             string
+	PhoneNumberID          string
+	DisplayName            string
 	WebhookVerifyTokenHash string // SHA-256 hex; never the token itself
-	Active               bool
-	CreatedAt            time.Time
-	UpdatedAt            time.Time
+	Active                 bool
+	CreatedAt              time.Time
+	UpdatedAt              time.Time
 }
 
 func ValidateWhatsAppAccount(a *WhatsAppAccount) error {
@@ -530,11 +530,11 @@ func ValidateSurvey(s *Survey) error {
 }
 
 type CXReport struct {
-	CustomersTotal         int             `json:"customers_total"`
-	OpenConversations      int             `json:"open_conversations"`
-	ResolvedConversations  int             `json:"resolved_conversations"`
-	SLABreached            int             `json:"sla_breached"`
-	SurveyCount            int             `json:"survey_count"`
-	AvgSatisfaction        float64         `json:"avg_satisfaction"`
+	CustomersTotal         int            `json:"customers_total"`
+	OpenConversations      int            `json:"open_conversations"`
+	ResolvedConversations  int            `json:"resolved_conversations"`
+	SLABreached            int            `json:"sla_breached"`
+	SurveyCount            int            `json:"survey_count"`
+	AvgSatisfaction        float64        `json:"avg_satisfaction"`
 	ConversationsByChannel map[string]int `json:"conversations_by_channel"`
 }
