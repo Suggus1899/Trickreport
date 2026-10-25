@@ -44,6 +44,15 @@ func isWebSocket(r *http.Request) bool {
 	return strings.EqualFold(r.Header.Get("Upgrade"), "websocket")
 }
 
+// isMonitoringWebhook returns true for the Zabbix webhook path. Zabbix
+// cannot hold a browser session or a CSRF cookie, so this one path is
+// exempt; it authenticates instead with the per-source token header
+// (see the MSP webhook handler), which is the only credential it
+// accepts.
+func isMonitoringWebhook(path string) bool {
+	return path == "/api/v1/msp/monitoring/webhook"
+}
+
 // CSRF returns middleware that generates a CSRF token on safe methods (GET,
 // HEAD, OPTIONS) and validates it on state-changing methods (POST, PUT, PATCH,
 // DELETE). Auth endpoints and WebSocket connections are exempt. secure should
@@ -51,8 +60,9 @@ func isWebSocket(r *http.Request) bool {
 func CSRF(secure bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip CSRF for auth endpoints and WebSocket
-			if isAuthPath(r.URL.Path) || isWebSocket(r) {
+			// Skip CSRF for auth endpoints, WebSocket and the
+			// token-authenticated monitoring webhook
+			if isAuthPath(r.URL.Path) || isWebSocket(r) || isMonitoringWebhook(r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}

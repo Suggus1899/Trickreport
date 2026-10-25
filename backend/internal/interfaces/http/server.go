@@ -108,6 +108,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	attachmentHandler := handlers.Attachment
 	notificationHandler := handlers.Notification
 	itsmHandler := handlers.ITSM
+	mspHandler := handlers.MSP
 
 	// ── Router ────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -223,6 +224,14 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 				r.Post("/mfa/disable", authHandler.MFADisable)
 			})
 		})
+
+		// Zabbix webhook (Stage 4): no user session exists for a
+		// monitoring system, so this route sits outside the
+		// authenticated group. It still resolves the tenant from the
+		// X-Tenant-ID header and authenticates with the per-source
+		// webhook token inside the handler; CSRF is exempt for this
+		// path only (see middleware CSRF).
+		r.With(httpMiddleware.Tenant(repos.TenantResolver)).Post("/msp/monitoring/webhook", mspHandler.Webhook)
 
 		// Protected routes (auth + tenant required)
 		r.Group(func(r chi.Router) {
@@ -391,6 +400,101 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 				r.Get("/{id}/tickets", itsmHandler.TicketsForChange)
 				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/tickets", itsmHandler.LinkChangeTicket)
 				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}/tickets/{ticketId}", itsmHandler.UnlinkChangeTicket)
+			})
+
+			// MSP (Stage 4): multi-client operation. Reads are open to
+			// any authenticated user of the tenant, but the service
+			// restricts client contacts to their own clients; writes
+			// are staff-only except creating a multi-client ticket
+			// and requesting a remote session, whose per-record rules
+			// live in the application service.
+			r.Route("/msp/clients", func(r chi.Router) {
+				r.Get("/", mspHandler.ListClients)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.CreateClient)
+				r.Get("/{id}", mspHandler.GetClient)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", mspHandler.UpdateClient)
+				r.With(httpMiddleware.RequireRole("admin")).Delete("/{id}", mspHandler.DeleteClient)
+				r.Get("/{id}/contacts", mspHandler.ListContacts)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/contacts", mspHandler.CreateContact)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}/contacts/{contactId}", mspHandler.DeleteContact)
+				r.Get("/{id}/assets", mspHandler.ListClientAssets)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/assets", mspHandler.LinkClientAsset)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}/assets/{assetId}", mspHandler.UnlinkClientAsset)
+				r.Get("/{id}/discovered-assets", mspHandler.ListDiscoveredAssets)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/discovered-assets", mspHandler.CreateDiscoveredAsset)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/discovered-assets/{discoveredId}/import", mspHandler.ImportDiscoveredAsset)
+			})
+
+			r.Route("/msp/contracts", func(r chi.Router) {
+				r.Get("/", mspHandler.ListContracts)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.CreateContract)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", mspHandler.UpdateContract)
+			})
+
+			r.Route("/msp/tickets", func(r chi.Router) {
+				r.Get("/", mspHandler.ListMSPTickets)
+				r.Post("/", mspHandler.CreateMSPTicket)
+				r.Get("/{id}/context", mspHandler.GetTicketContext)
+			})
+
+			r.Route("/msp/technicians", func(r chi.Router) {
+				r.Get("/", mspHandler.ListTechnicians)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.CreateTechnician)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", mspHandler.UpdateTechnician)
+				r.Get("/{id}/availability", mspHandler.ListAvailability)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/availability", mspHandler.CreateAvailability)
+			})
+
+			r.Route("/msp/interventions", func(r chi.Router) {
+				r.Get("/", mspHandler.ListInterventions)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.CreateIntervention)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Patch("/{id}/status", mspHandler.UpdateInterventionStatus)
+			})
+
+			r.Route("/msp/time-entries", func(r chi.Router) {
+				r.Get("/", mspHandler.ListTimeEntries)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.CreateTimeEntry)
+			})
+
+			r.Route("/msp/expenses", func(r chi.Router) {
+				r.Get("/", mspHandler.ListExpenses)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.CreateExpense)
+			})
+
+			r.Route("/msp/projects", func(r chi.Router) {
+				r.Get("/", mspHandler.ListProjects)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.CreateProject)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Patch("/{id}/status", mspHandler.UpdateProjectStatus)
+				r.Get("/{id}/tasks", mspHandler.ListTasks)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/tasks", mspHandler.CreateTask)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Patch("/{id}/tasks/{taskId}/status", mspHandler.UpdateTaskStatus)
+			})
+
+			r.Route("/msp/billing-drafts", func(r chi.Router) {
+				r.Get("/", mspHandler.ListBillingDrafts)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.GenerateBillingDraft)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Patch("/{id}/status", mspHandler.UpdateBillingDraftStatus)
+			})
+
+			r.Get("/msp/profitability", mspHandler.Profitability)
+			r.With(httpMiddleware.RequireRole("admin")).Get("/admin/msp", mspHandler.Report)
+
+			r.Route("/msp/monitoring", func(r chi.Router) {
+				r.Route("/sources", func(r chi.Router) {
+					r.Get("/", mspHandler.ListMonitoringSources)
+					r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", mspHandler.CreateMonitoringSource)
+					r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/rotate-token", mspHandler.RotateSourceToken)
+				})
+				r.Get("/alerts", mspHandler.ListMonitoringAlerts)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/alerts/{id}/resolve", mspHandler.ResolveMonitoringAlert)
+			})
+
+			r.Route("/msp/remote-sessions", func(r chi.Router) {
+				r.Get("/", mspHandler.ListRemoteSessions)
+				r.Post("/", mspHandler.RequestRemoteSession)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/authorize", mspHandler.AuthorizeRemoteSession)
+				r.Post("/{id}/start", mspHandler.StartRemoteSession)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/end", mspHandler.EndRemoteSession)
 			})
 		})
 	})
