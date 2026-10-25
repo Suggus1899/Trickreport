@@ -12,17 +12,24 @@ export function stripTokens(body: Record<string, unknown>): Record<string, unkno
   return publicBody;
 }
 
+const forwardedHeaders = ['cookie', 'content-type', 'accept', 'x-csrf-token', 'idempotency-key', 'x-tenant-id', 'user-agent'];
+// Provider callbacks are authenticated by their own token or HMAC signature, not by a browser Origin.
+const providerWebhooks = new Set(['msp/monitoring/webhook', 'cx/whatsapp/webhook']);
+const webhookHeaders = ['x-msp-webhook-token', 'x-hub-signature-256'];
+const isProviderWebhook = (path: string[]) => providerWebhooks.has(path.join('/'));
+
 /** Same-origin browser boundary. API credentials stay in HttpOnly cookies. */
 export async function proxy(request: Request, context: { params: Promise<{ path: string[] }> }, product: Product): Promise<Response> {
   const url = new URL(request.url);
   const safe = ['GET', 'HEAD', 'OPTIONS'].includes(request.method);
   const origin = request.headers.get('origin');
   const expectedOrigin = process.env.APP_PUBLIC_URL ? new URL(process.env.APP_PUBLIC_URL).origin : url.origin;
-  if (!safe && origin !== expectedOrigin) return Response.json({ error: 'Invalid request origin' }, { status: 403 });
   const { path } = await context.params;
+  const webhook = isProviderWebhook(path);
+  if (!safe && !webhook && origin !== expectedOrigin) return Response.json({ error: 'Invalid request origin' }, { status: 403 });
   if (!path.length || path.some(segment => segment === '.' || segment === '..' || /[\\/]/.test(segment))) return new Response(null, { status: 400 });
   const headers = new Headers();
-  for (const key of ['cookie', 'content-type', 'accept', 'x-csrf-token', 'idempotency-key', 'x-tenant-id', 'user-agent']) {
+  for (const key of webhook ? [...forwardedHeaders, ...webhookHeaders] : forwardedHeaders) {
     const value = request.headers.get(key);
     if (value) headers.set(key, value);
   }

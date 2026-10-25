@@ -26,6 +26,13 @@
 		header Cache-Control "public, max-age=31536000, immutable"
 		reverse_proxy frontend:3000
 	}
+	# Provider callbacks authenticate with their own token or HMAC, not a browser Origin.
+	handle /api/v1/msp/monitoring/webhook {
+		reverse_proxy app:8080
+	}
+	handle /api/v1/cx/whatsapp/webhook {
+		reverse_proxy app:8080
+	}
 	handle /api/* {
 		reverse_proxy frontend:3000
 	}
