@@ -665,8 +665,12 @@ func (s *Service) UpdateProjectStatus(ctx context.Context, tenantID, id uuid.UUI
 	return p, nil
 }
 
-func (s *Service) ListTasks(ctx context.Context, tenantID, projectID uuid.UUID) ([]domain.ProjectTask, error) {
-	if _, err := s.repo.GetProject(ctx, projectID, tenantID); err != nil {
+func (s *Service) ListTasks(ctx context.Context, tenantID, viewerID uuid.UUID, viewerRole string, projectID uuid.UUID) ([]domain.ProjectTask, error) {
+	p, err := s.repo.GetProject(ctx, projectID, tenantID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.checkClient(ctx, tenantID, viewerID, viewerRole, p.ClientID); err != nil {
 		return nil, err
 	}
 	return s.repo.ListTasks(ctx, tenantID, projectID)
@@ -1082,7 +1086,7 @@ func (s *Service) ResolveMonitoringAlert(ctx context.Context, tenantID, id uuid.
 
 // ── Remote sessions ─────────────────────────────────────────────────
 
-func (s *Service) RequestRemoteSession(ctx context.Context, tenantID uuid.UUID, sess *domain.RemoteSession) (*domain.RemoteSession, error) {
+func (s *Service) RequestRemoteSession(ctx context.Context, tenantID, callerID uuid.UUID, callerRole string, sess *domain.RemoteSession) (*domain.RemoteSession, error) {
 	sess.TenantID = tenantID
 	if sess.Provider == "" {
 		sess.Provider = "meshcentral"
@@ -1094,6 +1098,9 @@ func (s *Service) RequestRemoteSession(ctx context.Context, tenantID uuid.UUID, 
 		return nil, err
 	}
 	if _, err := s.repo.GetClient(ctx, sess.ClientID, tenantID); err != nil {
+		return nil, err
+	}
+	if err := s.checkClient(ctx, tenantID, callerID, callerRole, sess.ClientID); err != nil {
 		return nil, err
 	}
 	if _, err := s.repo.GetTechnician(ctx, sess.TechnicianID, tenantID); err != nil {

@@ -1058,7 +1058,8 @@ func (h *MSPHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		response.Error(w, http.StatusBadRequest, "invalid id")
 		return
 	}
-	tasks, err := h.svc.ListTasks(r.Context(), mspTenant(r), projectID)
+	viewerID, viewerRole := mspCaller(r)
+	tasks, err := h.svc.ListTasks(r.Context(), mspTenant(r), viewerID, viewerRole, projectID)
 	if err != nil {
 		mspErr(w, err)
 		return
@@ -1435,7 +1436,8 @@ func (h *MSPHandler) RequestRemoteSession(w http.ResponseWriter, r *http.Request
 	if !mspDecode(w, r, &in) {
 		return
 	}
-	s, err := h.svc.RequestRemoteSession(r.Context(), mspTenant(r), &domain.RemoteSession{ClientID: in.ClientID, TicketID: in.TicketID, TechnicianID: in.TechnicianID, ExternalSessionID: in.ExternalSessionID, AuditNote: in.AuditNote})
+	callerID, callerRole := mspCaller(r)
+	s, err := h.svc.RequestRemoteSession(r.Context(), mspTenant(r), callerID, callerRole, &domain.RemoteSession{ClientID: in.ClientID, TicketID: in.TicketID, TechnicianID: in.TechnicianID, ExternalSessionID: in.ExternalSessionID, AuditNote: in.AuditNote})
 	if err != nil {
 		mspErr(w, err)
 		return
