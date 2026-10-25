@@ -53,6 +53,14 @@ func isMonitoringWebhook(path string) bool {
 	return path == "/api/v1/msp/monitoring/webhook"
 }
 
+// isWhatsAppWebhook returns true for the WhatsApp webhook path. Meta
+// cannot hold a browser session or a CSRF cookie, so this one path is
+// exempt; it authenticates instead with the verification token on
+// GET and the HMAC signature on POST (see the CX webhook handler).
+func isWhatsAppWebhook(path string) bool {
+	return path == "/api/v1/cx/whatsapp/webhook"
+}
+
 // CSRF returns middleware that generates a CSRF token on safe methods (GET,
 // HEAD, OPTIONS) and validates it on state-changing methods (POST, PUT, PATCH,
 // DELETE). Auth endpoints and WebSocket connections are exempt. secure should
@@ -61,8 +69,8 @@ func CSRF(secure bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Skip CSRF for auth endpoints, WebSocket and the
-			// token-authenticated monitoring webhook
-			if isAuthPath(r.URL.Path) || isWebSocket(r) || isMonitoringWebhook(r.URL.Path) {
+			// token-authenticated monitoring webhook and WhatsApp webhook
+			if isAuthPath(r.URL.Path) || isWebSocket(r) || isMonitoringWebhook(r.URL.Path) || isWhatsAppWebhook(r.URL.Path) {
 				next.ServeHTTP(w, r)
 				return
 			}

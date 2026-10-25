@@ -108,6 +108,7 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 	attachmentHandler := handlers.Attachment
 	notificationHandler := handlers.Notification
 	itsmHandler := handlers.ITSM
+	cxHandler := handlers.CX
 	mspHandler := handlers.MSP
 
 	// ── Router ────────────────────────────────────────────────────────
@@ -232,6 +233,15 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 		// webhook token inside the handler; CSRF is exempt for this
 		// path only (see middleware CSRF).
 		r.With(httpMiddleware.Tenant(repos.TenantResolver)).Post("/msp/monitoring/webhook", mspHandler.Webhook)
+
+		// WhatsApp webhook (Stage 5): no user session exists for Meta,
+		// so this route sits outside the authenticated group. It still
+		// resolves the tenant from the X-Tenant-ID header and
+		// authenticates with the verification token (GET) or the
+		// HMAC signature (POST) inside the handler; CSRF is exempt
+		// for this path only (see middleware CSRF).
+		r.With(httpMiddleware.Tenant(repos.TenantResolver)).Get("/cx/whatsapp/webhook", cxHandler.WhatsAppWebhookVerify)
+		r.With(httpMiddleware.Tenant(repos.TenantResolver)).Post("/cx/whatsapp/webhook", cxHandler.WhatsAppWebhookIngest)
 
 		// Protected routes (auth + tenant required)
 		r.Group(func(r chi.Router) {
@@ -496,6 +506,71 @@ func New(ctx context.Context, cfg *config.Config, pool *pgxpool.Pool) *Server {
 				r.Post("/{id}/start", mspHandler.StartRemoteSession)
 				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/end", mspHandler.EndRemoteSession)
 			})
+
+			// CX (Stage 5): customer service. Reads are open to any
+			// authenticated user of the tenant, but the service
+			// restricts external customers to their own customers
+			// and conversations, and filters internal notes out of
+			// their message lists; writes are staff-only except
+			// opening a conversation, replying to it and rating it,
+			// whose per-record rules live in the application service.
+			r.Route("/cx/customers", func(r chi.Router) {
+				r.Get("/", cxHandler.ListCustomers)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", cxHandler.CreateCustomer)
+				r.Get("/{id}", cxHandler.GetCustomer)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", cxHandler.UpdateCustomer)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}", cxHandler.DeleteCustomer)
+				r.Get("/{id}/contacts", cxHandler.ListContacts)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/contacts", cxHandler.CreateContact)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}/contacts/{contactId}", cxHandler.DeleteContact)
+			})
+
+			r.Route("/cx/conversations", func(r chi.Router) {
+				r.Get("/", cxHandler.ListConversations)
+				r.Post("/", cxHandler.CreateConversation)
+				r.Get("/{id}", cxHandler.GetConversation)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Patch("/{id}/status", cxHandler.UpdateConversationStatus)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/take", cxHandler.TakeConversation)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/release", cxHandler.ReleaseConversation)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/{id}/escalate", cxHandler.EscalateConversation)
+				r.Get("/{id}/messages", cxHandler.ListMessages)
+				r.Post("/{id}/messages", cxHandler.AddMessage)
+				r.Post("/{id}/surveys", cxHandler.CreateSurvey)
+			})
+
+			r.Route("/cx/email-accounts", func(r chi.Router) {
+				r.Get("/", cxHandler.ListEmailAccounts)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", cxHandler.CreateEmailAccount)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", cxHandler.UpdateEmailAccount)
+			})
+
+			r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/cx/email/ingest", cxHandler.IngestEmail)
+
+			r.Route("/cx/whatsapp-accounts", func(r chi.Router) {
+				r.Get("/", cxHandler.ListWhatsAppAccounts)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", cxHandler.CreateWhatsAppAccount)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/{id}", cxHandler.UpdateWhatsAppAccount)
+			})
+
+			r.Route("/cx/sla-policies", func(r chi.Router) {
+				r.Get("/", cxHandler.ListSLAPolicies)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Put("/", cxHandler.UpsertSLAPolicy)
+			})
+
+			r.Route("/cx/assignment-rules", func(r chi.Router) {
+				r.Get("/", cxHandler.ListAssignmentRules)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", cxHandler.CreateAssignmentRule)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}", cxHandler.DeleteAssignmentRule)
+			})
+
+			r.Route("/cx/auto-replies", func(r chi.Router) {
+				r.Get("/", cxHandler.ListAutoReplies)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Post("/", cxHandler.CreateAutoReply)
+				r.With(httpMiddleware.RequireRole("admin", "agent")).Delete("/{id}", cxHandler.DeleteAutoReply)
+			})
+
+			r.Get("/cx/surveys", cxHandler.ListSurveys)
+			r.Get("/cx/report", cxHandler.Report)
 		})
 	})
 
