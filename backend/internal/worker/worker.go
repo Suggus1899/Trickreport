@@ -187,7 +187,7 @@ func (w *Worker) processDeadline(ctx context.Context, field, deadline, message, 
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	condition := field + "=FALSE"
 	update := field + "=TRUE"
 	oldValue, newValue := "false", "true"

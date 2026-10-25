@@ -304,7 +304,7 @@ func (r *MSPRepo) CreateTicketWithContext(ctx context.Context, tenantID, creator
 	if err != nil {
 		return uuid.Nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var ticketID uuid.UUID
 	if err := tx.QueryRow(ctx, `INSERT INTO tickets (tenant_id, title, description, status, priority, category, created_by, sla_deadline, response_deadline, escalation_deadline) VALUES ($1, $2, $3, 'open', $4, $5, $6, $7, $8, $9) RETURNING id`,
 		tenantID, title, description, priority, category, creatorID, dl.Resolution, dl.Response, dl.Escalation).Scan(&ticketID); err != nil {
@@ -356,7 +356,6 @@ func (r *MSPRepo) ListMSPTickets(ctx context.Context, tenantID uuid.UUID, client
 	if clientFilter != nil {
 		query += fmt.Sprintf(` AND tc.client_id = $%d`, next)
 		args = append(args, *clientFilter)
-		next++
 	}
 	query += ` ORDER BY t.created_at DESC`
 	rows, err := r.db.Query(ctx, query, args...)
@@ -513,7 +512,6 @@ func (r *MSPRepo) ListInterventions(ctx context.Context, tenantID uuid.UUID, cli
 	if technicianFilter != nil {
 		query += fmt.Sprintf(` AND technician_id = $%d`, next)
 		args = append(args, *technicianFilter)
-		next++
 	}
 	query += ` ORDER BY starts_at`
 	rows, err := r.db.Query(ctx, query, args...)
@@ -603,7 +601,6 @@ func dateFilter(query string, args []any, next int, col string, from, to *time.T
 	if to != nil {
 		query += fmt.Sprintf(` AND %s <= $%d::date`, col, next)
 		args = append(args, *to)
-		next++
 	}
 	return query, args
 }
@@ -742,7 +739,6 @@ func (r *MSPRepo) ListProjects(ctx context.Context, tenantID uuid.UUID, clientID
 	if clientFilter != nil {
 		query += fmt.Sprintf(` AND client_id = $%d`, next)
 		args = append(args, *clientFilter)
-		next++
 	}
 	query += ` ORDER BY created_at DESC`
 	rows, err := r.db.Query(ctx, query, args...)
@@ -857,7 +853,7 @@ func (r *MSPRepo) CreateBillingDraft(ctx context.Context, d *domain.BillingDraft
 	if err != nil {
 		return err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	if err := tx.QueryRow(ctx, `INSERT INTO msp_billing_drafts (tenant_id, client_id, contract_id, period_start, period_end, status, total_cents, notes) VALUES ($1, $2, $3, $4, $5, 'draft', $6, $7) RETURNING id, created_at, updated_at`,
 		d.TenantID, d.ClientID, toPgUUID(d.ContractID), d.PeriodStart, d.PeriodEnd, d.TotalCents, d.Notes).Scan(&d.ID, &d.CreatedAt, &d.UpdatedAt); err != nil {
 		return mspMapErr(err)
@@ -911,7 +907,6 @@ func (r *MSPRepo) ListBillingDrafts(ctx context.Context, tenantID uuid.UUID, cli
 	if clientFilter != nil {
 		query += fmt.Sprintf(` AND client_id = $%d`, next)
 		args = append(args, *clientFilter)
-		next++
 	}
 	query += ` ORDER BY created_at DESC`
 	rows, err := r.db.Query(ctx, query, args...)
@@ -959,7 +954,6 @@ func (r *MSPRepo) Profitability(ctx context.Context, tenantID uuid.UUID, clientI
 	if clientFilter != nil {
 		timeQuery += fmt.Sprintf(` AND client_id = $%d`, next)
 		timeArgs = append(timeArgs, *clientFilter)
-		next++
 	}
 	var minutes int
 	if err := r.db.QueryRow(ctx, timeQuery, timeArgs...).Scan(&minutes, &p.TimeRevenue, &p.TimeCost); err != nil {
@@ -983,7 +977,6 @@ func (r *MSPRepo) Profitability(ctx context.Context, tenantID uuid.UUID, clientI
 	if projectFilter != nil {
 		expQuery += fmt.Sprintf(` AND project_id = $%d`, next)
 		expArgs = append(expArgs, *projectFilter)
-		next++
 	}
 	if err := r.db.QueryRow(ctx, expQuery, expArgs...).Scan(&p.Expenses); err != nil {
 		return nil, fmt.Errorf("msp_repo.Profitability expenses: %w", err)
@@ -1000,7 +993,6 @@ func (r *MSPRepo) Profitability(ctx context.Context, tenantID uuid.UUID, clientI
 	if clientFilter != nil {
 		draftQuery += fmt.Sprintf(` AND client_id = $%d`, next)
 		draftArgs = append(draftArgs, *clientFilter)
-		next++
 	}
 	if err := r.db.QueryRow(ctx, draftQuery, draftArgs...).Scan(&p.BilledDrafts); err != nil {
 		return nil, fmt.Errorf("msp_repo.Profitability drafts: %w", err)
@@ -1089,7 +1081,7 @@ func (r *MSPRepo) ImportDiscoveredAsset(ctx context.Context, tenantID, clientID,
 	if err != nil {
 		return uuid.Nil, err
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 	var assetID uuid.UUID
 	if err := tx.QueryRow(ctx, `INSERT INTO assets (tenant_id, ci_type_id, name, status) SELECT $1, $2, $3, 'active' WHERE EXISTS (SELECT 1 FROM ci_types WHERE id = $2 AND tenant_id = $1) RETURNING id`, tenantID, ciTypeID, assetName).Scan(&assetID); err != nil {
 		return uuid.Nil, mspMapErr(err)
@@ -1212,7 +1204,6 @@ func (r *MSPRepo) ListMonitoringAlerts(ctx context.Context, tenantID uuid.UUID, 
 	if clientFilter != nil {
 		query += fmt.Sprintf(` AND client_id = $%d`, next)
 		args = append(args, *clientFilter)
-		next++
 	}
 	query += ` ORDER BY created_at DESC`
 	rows, err := r.db.Query(ctx, query, args...)
@@ -1295,7 +1286,6 @@ func (r *MSPRepo) ListRemoteSessions(ctx context.Context, tenantID uuid.UUID, cl
 	if clientFilter != nil {
 		query += fmt.Sprintf(` AND rs.client_id = $%d`, next)
 		args = append(args, *clientFilter)
-		next++
 	}
 	query += ` ORDER BY rs.created_at DESC`
 	rows, err := r.db.Query(ctx, query, args...)

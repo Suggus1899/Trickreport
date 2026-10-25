@@ -361,7 +361,7 @@ func (r *ITSMRepo) DecideApproval(ctx context.Context, a *domain.Approval, actor
 	if err != nil {
 		return fmt.Errorf("itsm_repo.DecideApproval: begin: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	tag, err := tx.Exec(ctx, `UPDATE approvals SET status = $1, comment = $2, decided_by = $3, decided_at = $4, updated_at = NOW() WHERE id = $5 AND tenant_id = $6 AND status = 'pending'`,
 		a.Status, a.Comment, actorID, a.DecidedAt, a.ID, a.TenantID)

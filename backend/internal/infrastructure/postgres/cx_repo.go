@@ -237,7 +237,6 @@ func (r *CXRepo) ListConversations(ctx context.Context, tenantID uuid.UUID, cust
 	if assigneeFilter != nil {
 		query += fmt.Sprintf(` AND c.assigned_to = $%d`, next)
 		args = append(args, *assigneeFilter)
-		next++
 	}
 	query += ` ORDER BY c.created_at DESC`
 	rows, err := r.db.Query(ctx, query, args...)
@@ -580,7 +579,6 @@ func (r *CXRepo) ListSurveys(ctx context.Context, tenantID uuid.UUID, customerID
 	if customerFilter != nil {
 		query += fmt.Sprintf(` AND customer_id = $%d`, next)
 		args = append(args, *customerFilter)
-		next++
 	}
 	query += ` ORDER BY created_at DESC`
 	rows, err := r.db.Query(ctx, query, args...)
