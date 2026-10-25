@@ -13,7 +13,6 @@ import (
 
 type mockRepo struct {
 	policies    []sla.Policy
-	policy      *sla.Policy
 	err         error
 	upsertErr   error
 	gotUpsert   *sla.Policy

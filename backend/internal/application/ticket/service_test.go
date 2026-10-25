@@ -79,7 +79,6 @@ func (m *mockRepo) GetCreator(ctx context.Context, id, tenantID uuid.UUID) (uuid
 
 type mockCommentRepo struct {
 	comments    []domainTicket.Comment
-	comment     *domainTicket.Comment
 	err         error
 	createErr   error
 	gotRole     string

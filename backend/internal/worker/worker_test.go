@@ -139,9 +139,7 @@ func TestWorker_HealthCheck_NilDB(t *testing.T) {
 	w := New(nil)
 
 	defer func() {
-		if r := recover(); r == nil {
-			// If it didn't panic but returned an error, that's also acceptable.
-		}
+		_ = recover()
 	}()
 
 	_ = w.HealthCheck()

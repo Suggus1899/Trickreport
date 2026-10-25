@@ -59,10 +59,9 @@ func (m *mockHasher) Compare(hash, password string) error {
 }
 
 type mockLDAP struct {
-	err      error
-	gotUser  string
-	gotPwd   string
-	disabled bool
+	err     error
+	gotUser string
+	gotPwd  string
 }
 
 func (m *mockLDAP) Authenticate(username, password string) (string, error) {

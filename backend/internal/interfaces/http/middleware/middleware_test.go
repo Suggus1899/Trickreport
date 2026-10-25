@@ -110,10 +110,6 @@ func TestTenant_ValidHeader(t *testing.T) {
 	if resolver.got != "my-tenant" {
 		t.Errorf("resolver got %q", resolver.got)
 	}
-	if got := TenantFromContext(req.Context()); got != uuid.Nil {
-		// req.Context() is the original; the modified one is inside rec
-	}
-	// Verify tenant is in the context that reaches next handler
 }
 
 func TestTenant_ValidHeader_TenantInContext(t *testing.T) {
