@@ -85,7 +85,7 @@ test('administrator publishes knowledge, creates a valid automation, manages SLA
   await page.goto('/admin/automations');
   await page.getByRole('button', { name: 'Nueva regla' }).click();
   await page.getByLabel('Nombre', { exact: true }).fill(`Seguimiento ${stamp}`);
-  await page.getByLabel('Evento', { exact: true }).selectOption('status_changed');
+  await page.getByRole('combobox', { name: 'Evento', exact: true }).selectOption('status_changed');
   await page.getByRole('button', { name: 'Guardar regla' }).click();
   await expect(page.getByRole('heading', { name: `Seguimiento ${stamp}` })).toBeVisible();
 
@@ -108,4 +108,13 @@ test('administrator publishes knowledge, creates a valid automation, manages SLA
   await expect(page.getByRole('heading', { name: 'Requests', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Switch to dark theme' }).click();
   await expect(page.locator('html')).toHaveClass(/dark/);
+
+  await page.setViewportSize({ width: 390, height: 560 });
+  await page.getByRole('button', { name: 'Open navigation' }).click();
+  expect(await page.locator('#primary-navigation').evaluate((el) => el.scrollHeight > el.clientHeight)).toBe(true);
+  const signOut = page.getByRole('button', { name: 'Sign out', exact: true });
+  await signOut.scrollIntoViewIfNeeded();
+  await expect(signOut).toBeInViewport();
+  await signOut.click();
+  await expect(page).toHaveURL(/\/login$/);
 });
