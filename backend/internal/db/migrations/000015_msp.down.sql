@@ -1,0 +1,19 @@
+-- Reversión de la Etapa 4 (MSP), en orden inverso a la creación.
+DROP TABLE IF EXISTS msp_remote_sessions;
+DROP TABLE IF EXISTS msp_monitoring_alerts;
+DROP TABLE IF EXISTS msp_monitoring_sources;
+DROP TABLE IF EXISTS msp_discovered_assets;
+DROP TABLE IF EXISTS msp_client_assets;
+DROP TABLE IF EXISTS msp_billing_items;
+DROP TABLE IF EXISTS msp_billing_drafts;
+DROP TABLE IF EXISTS msp_project_tasks;
+DROP TABLE IF EXISTS msp_expenses;
+DROP TABLE IF EXISTS msp_projects;
+DROP TABLE IF EXISTS msp_time_entries;
+DROP TABLE IF EXISTS msp_interventions;
+DROP TABLE IF EXISTS msp_availability;
+DROP TABLE IF EXISTS msp_technicians;
+DROP TABLE IF EXISTS msp_ticket_context;
+DROP TABLE IF EXISTS msp_contracts;
+DROP TABLE IF EXISTS msp_client_contacts;
+DROP TABLE IF EXISTS msp_clients;
