@@ -27,6 +27,30 @@ func NewAuthHandler(svc *appAuth.Service) *AuthHandler {
 	return &AuthHandler{svc: svc}
 }
 
+// sessionCookie builds an auth cookie. HttpOnly and SameSite are always set;
+// Secure follows COOKIE_SECURE, which is forced on in deployed environments.
+//
+//nolint:gosec // G124: Secure is configuration-driven rather than a literal; HttpOnly and SameSite are fixed.
+func sessionCookie(name, value string, expires time.Time, secure bool) *http.Cookie {
+	return &http.Cookie{
+		Name:     name,
+		Value:    value,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   secure,
+		SameSite: http.SameSiteStrictMode,
+		Expires:  expires,
+	}
+}
+
+// clearSessionCookie expires an auth cookie immediately.
+func clearSessionCookie(w http.ResponseWriter, name string, secure bool) {
+	//nolint:gosec // G124: sessionCookie always sets HttpOnly and SameSite; Secure comes from configuration.
+	c := sessionCookie(name, "", time.Unix(0, 0), secure)
+	c.MaxAge = -1
+	http.SetCookie(w, c)
+}
+
 // SetMFAService wires the MFA service.
 func (h *AuthHandler) SetMFAService(svc *appAuth.MFAService) { h.mfaSvc = svc }
 
@@ -102,25 +126,9 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "trickreport_token",
-		Value:    result.Token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   result.SecureCookie,
-		SameSite: http.SameSiteStrictMode,
-		Expires:  result.ExpiresAt,
-	})
+	http.SetCookie(w, sessionCookie("trickreport_token", result.Token, result.ExpiresAt, result.SecureCookie))
 	if result.RefreshToken != "" {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "trickreport_refresh",
-			Value:    result.RefreshToken,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   result.SecureCookie,
-			SameSite: http.SameSiteStrictMode,
-			Expires:  time.Now().Add(7 * 24 * time.Hour),
-		})
+		http.SetCookie(w, sessionCookie("trickreport_refresh", result.RefreshToken, time.Now().Add(7*24*time.Hour), result.SecureCookie))
 	}
 
 	response.JSON(w, http.StatusOK, loginResp{
@@ -182,14 +190,8 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	http.SetCookie(w, &http.Cookie{
-		Name: "trickreport_token", Value: result.Token, Path: "/", HttpOnly: true,
-		Secure: result.SecureCookie, SameSite: http.SameSiteStrictMode, Expires: result.ExpiresAt,
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name: "trickreport_refresh", Value: result.RefreshToken, Path: "/", HttpOnly: true,
-		Secure: result.SecureCookie, SameSite: http.SameSiteStrictMode, Expires: result.RefreshExpiresAt,
-	})
+	http.SetCookie(w, sessionCookie("trickreport_token", result.Token, result.ExpiresAt, result.SecureCookie))
+	http.SetCookie(w, sessionCookie("trickreport_refresh", result.RefreshToken, result.RefreshExpiresAt, result.SecureCookie))
 
 	response.JSON(w, http.StatusOK, refreshResp{
 		Token:        result.Token,
@@ -249,20 +251,8 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		_ = h.svc.Logout(r.Context(), token)
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:    "trickreport_token",
-		Value:   "",
-		Path:    "/",
-		MaxAge:  -1,
-		Expires: time.Unix(0, 0),
-	})
-	http.SetCookie(w, &http.Cookie{
-		Name:    "trickreport_refresh",
-		Value:   "",
-		Path:    "/",
-		MaxAge:  -1,
-		Expires: time.Unix(0, 0),
-	})
+	clearSessionCookie(w, "trickreport_token", h.svc.SecureCookies())
+	clearSessionCookie(w, "trickreport_refresh", h.svc.SecureCookies())
 	response.NoContent(w)
 }
 
@@ -523,25 +513,9 @@ func (h *AuthHandler) MFALogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "trickreport_token",
-		Value:    result.Token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   result.SecureCookie,
-		SameSite: http.SameSiteStrictMode,
-		Expires:  result.ExpiresAt,
-	})
+	http.SetCookie(w, sessionCookie("trickreport_token", result.Token, result.ExpiresAt, result.SecureCookie))
 	if result.RefreshToken != "" {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "trickreport_refresh",
-			Value:    result.RefreshToken,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   result.SecureCookie,
-			SameSite: http.SameSiteStrictMode,
-			Expires:  time.Now().Add(7 * 24 * time.Hour),
-		})
+		http.SetCookie(w, sessionCookie("trickreport_refresh", result.RefreshToken, time.Now().Add(7*24*time.Hour), result.SecureCookie))
 	}
 
 	response.JSON(w, http.StatusOK, loginResp{
@@ -610,25 +584,9 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	http.SetCookie(w, &http.Cookie{
-		Name:     "trickreport_token",
-		Value:    result.Token,
-		Path:     "/",
-		HttpOnly: true,
-		Secure:   result.SecureCookie,
-		SameSite: http.SameSiteStrictMode,
-		Expires:  result.ExpiresAt,
-	})
+	http.SetCookie(w, sessionCookie("trickreport_token", result.Token, result.ExpiresAt, result.SecureCookie))
 	if result.RefreshToken != "" {
-		http.SetCookie(w, &http.Cookie{
-			Name:     "trickreport_refresh",
-			Value:    result.RefreshToken,
-			Path:     "/",
-			HttpOnly: true,
-			Secure:   result.SecureCookie,
-			SameSite: http.SameSiteStrictMode,
-			Expires:  time.Now().Add(7 * 24 * time.Hour),
-		})
+		http.SetCookie(w, sessionCookie("trickreport_refresh", result.RefreshToken, time.Now().Add(7*24*time.Hour), result.SecureCookie))
 	}
 
 	response.JSON(w, http.StatusCreated, loginResp{

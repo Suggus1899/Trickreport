@@ -165,6 +165,9 @@ func (s *Service) SetMFARepository(repo MFARepository) { s.mfaRepo = repo }
 // SetUserCreator wires the user creator for self-registration.
 func (s *Service) SetUserCreator(creator UserCreator) { s.creator = creator }
 
+// SecureCookies reports whether auth cookies carry the Secure attribute (COOKIE_SECURE).
+func (s *Service) SecureCookies() bool { return s.cfg.SecureCookie }
+
 // LoginInput holds the credentials for login.
 type LoginInput struct {
 	TenantID uuid.UUID
