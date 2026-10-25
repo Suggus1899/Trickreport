@@ -88,17 +88,6 @@ func mspDecode(w http.ResponseWriter, r *http.Request, dst any) bool {
 	return true
 }
 
-func mspOptTime(s string) (*time.Time, bool) {
-	if s == "" {
-		return nil, true
-	}
-	t, err := time.Parse(time.RFC3339, s)
-	if err != nil {
-		return nil, false
-	}
-	return &t, true
-}
-
 func mspOptDate(s string) (*time.Time, bool) {
 	if s == "" {
 		return nil, true

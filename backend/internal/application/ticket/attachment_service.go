@@ -108,16 +108,6 @@ func (s *AttachmentService) validateFileSize(data []byte) error {
 	return nil
 }
 
-// validateContentType checks that the declared content type is in the whitelist.
-func validateContentType(declaredType string) bool {
-	ct := strings.TrimSpace(declaredType)
-	if idx := strings.Index(ct, ";"); idx >= 0 {
-		ct = ct[:idx]
-	}
-	ct = strings.ToLower(strings.TrimSpace(ct))
-	return allowedContentTypes[ct]
-}
-
 // sanitizeFilename removes path components and replaces special characters
 // to prevent directory traversal and ensure safe filenames.
 func sanitizeFilename(filename string) string {

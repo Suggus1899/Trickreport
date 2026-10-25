@@ -249,7 +249,7 @@ func seedTickets(ctx context.Context, pool *pgxpool.Pool, userIDs map[string]uui
 		createdAt := now.Add(-time.Duration(rand.Intn(28*24)+1) * time.Hour)
 
 		var assignedTo *uuid.UUID
-		var updatedAt time.Time = createdAt
+		updatedAt := createdAt
 		if status != "open" {
 			a := assignees[i%len(assignees)]
 			assignedTo = &a

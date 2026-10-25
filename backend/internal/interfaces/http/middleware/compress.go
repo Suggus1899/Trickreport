@@ -65,7 +65,7 @@ func (g *gzipResponseWriter) Write(data []byte) (int, error) {
 	}
 
 	// Threshold reached — switch to gzip for this and all later writes.
-	h := g.ResponseWriter.Header()
+	h := g.Header()
 	h.Set("Content-Encoding", "gzip")
 	h.Add("Vary", "Accept-Encoding")
 	// The handler's Content-Length (if any) describes the uncompressed body.
