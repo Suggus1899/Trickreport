@@ -112,3 +112,129 @@ Re-verified after the fix, sequentially, from a clean `npm ci`:
 `npm run check`, `npm run lint` and `npm run test` (2/2) pass, and
 `npm run build` builds `@trickreport/customer-service`, `@trickreport/it`
 and `@trickreport/msp`.
+
+## Addendum — 2026-10-25, closure of Stage E0 (local)
+
+Scope: the E0 items of `docs/superpowers/plans/2026-10-25-cierre-produccion.md`,
+done on local `main` only. Nothing was pushed; `origin/main` stays at
+`9647012`. The E0 checkbox in the plan remains **unchecked**: it requires the
+seven CI jobs to be green on one commit, which needs a push that has not been
+authorized.
+
+Environment: Go 1.26.10; golangci-lint 2.15.0; Node v25.8.2 (the apps declare
+`>=24.22.1 <25`, so npm prints EBADENGINE); npm 11.11.1; PostgreSQL 18.4 as a
+disposable local instance on `127.0.0.1:55432` (CI uses 16.15);
+`TZ=America/Caracas`. No C compiler is installed, so `go test -race` cannot run
+on this host. Docker/Compose, Caddy, Trivy, govulncheck and promtool are not
+installed.
+
+### Commits (local, not pushed)
+
+| Commit | Item | Content |
+| --- | --- | --- |
+| `286f350` | plan | production closure plan |
+| `bdeb5e8` | E0-a | provider webhooks accepted without a browser `Origin` (Caddyfile, `proxy.ts`, tests) |
+| `3a70d33` | E0-b | client scope on MSP project tasks and remote sessions; integration test |
+| `cb176fb` | E0-c | stored contract fields kept; one datetime conversion |
+| `cfd1759` | E0-d | SLA deadlines for MSP and catalog tickets (11 files) |
+| `dd45902` | E0-e | sidebar sign-out reachable on short viewports (CSS); E2E spec |
+| `810e41c` | E0-f | CX conversation refreshed after actions; portal users linkable to contacts |
+| `be55532` | E0-g | gofmt for CX domain structs |
+| `d11e7a3` | E0-g | errcheck and ineffassign fixes in repositories |
+| `c155e96` | E0-g | unused helpers removed; TODO for metrics |
+| `ffd4e7b` | E0-g | unused test mocks and no-op assertions removed |
+| `fb98721` | E0-g | PostCSS 8.5.31 (clears the high advisory) |
+| `ef7498b` | test | outbox assertion pinned to its own message |
+| `f5294f8` | docs | README and agent guides aligned with the E0 state |
+
+### Verification on this HEAD
+
+- Backend: `go build ./...`, `go vet ./...` and `gofmt -l` clean.
+- Backend suite with `TEST_DATABASE_URL` set: `go test -count=1 -p 1 -v ./...`
+  exits 0. 32 packages ok, 0 FAIL, 0 SKIP, 758 PASS entries. Four packages have
+  no test files: `cmd/api`, `application/cx`, `application/msp`,
+  `domain/automation`. Named checks that pass include the outbox restart and
+  rollback test, the MSP contact scope test (4 subtests), MSP and catalog ticket
+  deadline tests, the SLA worker concurrency and history-rollback tests, and
+  the SLA breach test for MSP tickets.
+- Workspace (`packages/workspace`, Vitest): 27/27 in 4 files (proxy 5, itsm 5,
+  cx 7, msp 10). The MSP contract test passes in `America/Caracas` and `UTC`.
+- Next apps: `npm run check`, `npm run lint` and `npm run build` pass after the
+  PostCSS bump. `npm audit --audit-level=high` reports 0.
+- Playwright E2E `apps/it/tests/integration/service.spec.ts`: 2 passed (PostgreSQL
+  18.4, API on 8088, Next on 3000). It was red three times before the CSS fix.
+  This run was made earlier in the stage, not on the final HEAD.
+- golangci-lint with `--max-same-issues=0`: **143 issues**, exit 1 (errcheck 50,
+  gocyclo 11, gosec 32, revive 50). `ineffassign`, `unused`, `staticcheck`,
+  `govet` and `misspell` report 0. The plan says 132; the cause of the
+  difference is not established.
+
+### Status per item
+
+- **E0-a:** proxy tests 5/5 pass. `graphify-out/verify-webhook-boundary.mjs`
+  does not exist and was not run.
+- **E0-b:** integration test passes (4 subtests).
+- **E0-c:** the regression is a Vitest test (`msp.test.ts`, 10/10). There is no
+  Go test for the partial update.
+- **E0-d:** Go tests for deadlines and the worker pass. Known limits: no SLA
+  creation history; ITSM approval is not atomic with deadline creation; no
+  backfill for existing tickets; MSP tickets have no escalation; the ITSM
+  policy validates without the 525600-minute cap.
+- **E0-e:** the E2E failure was fixed by the sidebar CSS change. The Select
+  label hypothesis was tested and discarded, so the label association was not
+  changed.
+- **E0-f:** no tests added, no E2E, no targeted Vitest. The backend validates
+  `user_id` against the tenant only, not against end users. Inactive users stay
+  selectable. A reload failure after a successful action is shown as an error
+  (minor).
+- **E0-g:** npm audit is clean. Lint is not closed (143). The five high Trivy
+  findings for the image were not scanned. `application/msp` and
+  `application/cx` still have no test files; `application/itsm` now has tests.
+
+### Not verified
+
+- Prettier: declared in `frontend/package.json` but not installed. The husky
+  `pre-commit` hook runs `npx lint-staged` from the repository root, which has
+  no config. Not changed here.
+- The seven remote CI jobs (no push).
+- `go test -race` (no C compiler on this host).
+- E2E and a targeted Vitest for E0-f.
+- Docker Compose stack, Caddy routing, Trivy, govulncheck, promtool and
+  `restore.test.sh`.
+- GitNexus index was not available; impact checks were done with grep and the
+  test suites.
+- Outbox test: the assertion is now pinned to the test's own message. The
+  cross-package race was not reproduced in parallel runs.
+
+### Follow-ups (outside E0)
+
+- CX: validate contact `user_id` against end users; hide inactive users from
+  the selector; separate reload failures from action failures.
+- Go tests for `application/msp` and `application/cx`.
+- SLA: record deadline creation history; make ITSM approval atomic with
+  deadlines; backfill existing tickets; escalate MSP tickets; apply the
+  525600-minute cap in the ITSM policy.
+- Tests in different packages share one database (`TEST_DATABASE_URL`); give
+  each package its own database or schema.
+- `middleware_test`: the next handler does not assert the tenant.
+- Environment parity: local Node 25 and PostgreSQL 18.4 versus CI Node 24 and
+  PostgreSQL 16.15.
+
+### Decisions for the user
+
+1. Authorize a push to `origin/main` so the seven CI jobs can run. The E0
+   checkbox can only be closed after that.
+2. Lint: fix the 143 findings, or change `backend/.golangci.yml` (for example
+   `max-same-issues`). Changing the config would hide findings, so it needs a
+   decision.
+3. Accept the PostCSS lockfile change: three nested postcss copies removed, and
+   twelve `@tailwindcss/oxide-*` packages now marked dev because their parent is
+   a dev dependency. No production dependency, version or integrity changed.
+4. Render RPO: option A (accept and document the RPO; recommended to start) or
+   option B (synchronous replica), as set out in the plan.
+5. Vercel Functions request-body limit of 4.5 MB (413): decide how large
+   request bodies reach the Go API.
+6. SLA: history rule for deadline changes, backfill of existing tickets, and the
+   525600-minute cap.
+7. MSP contacts linked without `user_id`, and CX end-user validation.
+8. Per-package test database isolation.
