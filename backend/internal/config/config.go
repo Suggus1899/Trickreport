@@ -70,46 +70,14 @@ func (c *Config) AllowedOrigins() []string {
 }
 
 func Load() *Config {
-	viper := viper.New()
-	viper.SetConfigFile(".env")
-	viper.SetConfigType("env")
+	v := newViper()
 
-	viper.AutomaticEnv()
-	viper.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
-	// AutomaticEnv does not expose unset-file keys to Unmarshal.
-	for _, key := range []string{
-		"PORT", "ENV", "DATABASE_URL", "JWT_SECRET", "JWT_EXP_HOURS", "COOKIE_SECURE", "CORS_ORIGINS", "APP_PUBLIC_URL",
-		"ADMIN_EMAIL", "ADMIN_PASSWORD", "LDAP_ENABLED", "LDAP_HOST", "LDAP_PORT", "LDAP_USE_TLS",
-		"LDAP_BIND_DN", "LDAP_BIND_PW", "LDAP_BASE_DN", "LDAP_UID_ATTR", "SMTP_HOST", "SMTP_PORT",
-		"SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_USE_TLS",
-	} {
-		if err := viper.BindEnv(key); err != nil {
-			log.Fatal("Failed to register configuration environment key")
-		}
-	}
-
-	// Defaults
-	viper.SetDefault("PORT", "8080")
-	viper.SetDefault("ENV", "development")
-	viper.SetDefault("JWT_EXP_HOURS", 8)
-	// Default to true in production, false in dev — resolved after load
-	viper.SetDefault("COOKIE_SECURE", false)
-	viper.SetDefault("CORS_ORIGINS", "http://localhost:3000")
-	viper.SetDefault("APP_PUBLIC_URL", "http://localhost:3000")
-	viper.SetDefault("LDAP_ENABLED", false)
-	viper.SetDefault("LDAP_PORT", 636)
-	viper.SetDefault("LDAP_USE_TLS", true)
-	viper.SetDefault("LDAP_UID_ATTR", "uid")
-	viper.SetDefault("SMTP_PORT", 587)
-	viper.SetDefault("SMTP_USE_TLS", true)
-	viper.SetDefault("SMTP_FROM", "noreply@trickreport.local")
-
-	if err := viper.ReadInConfig(); err != nil {
+	if err := v.ReadInConfig(); err != nil {
 		log.Println("No .env file found, using environment variables only")
 	}
 
 	cfg := &Config{}
-	if err := viper.Unmarshal(cfg); err != nil {
+	if err := v.Unmarshal(cfg); err != nil {
 		log.Fatalf("Failed to unmarshal config: %v", err)
 	}
 
@@ -117,25 +85,67 @@ func Load() *Config {
 	if deployed && !cfg.SecureCookie {
 		cfg.SecureCookie = true
 	}
-
-	// Fail fast in production if JWT_SECRET is not set or is a placeholder
 	if deployed {
-		publicURL, err := url.Parse(cfg.AppPublicURL)
-		if err != nil || publicURL.Scheme != "https" || publicURL.Host == "" || publicURL.User != nil || publicURL.RawQuery != "" || publicURL.Fragment != "" {
-			log.Fatal("APP_PUBLIC_URL must be an absolute HTTPS origin in deployed environments")
-		}
-		if len(cfg.JWTSecret) < 32 || strings.Contains(strings.ToLower(cfg.JWTSecret), "change") {
-			log.Fatal("JWT_SECRET must contain at least 32 random bytes in deployed environments")
-		}
-		if cfg.AdminPassword == "" || strings.EqualFold(cfg.AdminPassword, "change_me") {
-			log.Fatal("ADMIN_PASSWORD must be set in production")
-		}
+		validateDeployedSettings(cfg)
 	}
+
 	if cfg.JWTExpHours <= 0 || cfg.JWTExpHours > 24 {
 		log.Fatal("JWT_EXP_HOURS must be between 1 and 24")
 	}
 
 	return cfg
+}
+
+// newViper returns a reader that resolves configuration from .env and the process environment.
+func newViper() *viper.Viper {
+	v := viper.New()
+	v.SetConfigFile(".env")
+	v.SetConfigType("env")
+
+	v.AutomaticEnv()
+	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
+	// AutomaticEnv does not expose unset-file keys to Unmarshal.
+	for _, key := range []string{
+		"PORT", "ENV", "DATABASE_URL", "JWT_SECRET", "JWT_EXP_HOURS", "COOKIE_SECURE", "CORS_ORIGINS", "APP_PUBLIC_URL",
+		"ADMIN_EMAIL", "ADMIN_PASSWORD", "LDAP_ENABLED", "LDAP_HOST", "LDAP_PORT", "LDAP_USE_TLS",
+		"LDAP_BIND_DN", "LDAP_BIND_PW", "LDAP_BASE_DN", "LDAP_UID_ATTR", "SMTP_HOST", "SMTP_PORT",
+		"SMTP_USERNAME", "SMTP_PASSWORD", "SMTP_FROM", "SMTP_USE_TLS",
+	} {
+		if err := v.BindEnv(key); err != nil {
+			log.Fatal("Failed to register configuration environment key")
+		}
+	}
+
+	// Defaults
+	v.SetDefault("PORT", "8080")
+	v.SetDefault("ENV", "development")
+	v.SetDefault("JWT_EXP_HOURS", 8)
+	// Default to true in production, false in dev — resolved after load
+	v.SetDefault("COOKIE_SECURE", false)
+	v.SetDefault("CORS_ORIGINS", "http://localhost:3000")
+	v.SetDefault("APP_PUBLIC_URL", "http://localhost:3000")
+	v.SetDefault("LDAP_ENABLED", false)
+	v.SetDefault("LDAP_PORT", 636)
+	v.SetDefault("LDAP_USE_TLS", true)
+	v.SetDefault("LDAP_UID_ATTR", "uid")
+	v.SetDefault("SMTP_PORT", 587)
+	v.SetDefault("SMTP_USE_TLS", true)
+	v.SetDefault("SMTP_FROM", "noreply@trickreport.local")
+	return v
+}
+
+// validateDeployedSettings fails fast when a deployed environment has an unsafe public URL, JWT secret or admin password.
+func validateDeployedSettings(cfg *Config) {
+	publicURL, err := url.Parse(cfg.AppPublicURL)
+	if err != nil || publicURL.Scheme != "https" || publicURL.Host == "" || publicURL.User != nil || publicURL.RawQuery != "" || publicURL.Fragment != "" {
+		log.Fatal("APP_PUBLIC_URL must be an absolute HTTPS origin in deployed environments")
+	}
+	if len(cfg.JWTSecret) < 32 || strings.Contains(strings.ToLower(cfg.JWTSecret), "change") {
+		log.Fatal("JWT_SECRET must contain at least 32 random bytes in deployed environments")
+	}
+	if cfg.AdminPassword == "" || strings.EqualFold(cfg.AdminPassword, "change_me") {
+		log.Fatal("ADMIN_PASSWORD must be set in production")
+	}
 }
 
 // IsProductionEnv is a package-level helper for early checks.

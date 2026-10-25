@@ -7,10 +7,12 @@ import (
 	"encoding/csv"
 	"encoding/xml"
 	"image"
+	// Decoders for the image formats checked by content sniffing; imported for side effects.
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
 	"io"
+	"math"
 	"mime"
 	"net/http"
 	"unicode/utf16"
@@ -23,38 +25,55 @@ func validateAttachmentContent(declared string, data []byte) (string, error) {
 		return "", ErrInvalidContent
 	}
 	detected, _, _ := mime.ParseMediaType(http.DetectContentType(data))
-	valid := false
-	switch contentType {
-	case "image/png", "image/jpeg", "image/gif":
-		cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
-		valid = err == nil && cfg.Width > 0 && cfg.Height > 0 && int64(cfg.Width)*int64(cfg.Height) <= 25000000 && detected == contentType
-		if valid {
-			_, _, err = image.Decode(bytes.NewReader(data))
-			valid = err == nil
-		}
-	case "image/webp":
-		valid = validWebP(data)
-	case "image/bmp":
-		valid = validBMP(data)
-	case "application/pdf":
-		valid = detected == contentType && bytes.HasPrefix(data, []byte("%PDF-")) && bytes.HasSuffix(bytes.TrimSpace(data), []byte("%%EOF"))
-	case "text/plain", "text/csv":
-		valid = detected == "text/plain" && utf8.Valid(data) && !bytes.ContainsRune(data, 0)
-		if valid && contentType == "text/csv" {
-			reader := csv.NewReader(bytes.NewReader(data))
-			reader.FieldsPerRecord = -1
-			_, err := reader.ReadAll()
-			valid = err == nil
-		}
-	case "application/msword", "application/vnd.ms-excel":
-		valid = validCompoundDocument(data, contentType)
-	default:
-		valid = validZipDocument(data, contentType)
-	}
-	if !valid {
+	if !validContentBody(contentType, detected, data) {
 		return "", ErrInvalidContent
 	}
 	return contentType, nil
+}
+
+// validContentBody reports whether data matches its declared content type.
+// detected is the type sniffed from the bytes.
+func validContentBody(contentType, detected string, data []byte) bool {
+	switch contentType {
+	case "image/png", "image/jpeg", "image/gif":
+		return validRaster(data, detected == contentType)
+	case "image/webp":
+		return validWebP(data)
+	case "image/bmp":
+		return validBMP(data)
+	case "application/pdf":
+		return detected == contentType && bytes.HasPrefix(data, []byte("%PDF-")) && bytes.HasSuffix(bytes.TrimSpace(data), []byte("%%EOF"))
+	case "text/plain", "text/csv":
+		return validText(data, contentType, detected)
+	case "application/msword", "application/vnd.ms-excel":
+		return validCompoundDocument(data, contentType)
+	default:
+		return validZipDocument(data, contentType)
+	}
+}
+
+// validRaster reports whether data decodes as an image of an allowed size.
+func validRaster(data []byte, typeMatches bool) bool {
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil || !typeMatches || cfg.Width <= 0 || cfg.Height <= 0 || int64(cfg.Width)*int64(cfg.Height) > 25000000 {
+		return false
+	}
+	_, _, err = image.Decode(bytes.NewReader(data))
+	return err == nil
+}
+
+// validText reports whether data is NUL-free UTF-8 text. CSV content must also parse as CSV.
+func validText(data []byte, contentType, detected string) bool {
+	if detected != "text/plain" || !utf8.Valid(data) || bytes.ContainsRune(data, 0) {
+		return false
+	}
+	if contentType != "text/csv" {
+		return true
+	}
+	reader := csv.NewReader(bytes.NewReader(data))
+	reader.FieldsPerRecord = -1
+	_, err := reader.ReadAll()
+	return err == nil
 }
 
 func validZipDocument(data []byte, contentType string) bool {
@@ -62,17 +81,8 @@ func validZipDocument(data []byte, contentType string) bool {
 	if err != nil {
 		return false
 	}
-	part := ""
-	root := ""
-	switch contentType {
-	case "application/zip":
-	case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-		part, root = "word/document.xml", "document"
-	case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-		part, root = "xl/workbook.xml", "workbook"
-	case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
-		part, root = "ppt/presentation.xml", "presentation"
-	default:
+	part, root, ok := zipDocumentPart(contentType)
+	if !ok {
 		return false
 	}
 	found := map[string]bool{}
@@ -86,49 +96,80 @@ func validZipDocument(data []byte, contentType string) bool {
 		if total > 100<<20 {
 			return false
 		}
-		r, err := file.Open()
-		if err != nil {
-			return false
-		}
-		if file.Name == part || file.Name == "[Content_Types].xml" || file.Name == "_rels/.rels" {
-			decoder := xml.NewDecoder(io.LimitReader(r, 100<<20))
-			first := ""
-			for {
-				token, err := decoder.Token()
-				if err == io.EOF {
-					break
-				}
-				if err != nil {
-					_ = r.Close()
-					return false
-				}
-				if start, ok := token.(xml.StartElement); ok && first == "" {
-					first = start.Name.Local
-				}
-			}
-			want := root
-			if file.Name == "[Content_Types].xml" {
-				want = "Types"
-			}
-			if file.Name == "_rels/.rels" {
-				want = "Relationships"
-			}
-			if first != want {
-				_ = r.Close()
-				return false
-			}
-			found[file.Name] = true
-		} else {
-			if _, err := io.Copy(io.Discard, io.LimitReader(r, 100<<20)); err != nil {
-				_ = r.Close()
-				return false
-			}
-		}
-		if err := r.Close(); err != nil {
+		if !readZipEntry(file, part, root, found) {
 			return false
 		}
 	}
 	return part == "" || (found[part] && found["[Content_Types].xml"] && found["_rels/.rels"])
+}
+
+// zipDocumentPart returns the main part and its required XML root element for a
+// ZIP-based document type. ok is false for types that are not ZIP containers.
+func zipDocumentPart(contentType string) (part, root string, ok bool) {
+	switch contentType {
+	case "application/zip":
+		return "", "", true
+	case "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+		return "word/document.xml", "document", true
+	case "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+		return "xl/workbook.xml", "workbook", true
+	case "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+		return "ppt/presentation.xml", "presentation", true
+	default:
+		return "", "", false
+	}
+}
+
+// readZipEntry reads an entry to the end, which verifies its CRC. The entries that define
+// the document must be well-formed XML with the expected root element; those are recorded in found.
+func readZipEntry(file *zip.File, part, root string, found map[string]bool) bool {
+	r, err := file.Open()
+	if err != nil {
+		return false
+	}
+	var ok bool
+	if file.Name == part || file.Name == "[Content_Types].xml" || file.Name == "_rels/.rels" {
+		ok = xmlRootIs(io.LimitReader(r, 100<<20), requiredRoot(file.Name, root))
+		if ok {
+			found[file.Name] = true
+		}
+	} else {
+		_, copyErr := io.Copy(io.Discard, io.LimitReader(r, 100<<20))
+		ok = copyErr == nil
+	}
+	closeErr := r.Close()
+	return ok && closeErr == nil
+}
+
+// xmlRootIs reports whether r is well-formed XML whose first element is named root.
+func xmlRootIs(r io.Reader, root string) bool {
+	decoder := xml.NewDecoder(r)
+	first := ""
+	for {
+		token, err := decoder.Token()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return false
+		}
+		if start, ok := token.(xml.StartElement); ok && first == "" {
+			first = start.Name.Local
+		}
+	}
+	return first == root
+}
+
+// requiredRoot returns the XML root element that a ZIP entry must have.
+func requiredRoot(name, documentRoot string) string {
+	switch name {
+	case "[Content_Types].xml":
+		return "Types"
+	case "_rels/.rels":
+		return "Relationships"
+	default:
+		return documentRoot
+	}
 }
 
 func validWebP(data []byte) bool {
@@ -177,12 +218,12 @@ func validBMP(data []byte) bool {
 	}
 	header := uint64(binary.LittleEndian.Uint32(data[14:18]))
 	offset := uint64(binary.LittleEndian.Uint32(data[10:14]))
-	width := int32(binary.LittleEndian.Uint32(data[18:22]))
-	height := int32(binary.LittleEndian.Uint32(data[22:26]))
-	if header < 40 || 14+header > offset || offset >= uint64(len(data)) || width <= 0 || height == 0 || height == -2147483648 || binary.LittleEndian.Uint16(data[26:28]) != 1 {
+	width := binary.LittleEndian.Uint32(data[18:22])
+	height := binary.LittleEndian.Uint32(data[22:26])
+	if header < 40 || 14+header > offset || offset >= uint64(len(data)) || width == 0 || width > math.MaxInt32 || height == 0 || height == 1<<31 || binary.LittleEndian.Uint16(data[26:28]) != 1 {
 		return false
 	}
-	if height < 0 {
+	if height > math.MaxInt32 {
 		height = -height
 	}
 	bits := uint64(binary.LittleEndian.Uint16(data[28:30]))
@@ -211,22 +252,37 @@ func validCompoundDocument(data []byte, contentType string) bool {
 		return false
 	}
 	sectorCount := uint64(len(data))/sectorSize - 1
+	fat, ok := compoundFAT(data, sectorSize, sectorCount)
+	if !ok {
+		return false
+	}
+	return compoundDirectoryHasDocument(data, fat, sectorSize, sectorCount, contentType)
+}
+
+// compoundFAT reads the file allocation table from the sectors listed in the header.
+func compoundFAT(data []byte, sectorSize, sectorCount uint64) ([]uint32, bool) {
 	// shortcut: inline DIFAT covers ordinary legacy Office uploads; add extended DIFAT support when needed.
 	fatCount := uint64(binary.LittleEndian.Uint32(data[44:48]))
 	if fatCount == 0 || fatCount > 109 {
-		return false
+		return nil, false
 	}
 	fat := make([]uint32, 0, fatCount*sectorSize/4)
 	for i := uint64(0); i < fatCount; i++ {
 		sector := uint64(binary.LittleEndian.Uint32(data[76+i*4 : 80+i*4]))
 		if sector >= sectorCount {
-			return false
+			return nil, false
 		}
 		start := (sector + 1) * sectorSize
 		for n := uint64(0); n < sectorSize; n += 4 {
 			fat = append(fat, binary.LittleEndian.Uint32(data[start+n:start+n+4]))
 		}
 	}
+	return fat, true
+}
+
+// compoundDirectoryHasDocument walks the directory sector chain. It reports whether the
+// directory holds a root entry and the main stream of contentType, and fails on malformed chains.
+func compoundDirectoryHasDocument(data []byte, fat []uint32, sectorSize, sectorCount uint64, contentType string) bool {
 	sector := binary.LittleEndian.Uint32(data[48:52])
 	seen := map[uint32]bool{}
 	foundRoot, foundStream := false, false
@@ -238,26 +294,46 @@ func validCompoundDocument(data []byte, contentType string) bool {
 		start := (uint64(sector) + 1) * sectorSize
 		for n := uint64(0); n < sectorSize; n += 128 {
 			entry := data[start+n : start+n+128]
-			length := int(binary.LittleEndian.Uint16(entry[64:66]))
 			if entry[66] == 0 {
 				continue
 			}
-			if length < 2 || length > 64 || length%2 != 0 {
+			name, ok := compoundEntryName(entry)
+			if !ok {
 				return false
 			}
-			chars := make([]uint16, (length-2)/2)
-			for i := range chars {
-				chars[i] = binary.LittleEndian.Uint16(entry[i*2 : i*2+2])
-			}
-			name := string(utf16.Decode(chars))
 			if entry[66] == 5 && name == "Root Entry" {
 				foundRoot = true
 			}
-			if entry[66] == 2 && ((contentType == "application/msword" && name == "WordDocument") || (contentType == "application/vnd.ms-excel" && (name == "Workbook" || name == "Book"))) {
+			if entry[66] == 2 && isDocumentStream(contentType, name) {
 				foundStream = true
 			}
 		}
 		sector = fat[sector]
 	}
 	return foundRoot && foundStream
+}
+
+// compoundEntryName decodes the UTF-16 name of a directory entry. ok is false when the name length is invalid.
+func compoundEntryName(entry []byte) (string, bool) {
+	length := int(binary.LittleEndian.Uint16(entry[64:66]))
+	if length < 2 || length > 64 || length%2 != 0 {
+		return "", false
+	}
+	chars := make([]uint16, (length-2)/2)
+	for i := range chars {
+		chars[i] = binary.LittleEndian.Uint16(entry[i*2 : i*2+2])
+	}
+	return string(utf16.Decode(chars)), true
+}
+
+// isDocumentStream reports whether name is the main stream of a legacy Office document of contentType.
+func isDocumentStream(contentType, name string) bool {
+	switch contentType {
+	case "application/msword":
+		return name == "WordDocument"
+	case "application/vnd.ms-excel":
+		return name == "Workbook" || name == "Book"
+	default:
+		return false
+	}
 }

@@ -82,70 +82,92 @@ func ValidateRule(name, trigger string, conditions map[string]any, actions []any
 		if !ok {
 			return nil, ErrValidation
 		}
-		kind, _ := action["type"].(string)
-		allowed := map[string]bool{"type": true}
-		var field string
-		switch kind {
-		case "set_priority":
-			field = "priority"
-		case "set_status":
-			field = "status"
-		case "assign_to":
-			field = "user_id"
-		case "add_comment":
-			field = "content"
-			allowed["is_internal"] = true
-		case "send_email":
-			field = "to"
-			allowed["subject"] = true
-		default:
-			return nil, fmt.Errorf("%w: unsupported action %q", ErrValidation, kind)
-		}
-		allowed[field] = true
-		if kind == "set_priority" || kind == "set_status" || kind == "add_comment" {
-			allowed["value"] = true
-		}
-		for key := range action {
-			if !allowed[key] {
-				return nil, ErrValidation
-			}
-		}
-		value, _ := action[field].(string)
-		if value == "" && allowed["value"] {
-			value, _ = action["value"].(string)
-		}
-		if strings.TrimSpace(value) == "" {
-			return nil, ErrValidation
-		}
-		switch kind {
-		case "set_priority":
-			if _, err := ticket.ParsePriority(value); err != nil {
-				return nil, ErrValidation
-			}
-		case "set_status":
-			if _, err := ticket.ParseStatus(value); err != nil {
-				return nil, ErrValidation
-			}
-		case "assign_to":
-			if id, err := uuid.Parse(value); err != nil || id == uuid.Nil {
-				return nil, ErrValidation
-			}
-		case "add_comment":
-			if raw, ok := action["is_internal"]; ok {
-				if _, ok := raw.(bool); !ok {
-					return nil, ErrValidation
-				}
-			}
-		case "send_email":
-			if _, err := mail.ParseAddress(value); err != nil {
-				return nil, ErrValidation
-			}
-			if subject, ok := action["subject"]; ok {
-				if _, ok := subject.(string); !ok {
-					return nil, ErrValidation
-				}
-			}
+		if err := validateAction(action); err != nil {
+			return nil, err
 		}
 	}
 	return canonical, nil
+}
+
+// validateAction checks that an action carries only the keys its type allows, with a usable value.
+func validateAction(action map[string]any) error {
+	kind, _ := action["type"].(string)
+	allowed, field, err := actionShape(kind)
+	if err != nil {
+		return err
+	}
+	for key := range action {
+		if !allowed[key] {
+			return ErrValidation
+		}
+	}
+	value, _ := action[field].(string)
+	if value == "" && allowed["value"] {
+		value, _ = action["value"].(string)
+	}
+	if strings.TrimSpace(value) == "" {
+		return ErrValidation
+	}
+	return validateActionValue(kind, value, action)
+}
+
+// actionShape returns the keys an action type accepts and the key that holds its main value.
+func actionShape(kind string) (map[string]bool, string, error) {
+	allowed := map[string]bool{"type": true}
+	var field string
+	switch kind {
+	case "set_priority":
+		field = "priority"
+		allowed["value"] = true
+	case "set_status":
+		field = "status"
+		allowed["value"] = true
+	case "assign_to":
+		field = "user_id"
+	case "add_comment":
+		field = "content"
+		allowed["value"] = true
+		allowed["is_internal"] = true
+	case "send_email":
+		field = "to"
+		allowed["subject"] = true
+	default:
+		return nil, "", fmt.Errorf("%w: unsupported action %q", ErrValidation, kind)
+	}
+	allowed[field] = true
+	return allowed, field, nil
+}
+
+// validateActionValue checks the main value and optional fields of an action against its type.
+func validateActionValue(kind, value string, action map[string]any) error {
+	switch kind {
+	case "set_priority":
+		if _, err := ticket.ParsePriority(value); err != nil {
+			return ErrValidation
+		}
+	case "set_status":
+		if _, err := ticket.ParseStatus(value); err != nil {
+			return ErrValidation
+		}
+	case "assign_to":
+		if id, err := uuid.Parse(value); err != nil || id == uuid.Nil {
+			return ErrValidation
+		}
+	case "add_comment":
+		if raw, ok := action["is_internal"]; ok {
+			if _, ok := raw.(bool); !ok {
+				return ErrValidation
+			}
+		}
+	case "send_email":
+		if _, err := mail.ParseAddress(value); err != nil {
+			return ErrValidation
+		}
+		if subject, ok := action["subject"]; ok {
+			if _, ok := subject.(string); !ok {
+				return ErrValidation
+			}
+		}
+	}
+	return nil
 }

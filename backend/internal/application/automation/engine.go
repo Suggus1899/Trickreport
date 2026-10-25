@@ -139,54 +139,64 @@ func (e *Engine) matchConditions(conditions map[string]any, snapshot *TicketSnap
 	}
 	for _, raw := range canonical["conditions"].([]any) {
 		clause := raw.(map[string]any)
-		field, expectedStr := clause["field"].(string), clause["value"].(string)
-		var actual string
-
-		switch strings.ToLower(field) {
-		case "status":
-			if snapshot != nil {
-				actual = snapshot.Status
-			}
-		case "priority":
-			if snapshot != nil {
-				actual = snapshot.Priority
-			}
-		case "category":
-			if snapshot != nil {
-				actual = snapshot.Category
-			}
-		case "title":
-			if snapshot != nil {
-				actual = snapshot.Title
-			}
-		case "old_value", "oldvalue":
-			actual = event.OldValue
-		case "new_value", "newvalue":
-			actual = event.NewValue
-		default:
-			// Unknown condition field — fail safe (no match).
+		field, expected := clause["field"].(string), clause["value"].(string)
+		actual, ok := conditionActual(field, snapshot, event)
+		if !ok || !clauseHolds(clause["op"], actual, expected) {
 			return false
-		}
-
-		if snapshot == nil && field != "old_value" && field != "new_value" {
-			return false
-		}
-		switch clause["op"] {
-		case "equals":
-			if !strings.EqualFold(actual, expectedStr) {
-				return false
-			}
-		case "not_equals":
-			if strings.EqualFold(actual, expectedStr) {
-				return false
-			}
-		case "contains":
-			if !strings.Contains(strings.ToLower(actual), strings.ToLower(expectedStr)) {
-				return false
-			}
 		}
 	}
 	return true
+}
+
+// conditionActual returns the value a condition field refers to. It reports false
+// for unknown fields and for ticket fields when no snapshot is available.
+func conditionActual(field string, snapshot *TicketSnapshot, event Event) (string, bool) {
+	switch strings.ToLower(field) {
+	case "old_value", "oldvalue":
+		// Without a snapshot, only the exact snake_case spelling matches.
+		return event.OldValue, snapshot != nil || field == "old_value"
+	case "new_value", "newvalue":
+		return event.NewValue, snapshot != nil || field == "new_value"
+	case "status", "priority", "category", "title":
+		if snapshot == nil {
+			return "", false
+		}
+		return ticketAttribute(snapshot, strings.ToLower(field)), true
+	default:
+		// Unknown condition field — fail safe (no match).
+		return "", false
+	}
+}
+
+// ticketAttribute returns the snapshot attribute named by a lowercase condition field.
+func ticketAttribute(snapshot *TicketSnapshot, field string) string {
+	switch field {
+	case "status":
+		return snapshot.Status
+	case "priority":
+		return snapshot.Priority
+	case "category":
+		return snapshot.Category
+	case "title":
+		return snapshot.Title
+	default:
+		return ""
+	}
+}
+
+// clauseHolds reports whether actual satisfies one condition operator.
+// Unknown operators do not fail the clause.
+func clauseHolds(op any, actual, expected string) bool {
+	switch op {
+	case "equals":
+		return strings.EqualFold(actual, expected)
+	case "not_equals":
+		return !strings.EqualFold(actual, expected)
+	case "contains":
+		return strings.Contains(strings.ToLower(actual), strings.ToLower(expected))
+	default:
+		return true
+	}
 }
 
 // executeActions runs all actions defined in a rule.
@@ -261,46 +271,56 @@ func (e *Engine) executeAction(ctx context.Context, tenantID uuid.UUID, actionTy
 		return e.tickets.AssignTo(ctx, tenantID, event.TicketID, userID)
 
 	case "add_comment":
-		content, _ := action["content"].(string)
-		if content == "" {
-			content, _ = action["value"].(string)
-		}
-		if content == "" {
-			return fmt.Errorf("add_comment: missing 'content' field")
-		}
-		isInternal := true
-		if v, ok := action["is_internal"]; ok {
-			isInternal, _ = v.(bool)
-		}
-		return e.tickets.AddComment(ctx, tenantID, event.TicketID, content, isInternal)
+		return e.addCommentAction(ctx, tenantID, event, action)
 
 	case "add_tag":
 		return fmt.Errorf("%w: add_tag is not supported", domainautomation.ErrValidation)
 
 	case "send_email":
-		to, _ := action["to"].(string)
-		if to == "" {
-			return fmt.Errorf("send_email: missing 'to' field")
-		}
-		if e.emailSender == nil {
-			return fmt.Errorf("send_email: no email sender configured")
-		}
-		subject, _ := action["subject"].(string)
-		if subject == "" {
-			subject = "Trickreport automation notification"
-		}
-		body := fmt.Sprintf("Ticket ID: %s", event.TicketID)
-		if snapshot != nil {
-			body = fmt.Sprintf("Ticket: %s\nStatus: %s\nPriority: %s", snapshot.Title, snapshot.Status, snapshot.Priority)
-		}
-		if sender, ok := e.emailSender.(interface {
-			SendContext(context.Context, string, string, string) error
-		}); ok {
-			return sender.SendContext(ctx, to, subject, body)
-		}
-		return e.emailSender.Send(to, subject, body)
+		return e.sendEmailAction(ctx, event, snapshot, action)
 
 	default:
 		return fmt.Errorf("%w: unknown action %q", domainautomation.ErrValidation, actionType)
 	}
+}
+
+// addCommentAction posts the comment described by an add_comment action.
+func (e *Engine) addCommentAction(ctx context.Context, tenantID uuid.UUID, event Event, action map[string]any) error {
+	content, _ := action["content"].(string)
+	if content == "" {
+		content, _ = action["value"].(string)
+	}
+	if content == "" {
+		return fmt.Errorf("add_comment: missing 'content' field")
+	}
+	isInternal := true
+	if v, ok := action["is_internal"]; ok {
+		isInternal, _ = v.(bool)
+	}
+	return e.tickets.AddComment(ctx, tenantID, event.TicketID, content, isInternal)
+}
+
+// sendEmailAction sends the notification described by a send_email action.
+func (e *Engine) sendEmailAction(ctx context.Context, event Event, snapshot *TicketSnapshot, action map[string]any) error {
+	to, _ := action["to"].(string)
+	if to == "" {
+		return fmt.Errorf("send_email: missing 'to' field")
+	}
+	if e.emailSender == nil {
+		return fmt.Errorf("send_email: no email sender configured")
+	}
+	subject, _ := action["subject"].(string)
+	if subject == "" {
+		subject = "Trickreport automation notification"
+	}
+	body := fmt.Sprintf("Ticket ID: %s", event.TicketID)
+	if snapshot != nil {
+		body = fmt.Sprintf("Ticket: %s\nStatus: %s\nPriority: %s", snapshot.Title, snapshot.Status, snapshot.Priority)
+	}
+	if sender, ok := e.emailSender.(interface {
+		SendContext(context.Context, string, string, string) error
+	}); ok {
+		return sender.SendContext(ctx, to, subject, body)
+	}
+	return e.emailSender.Send(to, subject, body)
 }

@@ -203,77 +203,19 @@ type CreateInput struct {
 
 // Create creates a new ticket and broadcasts a real-time event.
 func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTicket.Ticket, error) {
-	if input.Title == "" || input.Description == "" {
-		return nil, domainTicket.ErrValidation
+	t, err := newTicketFromInput(input)
+	if err != nil {
+		return nil, err
 	}
-
-	priority := domainTicket.PriorityLow
-	if input.Priority != "" {
-		p, err := domainTicket.ParsePriority(input.Priority)
-		if err != nil {
-			return nil, domainTicket.ErrValidation
-		}
-		priority = p
-	}
-
-	category := input.Category
-	if category == "" {
-		category = "general"
-	}
-
-	t := &domainTicket.Ticket{
-		TenantID:    input.TenantID,
-		Title:       input.Title,
-		Description: input.Description,
-		Status:      domainTicket.StatusOpen,
-		Priority:    priority,
-		Category:    category,
-		CreatedBy:   input.CreatedBy,
-		CreatedAt:   time.Now(),
-		UpdatedAt:   time.Now(),
-	}
-
-	// Fetch the SLA policy (read, outside the transaction) to calculate the
-	// resolution deadline.
-	if s.slaFetcher != nil {
-		policy, err := s.slaFetcher.GetByPriority(ctx, input.TenantID, string(priority))
-		if err != nil && !errors.Is(err, domainSLA.ErrNotFound) {
-			return nil, err
-		}
-		if policy != nil {
-			if err := policy.Validate(); err != nil {
-				return nil, domainTicket.ErrValidation
-			}
-			d := domainSLA.NewDeadlines(t.CreatedAt, policy.ResponseTimeMinutes, policy.ResolutionTimeMinutes, policy.EscalationMinutes)
-			t.ResponseDeadline, t.SLADeadline, t.EscalationDeadline = d.Response, d.Resolution, d.Escalation
-		}
+	if err := s.applyResolutionDeadlines(ctx, t); err != nil {
+		return nil, err
 	}
 
 	// Persist the ticket (and SLA deadline) inside a transaction.
 	created := true
-	persist := func(ctx context.Context) error {
-		if input.IdempotencyKey != uuid.Nil {
-			repo, ok := s.repo.(IdempotentCreator)
-			if !ok {
-				return errors.New("ticket repository does not support idempotency")
-			}
-			payload, _ := json.Marshal([]string{input.Title, input.Description, input.Priority, input.Category})
-			digest := sha256.Sum256(payload)
-			var err error
-			created, err = repo.CreateIdempotent(ctx, t, input.IdempotencyKey, digest[:])
-			if err != nil {
-				return err
-			}
-		} else if err := s.repo.Create(ctx, t); err != nil {
-			return err
-		}
-		if !created {
-			return nil
-		}
-		if err := s.createNotificationSafe(ctx, input.TenantID, input.CreatedBy, "Ticket created: "+t.Title, "Your ticket has been created successfully.", "ticket_created", &t.ID, "ticket"); err != nil {
-			return err
-		}
-		return s.notifyByEmailSafe(ctx, input.TenantID, input.CreatedBy, "ticket_created", t.ID.String(), t.Title, t.Description, string(t.Priority), string(t.Status))
+	persist := func(ctx context.Context) (err error) {
+		created, err = s.persistNewTicket(ctx, t, input)
+		return err
 	}
 
 	if s.tx != nil {
@@ -304,6 +246,91 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 	})
 
 	return t, nil
+}
+
+// newTicketFromInput validates the creation input and builds the unsaved ticket.
+func newTicketFromInput(input CreateInput) (*domainTicket.Ticket, error) {
+	if input.Title == "" || input.Description == "" {
+		return nil, domainTicket.ErrValidation
+	}
+
+	priority := domainTicket.PriorityLow
+	if input.Priority != "" {
+		p, err := domainTicket.ParsePriority(input.Priority)
+		if err != nil {
+			return nil, domainTicket.ErrValidation
+		}
+		priority = p
+	}
+
+	category := input.Category
+	if category == "" {
+		category = "general"
+	}
+
+	return &domainTicket.Ticket{
+		TenantID:    input.TenantID,
+		Title:       input.Title,
+		Description: input.Description,
+		Status:      domainTicket.StatusOpen,
+		Priority:    priority,
+		Category:    category,
+		CreatedBy:   input.CreatedBy,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
+	}, nil
+}
+
+// applyResolutionDeadlines sets the response, resolution and escalation deadlines
+// from the tenant's SLA policy for the ticket priority, when such a policy exists.
+func (s *UserService) applyResolutionDeadlines(ctx context.Context, t *domainTicket.Ticket) error {
+	if s.slaFetcher == nil {
+		return nil
+	}
+	policy, err := s.slaFetcher.GetByPriority(ctx, t.TenantID, string(t.Priority))
+	if err != nil && !errors.Is(err, domainSLA.ErrNotFound) {
+		return err
+	}
+	if policy == nil {
+		return nil
+	}
+	if err := policy.Validate(); err != nil {
+		return domainTicket.ErrValidation
+	}
+	d := domainSLA.NewDeadlines(t.CreatedAt, policy.ResponseTimeMinutes, policy.ResolutionTimeMinutes, policy.EscalationMinutes)
+	t.ResponseDeadline, t.SLADeadline, t.EscalationDeadline = d.Response, d.Resolution, d.Escalation
+	return nil
+}
+
+// persistNewTicket stores the new ticket and sends its creation notifications.
+// It reports false, without notifying, when an idempotent retry matched an
+// existing ticket.
+func (s *UserService) persistNewTicket(ctx context.Context, t *domainTicket.Ticket, input CreateInput) (bool, error) {
+	if input.IdempotencyKey != uuid.Nil {
+		repo, ok := s.repo.(IdempotentCreator)
+		if !ok {
+			return false, errors.New("ticket repository does not support idempotency")
+		}
+		payload, _ := json.Marshal([]string{input.Title, input.Description, input.Priority, input.Category})
+		digest := sha256.Sum256(payload)
+		created, err := repo.CreateIdempotent(ctx, t, input.IdempotencyKey, digest[:])
+		if err != nil {
+			return false, err
+		}
+		if !created {
+			return false, nil
+		}
+	} else if err := s.repo.Create(ctx, t); err != nil {
+		return false, err
+	}
+
+	if err := s.createNotificationSafe(ctx, input.TenantID, input.CreatedBy, "Ticket created: "+t.Title, "Your ticket has been created successfully.", "ticket_created", &t.ID, "ticket"); err != nil {
+		return false, err
+	}
+	if err := s.notifyByEmailSafe(ctx, input.TenantID, input.CreatedBy, "ticket_created", t.ID.String(), t.Title, t.Description, string(t.Priority), string(t.Status)); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // ChangeStatus transitions a ticket to a new status with authorization checks.
