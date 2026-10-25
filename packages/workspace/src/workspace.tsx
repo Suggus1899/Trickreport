@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { Activity, AlertTriangle, BarChart3, BookOpen, Building2, CheckSquare, Clock3, FolderKanban, Handshake, HardDrive, Layers, LayoutDashboard, LogOut, Menu, MonitorSmartphone, Moon, Receipt, Repeat, Server, Sun, Ticket, Users, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, BookOpen, Building2, CheckSquare, Clock3, FolderKanban, Handshake, HardDrive, Layers, LayoutDashboard, LogOut, Mail, Menu, MonitorSmartphone, MessageSquare, Moon, Receipt, Repeat, Server, Sun, Ticket, Users, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
 import type { Locale, Product, User } from './contracts';
 import { Analytics, Automations, SLAPolicies, Users as UserManagement } from './admin';
 import { AuthPage, Profile } from './auth';
@@ -13,6 +13,7 @@ import { api } from './api';
 import { Notifications } from './notifications';
 import { Approvals, Assets, Catalog, Changes, ITSMReportView, Problems } from './itsm';
 import { Billing, Clients, Inventory, Monitoring, MSPContracts, MSPReportView, MSPTickets, Projects, RemoteSessions, Technicians, TimeAndExpenses } from './msp';
+import { CXAutomation, CXChannels, CXCustomers, CXInbox, CXReportView } from './cx';
 import { Dashboard, Drafts, NewTicket, TicketDetail, TicketList } from './tickets';
 import { Button, Empty, Feedback, Language, Notice, useText } from './ui';
 
@@ -58,6 +59,10 @@ const navigation: NavigationItem[] = [
   { href: '/inventory', label: ['Inventario MSP', 'MSP inventory'], icon: HardDrive },
   { href: '/monitoring', label: ['Monitorización', 'Monitoring'], icon: Activity },
   { href: '/remote', label: ['Acceso remoto', 'Remote access'], icon: MonitorSmartphone },
+  { href: '/cx-customers', label: ['Clientes externos', 'External customers'], icon: Users },
+  { href: '/cx-inbox', label: ['Bandeja CX', 'CX inbox'], icon: MessageSquare },
+  { href: '/cx-channels', label: ['Canales CX', 'CX channels'], icon: Mail },
+  { href: '/cx-automation', label: ['Automatización CX', 'CX automation'], icon: Workflow },
   { href: '/articles', label: ['Conocimiento', 'Knowledge'], icon: BookOpen },
   { href: '/admin/users', label: ['Personas', 'People'], icon: Users, admin: true },
   { href: '/admin/sla', label: ['Acuerdos SLA', 'Service targets'], icon: Clock3, admin: true },
@@ -65,6 +70,7 @@ const navigation: NavigationItem[] = [
   { href: '/admin/analytics', label: ['Informes', 'Reports'], icon: BarChart3, admin: true },
   { href: '/admin/itsm', label: ['Informes ITSM', 'ITSM reports'], icon: BarChart3, admin: true },
   { href: '/admin/msp', label: ['Informes MSP', 'MSP reports'], icon: BarChart3, admin: true },
+  { href: '/admin/cx', label: ['Informes CX', 'CX reports'], icon: BarChart3, admin: true },
 ];
 
 function PageContent({ product, route, user }: Required<Pick<WorkspaceProps, 'product' | 'route'>> & { user: User }) {
@@ -89,6 +95,11 @@ function PageContent({ product, route, user }: Required<Pick<WorkspaceProps, 'pr
   if (route === '/inventory') return <Inventory user={user} />;
   if (route === '/monitoring') return <Monitoring user={user} />;
   if (route === '/remote') return <RemoteSessions user={user} />;
+  if (route === '/cx-customers') return <CXCustomers user={user} />;
+  if (route === '/cx-inbox') return <CXInbox user={user} />;
+  if (route === '/cx-channels') return <CXChannels user={user} />;
+  if (route === '/cx-automation') return <CXAutomation user={user} />;
+  if (route === '/admin/cx') return user.role === 'admin' ? <CXReportView /> : <AccessDenied />;
   if (route === '/articles') return <Knowledge user={user} />;
   if (route === '/articles/new') return user.role === 'end_user' ? <AccessDenied /> : <ArticleForm />;
   if (route.startsWith('/articles/')) {
