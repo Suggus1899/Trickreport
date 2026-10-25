@@ -20,3 +20,20 @@ linters:
     gosec:
       excludes:
         - G104
+  exclusions:
+    rules:
+      # Application code, not a published API: exported identifiers and package
+      # comments are not required. Revertible policy decision; see docs/operations/baseline.md.
+      - linters:
+          - revive
+        text: "should have comment|should have a package comment|should be of the form|will be used as .* by other packages"
+      # Test fixtures: hard-coded credentials, insecure test cookies and
+      # subprocess helpers are intentional and never reach production.
+      - path: _test\.go
+        linters:
+          - gosec
+        text: "G101|G124|G204"
+      # Table-driven and integration tests are allowed to be long and branchy.
+      - path: _test\.go
+        linters:
+          - gocyclo
