@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, BarChart3, BookOpen, CheckSquare, Clock3, Layers, LayoutDashboard, LogOut, Menu, Moon, Repeat, Server, Sun, Ticket, Users, Workflow, X, type LucideIcon } from 'lucide-react';
+import { Activity, AlertTriangle, BarChart3, BookOpen, Building2, CheckSquare, Clock3, FolderKanban, Handshake, HardDrive, Layers, LayoutDashboard, LogOut, Menu, MonitorSmartphone, Moon, Receipt, Repeat, Server, Sun, Ticket, Users, Workflow, Wrench, X, type LucideIcon } from 'lucide-react';
 import type { Locale, Product, User } from './contracts';
 import { Analytics, Automations, SLAPolicies, Users as UserManagement } from './admin';
 import { AuthPage, Profile } from './auth';
@@ -12,6 +12,7 @@ import { ArticleForm, ArticlePage, Knowledge } from './knowledge';
 import { api } from './api';
 import { Notifications } from './notifications';
 import { Approvals, Assets, Catalog, Changes, ITSMReportView, Problems } from './itsm';
+import { Billing, Clients, Inventory, Monitoring, MSPContracts, MSPReportView, MSPTickets, Projects, RemoteSessions, Technicians, TimeAndExpenses } from './msp';
 import { Dashboard, Drafts, NewTicket, TicketDetail, TicketList } from './tickets';
 import { Button, Empty, Feedback, Language, Notice, useText } from './ui';
 
@@ -47,12 +48,23 @@ const navigation: NavigationItem[] = [
   { href: '/assets', label: ['Activos', 'Assets'], icon: Server },
   { href: '/problems', label: ['Problemas', 'Problems'], icon: AlertTriangle },
   { href: '/changes', label: ['Cambios', 'Changes'], icon: Repeat },
+  { href: '/clients', label: ['Clientes MSP', 'MSP clients'], icon: Building2 },
+  { href: '/msp-tickets', label: ['Mesa multicliente', 'Multi-client desk'], icon: Ticket },
+  { href: '/contracts', label: ['Contratos y SLA', 'Contracts and SLA'], icon: Handshake },
+  { href: '/technicians', label: ['Técnicos', 'Technicians'], icon: Wrench },
+  { href: '/time', label: ['Horas y gastos', 'Hours and expenses'], icon: Clock3 },
+  { href: '/projects', label: ['Proyectos', 'Projects'], icon: FolderKanban },
+  { href: '/billing', label: ['Facturación', 'Billing'], icon: Receipt },
+  { href: '/inventory', label: ['Inventario MSP', 'MSP inventory'], icon: HardDrive },
+  { href: '/monitoring', label: ['Monitorización', 'Monitoring'], icon: Activity },
+  { href: '/remote', label: ['Acceso remoto', 'Remote access'], icon: MonitorSmartphone },
   { href: '/articles', label: ['Conocimiento', 'Knowledge'], icon: BookOpen },
   { href: '/admin/users', label: ['Personas', 'People'], icon: Users, admin: true },
   { href: '/admin/sla', label: ['Acuerdos SLA', 'Service targets'], icon: Clock3, admin: true },
   { href: '/admin/automations', label: ['Automatizaciones', 'Automations'], icon: Workflow, admin: true },
   { href: '/admin/analytics', label: ['Informes', 'Reports'], icon: BarChart3, admin: true },
   { href: '/admin/itsm', label: ['Informes ITSM', 'ITSM reports'], icon: BarChart3, admin: true },
+  { href: '/admin/msp', label: ['Informes MSP', 'MSP reports'], icon: BarChart3, admin: true },
 ];
 
 function PageContent({ product, route, user }: Required<Pick<WorkspaceProps, 'product' | 'route'>> & { user: User }) {
@@ -67,6 +79,16 @@ function PageContent({ product, route, user }: Required<Pick<WorkspaceProps, 'pr
   if (route === '/assets') return <Assets user={user} />;
   if (route === '/problems') return <Problems user={user} />;
   if (route === '/changes') return <Changes user={user} />;
+  if (route === '/clients') return <Clients user={user} />;
+  if (route === '/msp-tickets') return <MSPTickets user={user} />;
+  if (route === '/contracts') return <MSPContracts user={user} />;
+  if (route === '/technicians') return <Technicians user={user} />;
+  if (route === '/time') return <TimeAndExpenses user={user} />;
+  if (route === '/projects') return <Projects user={user} />;
+  if (route === '/billing') return <Billing user={user} />;
+  if (route === '/inventory') return <Inventory user={user} />;
+  if (route === '/monitoring') return <Monitoring user={user} />;
+  if (route === '/remote') return <RemoteSessions user={user} />;
   if (route === '/articles') return <Knowledge user={user} />;
   if (route === '/articles/new') return user.role === 'end_user' ? <AccessDenied /> : <ArticleForm />;
   if (route.startsWith('/articles/')) {
@@ -80,6 +102,7 @@ function PageContent({ product, route, user }: Required<Pick<WorkspaceProps, 'pr
   if (route === '/admin/automations') return user.role === 'admin' ? <Automations /> : <AccessDenied />;
   if (route === '/admin/analytics') return user.role === 'admin' ? <Analytics /> : <AccessDenied />;
   if (route === '/admin/itsm') return user.role === 'admin' ? <ITSMReportView /> : <AccessDenied />;
+  if (route === '/admin/msp') return user.role === 'admin' ? <MSPReportView /> : <AccessDenied />;
   return <section className="error-page"><Empty>{t('No encontramos esta página.','We could not find this page.')}</Empty></section>;
 }
 
