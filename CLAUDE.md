@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project
 
-Trickreport — multi-tenant help desk / ticketing platform. Go 1.25 backend (hexagonal/clean architecture) + Astro 5 SSR frontend with React islands (Tailwind + shadcn/ui), PostgreSQL 16, orchestrated with Docker Compose. See [AGENTS.md](AGENTS.md) for the full command reference — the essentials are repeated below.
+Trickreport — multi-tenant help desk / ticketing platform. Go 1.26 backend (hexagonal/clean architecture) + Astro 5 SSR frontend (legacy; retired in stage E2) with React islands (Tailwind + shadcn/ui), PostgreSQL 16, orchestrated with Docker Compose. See [AGENTS.md](AGENTS.md) for the full command reference — the essentials are repeated below.
 
 ## Commands
 
@@ -48,7 +48,7 @@ infrastructure/postgres, infrastructure/auth, infrastructure/email, infrastructu
 - **Wiring is manual and centralized** in [backend/internal/interfaces/http/wire.go](backend/internal/interfaces/http/wire.go): `NewRepos` → `NewServices` → `NewHandlers`. There is no DI framework/codegen (no wire/fx) — when adding a new repo/service/handler, wire it here by hand, in that order. Services are composed via setter methods after construction (e.g. `ticketSvc.SetEngine(engine)`, `authSvc.SetMFARepository(...)`) rather than large constructors — follow that pattern for new cross-service dependencies.
 - **Multi-tenancy**: every row-owning entity carries a `TenantID`; `infrastructure/postgres/tenant_resolver.go` (+ `cached_tenant_resolver.go`) resolves tenant context. Always scope new repo queries by tenant.
 - **Automation engine**: `application/automation` (`Engine`) evaluates SLA/automation rules and calls `infrastructure/postgres/automation_executor.go`, which runs raw SQL directly on the pool (bypassing the repo layer) for rule actions — this is a deliberate exception to the layering above.
-- **Migrations are embedded and consolidated into a single file**: `internal/db/migrations/000001_init.{up,down}.sql` (prior history was squashed — see git log). Applied automatically by `db.RunMigrations` on every API startup, and manually via `--migrate-up`/`--migrate-down`.
+- **Migrations are embedded**: `internal/db/migrations/` holds the numbered sequence `000001`–`000016`; history is in git log. Applied automatically by `db.RunMigrations` on every API startup, and manually via `--migrate-up`/`--migrate-down`.
 - **Realtime**: `internal/realtime` (hub/client/message) is the low-level WebSocket hub; `infrastructure/realtime/adapter.go` bridges it to application services (e.g. ticket + notification services broadcast on mutation).
 - **Logging**: single file `backend/trickreport.log` (zerolog), no `logs/` directory. Dev also mirrors to console via `io.MultiWriter`; production writes JSON to the file only — see [backend/cmd/api/main.go](backend/cmd/api/main.go).
 - **Admin bootstrap**: `internal/bootstrap.EnsureAdmin` creates the initial admin user from `ADMIN_EMAIL`/`ADMIN_PASSWORD` on every startup (idempotent).

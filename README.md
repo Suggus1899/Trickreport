@@ -37,9 +37,9 @@ The browser talks to the Next.js same-origin proxy. Authentication tokens stay i
 ## Architecture
 
 - **Backend (`backend/`):** a modular Go monolith organized as domain → application → infrastructure → HTTP interfaces, with manual wiring. PostgreSQL is the source of truth for data, sessions, background jobs and the email outbox. The existing API (`/api/v1`) is the IT support product's API; MSP and customer service will get their own compositions and databases.
-- **Web apps (`apps/`):** three Next.js applications — `apps/it` (active), `apps/msp` and `apps/customer-service` (workspace shells) — sharing UI, translations, API contracts and utilities from `packages/` through npm workspaces.
+- **Web apps (`apps/`):** three Next.js applications — `apps/it` (active), `apps/msp` and `apps/customer-service` (first functional versions; full scope in roadmap stages E4 and E5) — sharing UI, translations, API contracts and utilities from `packages/` through npm workspaces.
 - **Legacy frontend (`frontend/`):** the former Astro application, kept only as a migration reference. Its identity-scoped offline storage and security fixes remain maintained until the IT migration completes, then it is removed.
-- **Database migrations:** embedded in the API binary and applied on startup (or via `--migrate-up` / `--migrate-down`). The current sequence is `000001`–`000011`: base schema, ticket escalation, notifications, then the stabilization series — session security (`000005`), MFA challenges (`000006`), password-reset security (`000007`), ticket idempotency (`000008`), SLA tracking (`000009`), email outbox (`000010`) and user session revocation (`000011`).
+- **Database migrations:** embedded in the API binary and applied on startup (or via `--migrate-up` / `--migrate-down`). The current sequence is `000001`–`000016`: base schema, ticket escalation, notifications, then the stabilization series — session security (`000005`), MFA challenges (`000006`), password-reset security (`000007`), ticket idempotency (`000008`), SLA tracking (`000009`), email outbox (`000010`) and user session revocation (`000011`). Later migrations add assets and CMDB (`000013`), problems and changes (`000014`), MSP (`000015`) and CX (`000016`).
 
 ## Get started
 

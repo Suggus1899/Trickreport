@@ -6,8 +6,8 @@ Trickreport — Go backend + Astro frontend, orchestrated with Docker Compose.
 
 ## Stack
 
-- **Backend:** Go 1.25 (chi router, pgx/v5, squirrel, golang-jwt/v5, go-ldap/v3, viper, zerolog, prometheus client, swaggo). Module: `github.com/trickreport/backend`.
-- **Frontend:** Node + Astro 5 (TypeScript), ESLint, Prettier, Husky + lint-staged.
+- **Backend:** Go 1.26 (chi router, pgx/v5, squirrel, golang-jwt/v5, go-ldap/v3, viper, zerolog, prometheus client, swaggo). Module: `github.com/trickreport/backend`.
+- **Frontend:** Node + Astro 5 (TypeScript; legacy, retired in stage E2), ESLint, Prettier, Husky + lint-staged.
 - **Database:** PostgreSQL 16 (via `postgres:16-alpine`).
 - **Infra:** Docker Compose (root), Caddy reverse proxy, monitoring stack.
 
@@ -65,4 +65,4 @@ Required env vars before `up`: `POSTGRES_PASSWORD`, `JWT_SECRET`, `ADMIN_EMAIL`,
 
 ## SDD (Spec-Driven Development)
 
-Run `/sdd-init` with cwd here. Stack: Go 1.25 backend (chi + pgx + JWT + LDAP) + Astro 5 frontend (TypeScript) + PostgreSQL 16 + Docker Compose. Testing: `go test ./... -race` (backend), `npx vitest run` (frontend).
+Run `/sdd-init` with cwd here. Stack: Go 1.26 backend (chi + pgx + JWT + LDAP) + Astro 5 frontend (TypeScript) + PostgreSQL 16 + Docker Compose. Testing: `go test ./... -race` (backend), `npx vitest run` (frontend).
