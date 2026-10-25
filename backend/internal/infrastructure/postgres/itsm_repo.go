@@ -15,6 +15,7 @@ import (
 
 	appITSM "github.com/trickreport/backend/internal/application/itsm"
 	domain "github.com/trickreport/backend/internal/domain/itsm"
+	domainSLA "github.com/trickreport/backend/internal/domain/sla"
 )
 
 // ITSMRepo implements the ITSM repository boundary over PostgreSQL.
@@ -259,10 +260,10 @@ func (r *ITSMRepo) DeleteService(ctx context.Context, id, tenantID uuid.UUID) er
 
 // ── Tickets / users (minimal surface for ITSM links) ────────────────
 
-func (r *ITSMRepo) CreateTicketFromService(ctx context.Context, tenantID, requesterID uuid.UUID, title, description, category, priority string) (uuid.UUID, error) {
+func (r *ITSMRepo) CreateTicketFromService(ctx context.Context, tenantID, requesterID uuid.UUID, title, description, category, priority string, dl domainSLA.Deadlines) (uuid.UUID, error) {
 	var id uuid.UUID
-	err := r.db.QueryRow(ctx, `INSERT INTO tickets (tenant_id, title, description, status, priority, category, created_by) VALUES ($1, $2, $3, 'open', $4, $5, $6) RETURNING id`,
-		tenantID, title, description, priority, category, requesterID).Scan(&id)
+	err := r.db.QueryRow(ctx, `INSERT INTO tickets (tenant_id, title, description, status, priority, category, created_by, sla_deadline, response_deadline, escalation_deadline) VALUES ($1, $2, $3, 'open', $4, $5, $6, $7, $8, $9) RETURNING id`,
+		tenantID, title, description, priority, category, requesterID, dl.Resolution, dl.Response, dl.Escalation).Scan(&id)
 	if err != nil {
 		return uuid.Nil, fmt.Errorf("itsm_repo.CreateTicketFromService: %w", err)
 	}

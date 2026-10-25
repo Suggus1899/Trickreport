@@ -162,7 +162,7 @@ func NewServices(
 		SLA:           appSLA.NewService(repos.SLA),
 		Automation:    appAuto.NewService(repos.Automation),
 		Analytics:     appAnalytics.NewService(repos.Analytics),
-		ITSM:          appITSM.NewService(repos.ITSM),
+		ITSM:          appITSM.NewService(repos.ITSM, repos.SLA),
 		CX:            appCX.NewService(repos.CX),
 		MSP:           appMSP.NewService(repos.MSP),
 		Auth:          authSvc,

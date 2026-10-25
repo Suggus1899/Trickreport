@@ -241,16 +241,11 @@ func (s *UserService) Create(ctx context.Context, input CreateInput) (*domainTic
 			return nil, err
 		}
 		if policy != nil {
-			if policy.ResponseTimeMinutes <= 0 || policy.ResolutionTimeMinutes <= 0 || policy.EscalationMinutes < 0 {
+			if err := policy.Validate(); err != nil {
 				return nil, domainTicket.ErrValidation
 			}
-			deadline := t.CreatedAt.Add(time.Duration(policy.ResolutionTimeMinutes) * time.Minute)
-			responseDeadline := t.CreatedAt.Add(time.Duration(policy.ResponseTimeMinutes) * time.Minute)
-			t.SLADeadline, t.ResponseDeadline = &deadline, &responseDeadline
-			if policy.EscalationMinutes > 0 {
-				d := t.CreatedAt.Add(time.Duration(policy.EscalationMinutes) * time.Minute)
-				t.EscalationDeadline = &d
-			}
+			d := domainSLA.NewDeadlines(t.CreatedAt, policy.ResponseTimeMinutes, policy.ResolutionTimeMinutes, policy.EscalationMinutes)
+			t.ResponseDeadline, t.SLADeadline, t.EscalationDeadline = d.Response, d.Resolution, d.Escalation
 		}
 	}
 

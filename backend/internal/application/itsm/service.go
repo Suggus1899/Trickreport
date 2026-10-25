@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 	domain "github.com/trickreport/backend/internal/domain/itsm"
+	domainSLA "github.com/trickreport/backend/internal/domain/sla"
 )
 
 // Repository is the persistence boundary for ITSM aggregates. Every
@@ -32,7 +33,7 @@ type Repository interface {
 	UpdateService(ctx context.Context, s *domain.CatalogService) error
 	DeleteService(ctx context.Context, id, tenantID uuid.UUID) error
 	// Tickets (only what the catalog request and links need)
-	CreateTicketFromService(ctx context.Context, tenantID, requesterID uuid.UUID, title, description, category, priority string) (uuid.UUID, error)
+	CreateTicketFromService(ctx context.Context, tenantID, requesterID uuid.UUID, title, description, category, priority string, dl domainSLA.Deadlines) (uuid.UUID, error)
 	TicketExists(ctx context.Context, id, tenantID uuid.UUID) (bool, error)
 	UserExists(ctx context.Context, id, tenantID uuid.UUID) (bool, error)
 	// Approvals
@@ -78,13 +79,22 @@ type Repository interface {
 	Report(ctx context.Context, tenantID uuid.UUID) (*domain.Report, error)
 }
 
-// Service is the ITSM application service.
-type Service struct {
-	repo Repository
+// SLAPolicyFetcher returns the SLA policy configured for a priority.
+// ErrNotFound means the tenant has no policy for that priority.
+type SLAPolicyFetcher interface {
+	GetByPriority(ctx context.Context, tenantID uuid.UUID, priority string) (*domainSLA.Policy, error)
 }
 
-// NewService creates a Service from a Repository implementation.
-func NewService(repo Repository) *Service { return &Service{repo: repo} }
+// Service is the ITSM application service.
+type Service struct {
+	repo     Repository
+	policies SLAPolicyFetcher
+}
+
+// NewService creates a Service from a Repository and an SLA policy source.
+func NewService(repo Repository, policies SLAPolicyFetcher) *Service {
+	return &Service{repo: repo, policies: policies}
+}
 
 // ── Catalog ─────────────────────────────────────────────────────────
 
@@ -198,7 +208,11 @@ func (s *Service) RequestService(ctx context.Context, tenantID, requesterID, ser
 	default:
 		return uuid.Nil, domain.ErrValidation
 	}
-	ticketID, err = s.repo.CreateTicketFromService(ctx, tenantID, requesterID, strings.TrimSpace(req.Title), req.Description, category, priority)
+	dl, err := s.catalogDeadlines(ctx, tenantID, priority, time.Now())
+	if err != nil {
+		return uuid.Nil, err
+	}
+	ticketID, err = s.repo.CreateTicketFromService(ctx, tenantID, requesterID, strings.TrimSpace(req.Title), req.Description, category, priority, dl)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -576,6 +590,22 @@ func (s *Service) TicketsForChange(ctx context.Context, tenantID, changeID uuid.
 
 func (s *Service) Report(ctx context.Context, tenantID uuid.UUID) (*domain.Report, error) {
 	return s.repo.Report(ctx, tenantID)
+}
+
+// catalogDeadlines applies the tenant's SLA policy for the request priority to
+// the new ticket. Without a policy the ticket gets no SLA clocks.
+func (s *Service) catalogDeadlines(ctx context.Context, tenantID uuid.UUID, priority string, createdAt time.Time) (domainSLA.Deadlines, error) {
+	policy, err := s.policies.GetByPriority(ctx, tenantID, priority)
+	if err != nil && !errors.Is(err, domainSLA.ErrNotFound) {
+		return domainSLA.Deadlines{}, err
+	}
+	if policy == nil {
+		return domainSLA.Deadlines{}, nil
+	}
+	if err := policy.Validate(); err != nil {
+		return domainSLA.Deadlines{}, fmt.Errorf("%w: invalid SLA policy for priority %s", domain.ErrValidation, priority)
+	}
+	return domainSLA.NewDeadlines(createdAt, policy.ResponseTimeMinutes, policy.ResolutionTimeMinutes, policy.EscalationMinutes), nil
 }
 
 // mapRepoErr translates persistence conflicts into domain errors; other

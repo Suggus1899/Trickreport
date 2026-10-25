@@ -14,6 +14,7 @@ import (
 
 	appMSP "github.com/trickreport/backend/internal/application/msp"
 	domain "github.com/trickreport/backend/internal/domain/msp"
+	domainSLA "github.com/trickreport/backend/internal/domain/sla"
 )
 
 // MSPRepo implements the MSP repository boundary over PostgreSQL.
@@ -298,15 +299,15 @@ func (r *MSPRepo) ActiveContractForClient(ctx context.Context, tenantID, clientI
 
 // ── Tickets ─────────────────────────────────────────────────────────
 
-func (r *MSPRepo) CreateTicketWithContext(ctx context.Context, tenantID, creatorID uuid.UUID, title, description, category, priority string, tc *domain.TicketContext) (uuid.UUID, error) {
+func (r *MSPRepo) CreateTicketWithContext(ctx context.Context, tenantID, creatorID uuid.UUID, title, description, category, priority string, tc *domain.TicketContext, dl domainSLA.Deadlines) (uuid.UUID, error) {
 	tx, err := r.db.Begin(ctx)
 	if err != nil {
 		return uuid.Nil, err
 	}
 	defer tx.Rollback(ctx)
 	var ticketID uuid.UUID
-	if err := tx.QueryRow(ctx, `INSERT INTO tickets (tenant_id, title, description, status, priority, category, created_by) VALUES ($1, $2, $3, 'open', $4, $5, $6) RETURNING id`,
-		tenantID, title, description, priority, category, creatorID).Scan(&ticketID); err != nil {
+	if err := tx.QueryRow(ctx, `INSERT INTO tickets (tenant_id, title, description, status, priority, category, created_by, sla_deadline, response_deadline, escalation_deadline) VALUES ($1, $2, $3, 'open', $4, $5, $6, $7, $8, $9) RETURNING id`,
+		tenantID, title, description, priority, category, creatorID, dl.Resolution, dl.Response, dl.Escalation).Scan(&ticketID); err != nil {
 		return uuid.Nil, mspMapErr(err)
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO msp_ticket_context (ticket_id, tenant_id, client_id, contract_id, sla_response_minutes, sla_resolution_minutes) VALUES ($1, $2, $3, $4, $5, $6)`,

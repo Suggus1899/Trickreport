@@ -22,6 +22,7 @@ import (
 
 	"github.com/google/uuid"
 	domain "github.com/trickreport/backend/internal/domain/msp"
+	domainSLA "github.com/trickreport/backend/internal/domain/sla"
 )
 
 // Repository is the persistence boundary for MSP aggregates. Every
@@ -46,7 +47,7 @@ type Repository interface {
 	UpdateContract(ctx context.Context, c *domain.Contract) error
 	ActiveContractForClient(ctx context.Context, tenantID, clientID uuid.UUID, at time.Time) (*domain.Contract, error)
 	// Tickets
-	CreateTicketWithContext(ctx context.Context, tenantID, creatorID uuid.UUID, title, description, category, priority string, tc *domain.TicketContext) (uuid.UUID, error)
+	CreateTicketWithContext(ctx context.Context, tenantID, creatorID uuid.UUID, title, description, category, priority string, tc *domain.TicketContext, dl domainSLA.Deadlines) (uuid.UUID, error)
 	AlertTicketCreator(ctx context.Context, tenantID uuid.UUID) (uuid.UUID, error)
 	TicketContext(ctx context.Context, tenantID, ticketID uuid.UUID) (*domain.TicketContext, error)
 	ListMSPTickets(ctx context.Context, tenantID uuid.UUID, clientIDs []uuid.UUID, clientFilter *uuid.UUID) ([]MSPTicket, error)
@@ -371,7 +372,8 @@ func (s *Service) CreateMSPTicket(ctx context.Context, tenantID, creatorID uuid.
 	if len(category) > 100 {
 		category = category[:100]
 	}
-	contract, resp, res, err := s.ResolveContractForTicket(ctx, tenantID, in.ClientID, in.ContractID, in.Priority, time.Now())
+	now := time.Now()
+	contract, resp, res, err := s.ResolveContractForTicket(ctx, tenantID, in.ClientID, in.ContractID, in.Priority, now)
 	if err != nil {
 		return uuid.Nil, err
 	}
@@ -379,7 +381,8 @@ func (s *Service) CreateMSPTicket(ctx context.Context, tenantID, creatorID uuid.
 	if contract != nil {
 		tc.ContractID = &contract.ID
 	}
-	return s.repo.CreateTicketWithContext(ctx, tenantID, creatorID, strings.TrimSpace(in.Title), in.Description, category, in.Priority, tc)
+	dl := domainSLA.NewDeadlines(now, resp, res, 0)
+	return s.repo.CreateTicketWithContext(ctx, tenantID, creatorID, strings.TrimSpace(in.Title), in.Description, category, in.Priority, tc, dl)
 }
 
 func (s *Service) ListMSPTickets(ctx context.Context, tenantID, viewerID uuid.UUID, viewerRole string, clientFilter *uuid.UUID) ([]MSPTicket, error) {
@@ -1023,7 +1026,8 @@ func (s *Service) IngestAlert(ctx context.Context, tenantID uuid.UUID, token str
 	// trail still shows the alert itself as the origin). Without any
 	// staff user the ingestion fails instead of inventing an author.
 	if domain.ShouldCreateTicketForAlert(false, alert.Status) {
-		contract, resp, res, err := s.ResolveContractForTicket(ctx, tenantID, alert.ClientID, nil, "high", time.Now())
+		now := time.Now()
+		contract, resp, res, err := s.ResolveContractForTicket(ctx, tenantID, alert.ClientID, nil, "high", now)
 		if err != nil {
 			return nil, err
 		}
@@ -1039,7 +1043,8 @@ func (s *Service) IngestAlert(ctx context.Context, tenantID uuid.UUID, token str
 		if contract != nil {
 			tc.ContractID = &contract.ID
 		}
-		ticketID, err := s.repo.CreateTicketWithContext(ctx, tenantID, creatorID, title, alert.Message, "monitoring", "high", tc)
+		dl := domainSLA.NewDeadlines(now, resp, res, 0)
+		ticketID, err := s.repo.CreateTicketWithContext(ctx, tenantID, creatorID, title, alert.Message, "monitoring", "high", tc, dl)
 		if err != nil {
 			return nil, err
 		}
